@@ -40,9 +40,14 @@ engine.signalUpdate(rotationXTarget, SnapToFace, (_prev, face) => {
   const snaps: Record<number, number> = { 4: -90, 5: 90 } // top, bottom
   return snaps[face] ?? 0
 })
-engine.signalUpdate(rotationYTarget, SnapToFace, (_prev, face) => {
-  const snaps: Record<number, number> = { 0: 0, 1: -90, 2: -180, 3: -270 }
-  return snaps[face] ?? 0
+engine.signalUpdate(rotationYTarget, SnapToFace, (prev, face) => {
+  // Canonical angles for each face
+  const canonical: Record<number, number> = { 0: 0, 1: -90, 2: -180, 3: -270 }
+  const base = canonical[face] ?? 0
+  // Find the closest equivalent angle to the current rotation
+  // Equivalent angles: base + 360*n for any integer n
+  const offset = Math.round((prev - base) / 360) * 360
+  return base + offset
 })
 
 // Springs smooth the rotation

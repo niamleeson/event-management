@@ -106,7 +106,7 @@ for (let i = 0; i < CELL_COUNT; i++) {
 /*  Join: all CellMorphDone -> AllMorphed                             */
 /* ------------------------------------------------------------------ */
 engine.join(cellMorphDones, AllMorphed, {
-    do: () => undefined,
+    do: () => null,
 });
 /* ------------------------------------------------------------------ */
 /*  MorphTrigger handler: set targets + stagger cell starts           */

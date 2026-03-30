@@ -55,7 +55,7 @@ layerEnterDoneEvents.forEach((evt, i) => {
 engine.join(
   layerEnterDoneEvents,
   SceneLoaded,
-  { do: () => undefined },
+  { do: () => null as any },
 )
 
 // Stagger trigger: fire entrance events with delay via frame counting
@@ -84,8 +84,10 @@ const isNight: Signal<boolean> = engine.signal(DayNightToggle, false, (prev) => 
 const dayNightTween: TweenValue = engine.tween({
   start: DayNightToggle,
   done: DayNightDone,
-  from: () => isNight.value ? 1 : 0,
-  to: () => isNight.value ? 0 : 1,
+  // isNight signal has already toggled by the time the tween starts,
+  // so when isNight is true (just switched to night), we go 0->1
+  from: () => isNight.value ? 0 : 1,
+  to: () => isNight.value ? 1 : 0,
   duration: 1500,
   easing: 'easeInOut',
 })
@@ -94,21 +96,20 @@ const dayNightTween: TweenValue = engine.tween({
 /*  Floating clouds tween (continuous)                                */
 /* ------------------------------------------------------------------ */
 
+// Restart cloud float with reverse direction
+let cloudDirection = 1
+
 const cloudFloat: TweenValue = engine.tween({
   start: CloudFloatStart,
   done: CloudFloatDone,
-  from: -20,
-  to: 20,
+  from: () => cloudDirection === 1 ? -20 : 20,
+  to: () => cloudDirection === 1 ? 20 : -20,
   duration: 4000,
   easing: 'easeInOut',
 })
 
-// Restart cloud float with reverse direction
-let cloudDirection = 1
 engine.on(CloudFloatDone, () => {
   cloudDirection *= -1
-  // We need to create a new approach: just restart by emitting again
-  // The tween will snap from/to so we toggle the approach
   engine.emit(CloudFloatStart, undefined)
 })
 

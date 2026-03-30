@@ -1,5 +1,5 @@
 import { useEmit, useTween, useSpring } from '@pulse/react'
-import type { EventType, TweenValue, SpringValue, Signal } from '@pulse/core'
+import type { Engine, EventType, TweenValue, SpringValue, Signal } from '@pulse/core'
 import { engine } from './engine'
 
 /* ------------------------------------------------------------------ */
@@ -85,8 +85,8 @@ function createCardAnimations(eng: Engine): CardAnimations {
     eng.on(unflipDone, () => eng.emit(CardFlipDone, i))
 
     // Hover spring: signal target tracks hover state
-    const ht = eng.signal(HoverIn, 1.0 as number, (prev, idx) => idx === i ? 1.05 : prev)
-    eng.signalUpdate(ht, HoverOut, (prev, idx) => idx === i ? 1.0 : prev)
+    const ht = eng.signal(HoverIn, 1.0 as number, (prev: number, idx: number) => idx === i ? 1.05 : prev)
+    eng.signalUpdate(ht, HoverOut, (prev: number, idx: number) => idx === i ? 1.0 : prev)
     hoverTargets.push(ht)
 
     const hs = eng.spring(ht, { stiffness: 300, damping: 20 })
@@ -96,7 +96,7 @@ function createCardAnimations(eng: Engine): CardAnimations {
   }
 
   // Route CardClicked -> per-card flip/unflip start
-  eng.on(CardClicked, (index) => {
+  eng.on(CardClicked, (index: number) => {
     const isFlipped = flippedStates[index]
     if (isFlipped) {
       eng.emit(unflipStarts[index], undefined)

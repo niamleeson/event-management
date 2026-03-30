@@ -33,6 +33,7 @@ const SelectItem = engine.event<number>('SelectItem')
 const ItemSelected = engine.event<number>('ItemSelected')
 const AutoRotateTick = engine.event('AutoRotateTick')
 const AutoRotateDone = engine.event('AutoRotateDone')
+const PauseAutoRotate = engine.event('PauseAutoRotate')
 
 /* ------------------------------------------------------------------ */
 /*  State                                                             */
@@ -42,7 +43,7 @@ const AutoRotateDone = engine.event('AutoRotateDone')
 const autoRotateTween: TweenValue = engine.tween({
   start: AutoRotateTick,
   done: AutoRotateDone,
-  cancel: DragStart,
+  cancel: [DragStart, PauseAutoRotate],
   from: 0,
   to: 360,
   duration: 20000,
@@ -64,6 +65,13 @@ engine.on(AutoRotateDone, () => {
   }
 })
 
+// On drag start, absorb current tween progress into base before tween is canceled
+engine.on(DragStart, () => {
+  if (autoRotateTween.active) {
+    baseAngle._set(baseAngle.value + autoRotateTween.value)
+  }
+})
+
 // On drag end, resume auto-rotate if enabled
 engine.on(DragEnd, () => {
   if (autoRotating.value) {
@@ -74,10 +82,11 @@ engine.on(DragEnd, () => {
 // Toggle auto-rotate
 engine.on(AutoRotateToggle, () => {
   if (autoRotating.value) {
-    // Will be true after signal updates
+    // Will be true after signal updates (resuming handled by setTimeout below)
   } else {
-    // Stopping: add current tween progress to base
+    // Stopping: absorb current tween progress into base angle, then cancel the tween
     baseAngle._set(baseAngle.value + autoRotateTween.value)
+    engine.emit(PauseAutoRotate, undefined)
   }
 })
 

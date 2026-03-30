@@ -39,7 +39,7 @@ layerEnterDoneEvents.forEach((evt, i) => {
     engine.on(evt, () => engine.emit(LayerAnimDone, i));
 });
 // Join: all layers done -> SceneLoaded
-engine.join(layerEnterDoneEvents, SceneLoaded, { do: () => undefined });
+engine.join(layerEnterDoneEvents, SceneLoaded, { do: () => null });
 // Stagger trigger: fire entrance events with delay via frame counting
 let entranceTriggered = false;
 let entranceFrame = 0;
@@ -64,28 +64,28 @@ const isNight = engine.signal(DayNightToggle, false, (prev) => !prev);
 const dayNightTween = engine.tween({
     start: DayNightToggle,
     done: DayNightDone,
-    from: () => isNight.value ? 1 : 0,
-    to: () => isNight.value ? 0 : 1,
+    // isNight signal has already toggled by the time the tween starts,
+    // so when isNight is true (just switched to night), we go 0->1
+    from: () => isNight.value ? 0 : 1,
+    to: () => isNight.value ? 1 : 0,
     duration: 1500,
     easing: 'easeInOut',
 });
 /* ------------------------------------------------------------------ */
 /*  Floating clouds tween (continuous)                                */
 /* ------------------------------------------------------------------ */
+// Restart cloud float with reverse direction
+let cloudDirection = 1;
 const cloudFloat = engine.tween({
     start: CloudFloatStart,
     done: CloudFloatDone,
-    from: -20,
-    to: 20,
+    from: () => cloudDirection === 1 ? -20 : 20,
+    to: () => cloudDirection === 1 ? 20 : -20,
     duration: 4000,
     easing: 'easeInOut',
 });
-// Restart cloud float with reverse direction
-let cloudDirection = 1;
 engine.on(CloudFloatDone, () => {
     cloudDirection *= -1;
-    // We need to create a new approach: just restart by emitting again
-    // The tween will snap from/to so we toggle the approach
     engine.emit(CloudFloatStart, undefined);
 });
 // Kick off cloud float

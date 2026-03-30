@@ -62,7 +62,7 @@ engine.on(engine.frame, ({ dt }) => {
         p.x += p.vx * dtSec;
         p.y += p.vy * dtSec;
         p.life -= dtSec;
-        p.size *= 0.997;
+        p.size *= Math.pow(0.997, dtSec);
         if (p.life <= 0 || p.size < 0.2) {
             particles.splice(i, 1);
         }
