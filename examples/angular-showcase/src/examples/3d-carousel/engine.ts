@@ -87,7 +87,7 @@ engine.on(SelectItem, () => { autoRotateEnabled = false })
 engine.on(engine.frame, ({ dt }) => {
   if (!autoRotateEnabled || isDragging.value) return
   autoRotateAngle += dt * 0.02
-  rotation._set(autoRotateAngle)
+  rotation.set(autoRotateAngle)
 })
 
 // Drag handling: accumulate rotation from mouse delta
@@ -98,7 +98,7 @@ engine.on(DragStart, (startX) => {
 })
 
 engine.on(DragMove, (deltaX) => {
-  rotation._set(dragStartAngle + deltaX * 0.3)
+  rotation.set(dragStartAngle + deltaX * 0.3)
 })
 
 engine.on(DragEnd, () => {

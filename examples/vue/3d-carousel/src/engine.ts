@@ -78,7 +78,7 @@ engine.on(ItemSelected, () => { autoRotating = false })
 engine.on(engine.frame, ({ dt }) => {
   if (!autoRotating) return
   const speed = 0.015
-  rotationTarget._set(rotationTarget.value + speed * (dt / 16.667))
+  rotationTarget.set(rotationTarget.value + speed * (dt / 16.667))
 })
 
 export { ANGLE_STEP }

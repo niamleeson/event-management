@@ -340,6 +340,7 @@ export class RealtimeDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     ;(window as any).__pulseEngine = null
     stopFeed()
+    engine.destroy()
   }
 
   getMetricValue(name: string): number {

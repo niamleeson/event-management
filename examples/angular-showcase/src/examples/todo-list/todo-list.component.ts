@@ -253,6 +253,7 @@ export class TodoListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   capitalize(s: string): string {

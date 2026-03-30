@@ -60,7 +60,7 @@ const autoRotating: Signal<boolean> = engine.signal(AutoRotateToggle, true, (pre
 engine.on(AutoRotateDone, () => {
   if (autoRotating.value) {
     // Add 360 to base and restart tween
-    baseAngle._set(baseAngle.value + 360)
+    baseAngle.set(baseAngle.value + 360)
     engine.emit(AutoRotateTick, undefined)
   }
 })
@@ -68,7 +68,7 @@ engine.on(AutoRotateDone, () => {
 // On drag start, absorb current tween progress into base before tween is canceled
 engine.on(DragStart, () => {
   if (autoRotateTween.active) {
-    baseAngle._set(baseAngle.value + autoRotateTween.value)
+    baseAngle.set(baseAngle.value + autoRotateTween.value)
   }
 })
 
@@ -85,7 +85,7 @@ engine.on(AutoRotateToggle, () => {
     // Will be true after signal updates (resuming handled by setTimeout below)
   } else {
     // Stopping: absorb current tween progress into base angle, then cancel the tween
-    baseAngle._set(baseAngle.value + autoRotateTween.value)
+    baseAngle.set(baseAngle.value + autoRotateTween.value)
     engine.emit(PauseAutoRotate, undefined)
   }
 })

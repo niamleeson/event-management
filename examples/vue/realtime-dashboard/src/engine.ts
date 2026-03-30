@@ -66,11 +66,9 @@ engine.pipe(MetricReceived, ChartDataUpdated, (metric: Metric) => ({
 }))
 
 // MetricReceived -> ThresholdBreached (conditional: only when value > threshold)
-engine.on(MetricReceived, (metric: Metric) => {
+engine.pipeIf(MetricReceived, ThresholdBreached, (metric: Metric) => {
   const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value > config.threshold) {
-    engine.emit(ThresholdBreached, metric)
-  }
+  return config && metric.value > config.threshold ? metric : null
 })
 
 // Track breach counts per metric; create alert when count hits 3

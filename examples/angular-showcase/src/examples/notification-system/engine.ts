@@ -119,9 +119,7 @@ engine.on(AddNotification, (data) => {
   }
 })
 
-engine.on(DismissNotification, (id) => {
-  engine.emit(NotificationRemoved, id)
-})
+engine.pipe(DismissNotification, NotificationRemoved, (id) => id)
 
 // ---------------------------------------------------------------------------
 // Spring: stack reflow positions

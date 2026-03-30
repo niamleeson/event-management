@@ -94,30 +94,31 @@ export const selectedStock = engine.signal<string | null>(
 // Threshold alert logic
 // ---------------------------------------------------------------------------
 
-engine.on(PriceUpdated, ({ symbol, price }) => {
+engine.pipeIf(PriceUpdated, AlertTriggered, ({ symbol, price }) => {
   const stock = stocks.value.find((s) => s.symbol === symbol)
-  if (!stock || stock.alertThreshold === null) return
+  if (!stock || stock.alertThreshold === null) return null
 
   const prevPrice = stock.price
   if (prevPrice <= stock.alertThreshold && price > stock.alertThreshold) {
-    engine.emit(AlertTriggered, {
+    return {
       id: `alert-${Date.now()}-${symbol}`,
       symbol,
       price,
       threshold: stock.alertThreshold,
       timestamp: Date.now(),
-      type: 'above',
-    })
+      type: 'above' as const,
+    }
   } else if (prevPrice >= stock.alertThreshold && price < stock.alertThreshold) {
-    engine.emit(AlertTriggered, {
+    return {
       id: `alert-${Date.now()}-${symbol}`,
       symbol,
       price,
       threshold: stock.alertThreshold,
       timestamp: Date.now(),
-      type: 'below',
-    })
+      type: 'below' as const,
+    }
   }
+  return null
 })
 
 // ---------------------------------------------------------------------------

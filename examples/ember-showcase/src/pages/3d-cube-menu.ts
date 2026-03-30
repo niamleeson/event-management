@@ -90,8 +90,8 @@ export function mount(container: HTMLElement): () => void {
     const dy = e.clientY - dragStartPos.y
     const newX = dragStartRotation.x - dy * 0.5
     const newY = dragStartRotation.y + dx * 0.5
-    targetRotationX._set(newX)
-    targetRotationY._set(newY)
+    targetRotationX.set(newX)
+    targetRotationY.set(newY)
     engine.emit(DragMove, { x: e.clientX, y: e.clientY })
   }
 
@@ -144,6 +144,7 @@ export function mount(container: HTMLElement): () => void {
 
   return () => {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
     unsubs.forEach((u) => u())

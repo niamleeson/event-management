@@ -17,13 +17,17 @@ export function createSignal<T>(initialValue: T): Signal<T> {
       }
     },
 
-    _set(next: T): void {
+    set(next: T): void {
       const prev = signal.value
       if (Object.is(prev, next)) return
       signal.value = next
       for (const cb of subscribers) {
         cb(next, prev)
       }
+    },
+
+    _set(next: T): void {
+      signal.set(next)
     },
   }
 

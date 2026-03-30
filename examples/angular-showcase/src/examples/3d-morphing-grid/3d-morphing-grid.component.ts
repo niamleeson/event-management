@@ -101,6 +101,7 @@ export class ThreeDMorphingGridComponent implements OnInit, OnDestroy, AfterView
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
     stopAutoCycle()
+    engine.destroy()
   }
 
   ngAfterViewInit(): void {

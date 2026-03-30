@@ -231,7 +231,7 @@ engine.on(TaskDragEnd, (payload) => {
   const currentTasks = tasks.value
   const task = currentTasks.find(t => t.id === payload.id)
   if (task) {
-    snapTarget._set(task.start)
+    snapTarget.set(task.start)
     engine.emit(DragSnap, undefined)
   }
 })

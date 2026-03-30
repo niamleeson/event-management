@@ -150,6 +150,7 @@ export class SortableGridComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   getPos(index: number): { x: number; y: number } {

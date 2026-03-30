@@ -156,7 +156,7 @@ engine.signalUpdate(redoStack, EndStroke, () => []) // clear redo on new stroke
 engine.on(UndoStroke, () => {
   const current = strokes.value
   if (current.length > 0) {
-    strokes._set(current.slice(0, -1))
+    strokes.set(current.slice(0, -1))
   }
 })
 
@@ -164,6 +164,6 @@ engine.on(RedoStroke, () => {
   const redo = redoStack.value
   if (redo.length > 0) {
     const stroke = redo[redo.length - 1]
-    strokes._set([...strokes.value, stroke])
+    strokes.set([...strokes.value, stroke])
   }
 })

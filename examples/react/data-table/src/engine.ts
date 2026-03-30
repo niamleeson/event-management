@@ -222,7 +222,7 @@ engine.on(FilterChanged, ({ column, value }) => {
   } else {
     delete current[column]
   }
-  filters._set(current)
+  filters.set(current)
   // Reset to page 1 on filter change
   engine.emit(PageChanged, 1)
 })
@@ -234,7 +234,7 @@ engine.on(RowSelected, (id) => {
   } else {
     current.add(id)
   }
-  selectedRows._set(current)
+  selectedRows.set(current)
 })
 
 engine.on(RowExpanded, (id) => {
@@ -244,7 +244,7 @@ engine.on(RowExpanded, (id) => {
   } else {
     current.add(id)
   }
-  expandedRows._set(current)
+  expandedRows.set(current)
 })
 
 engine.on(SelectAll, () => {
@@ -259,28 +259,28 @@ engine.on(SelectAll, () => {
     // Select all visible
     for (const id of allIds) current.add(id)
   }
-  selectedRows._set(current)
+  selectedRows.set(current)
 })
 
 engine.on(DeselectAll, () => {
-  selectedRows._set(new Set())
+  selectedRows.set(new Set())
 })
 
 engine.on(BulkAction, ({ action, ids }) => {
   // In a real app, this would trigger an API call
   console.log(`Bulk action: ${action} on ${ids.length} rows`)
-  selectedRows._set(new Set())
+  selectedRows.set(new Set())
 })
 
 engine.on(ColumnResized, ({ column, width }) => {
-  columnWidths._set({ ...columnWidths.value, [column]: Math.max(50, width) })
+  columnWidths.set({ ...columnWidths.value, [column]: Math.max(50, width) })
 })
 
 // Simulate async data fetch delay on sort/filter/page change
 function simulateLoad() {
-  isLoading._set(true)
+  isLoading.set(true)
   setTimeout(() => {
-    isLoading._set(false)
+    isLoading.set(false)
   }, 200)
 }
 

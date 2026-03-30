@@ -98,14 +98,13 @@ engine.pipe(CardMoved, SavePending, (move: MoveInfo) => move.cardId)
 // SaveDone -> success flash animation
 engine.pipe(SaveDone, FlashSuccess, (result: SaveResult) => result.cardId)
 
-// SaveError -> error shake animation + auto-retry after 2s
-engine.on(SaveError, (result: SaveResult) => {
-  engine.emit(ShakeError, result.cardId)
-  // Auto-retry after 2 seconds
-  setTimeout(() => {
-    engine.emit(SaveRetry, result.cardId)
-  }, 2000)
-})
+// SaveError -> error shake animation
+engine.pipe(SaveError, ShakeError, (result: SaveResult) => result.cardId)
+
+// SaveError -> auto-retry after 2s debounce (debounces rapid failures, then extracts cardId)
+const SaveErrorDebounced = engine.event<SaveResult>('SaveErrorDebounced')
+engine.debounce(SaveError, 2000, SaveErrorDebounced)
+engine.pipe(SaveErrorDebounced, SaveRetry, (result: SaveResult) => result.cardId)
 
 // ---------------------------------------------------------------------------
 // Async: save card move to API (mock with random failures)
@@ -133,15 +132,9 @@ engine.async(CardMoved, {
 })
 
 // Retry save: re-emit the move for the card that failed
-engine.on(SaveRetry, (cardId: string) => {
+engine.pipeIf(SaveRetry, CardMoved, (cardId: string) => {
   const card = cards.value.find((c) => c.id === cardId)
-  if (card) {
-    engine.emit(CardMoved, {
-      cardId,
-      fromColumn: card.column,
-      toColumn: card.column,
-    })
-  }
+  return card ? { cardId, fromColumn: card.column, toColumn: card.column } : null
 })
 
 // ---------------------------------------------------------------------------
@@ -162,7 +155,7 @@ engine.on(CardMoved, (move: MoveInfo) => {
   undoHistory.set(move.cardId, move)
 })
 
-engine.on(UndoRequested, (cardId: string) => {
+engine.pipeIf(UndoRequested, UndoComplete, (cardId: string) => {
   const lastMove = undoHistory.get(cardId)
   if (lastMove) {
     const reverseMove: MoveInfo = {
@@ -171,10 +164,13 @@ engine.on(UndoRequested, (cardId: string) => {
       toColumn: lastMove.fromColumn,
     }
     undoHistory.delete(cardId)
-    engine.emit(UndoComplete, reverseMove)
-    engine.emit(CardMoved, reverseMove)
+    return reverseMove
   }
+  return null
 })
+
+// UndoComplete also triggers a CardMoved to update state
+engine.pipe(UndoComplete, CardMoved, (move: MoveInfo) => move)
 
 // ---------------------------------------------------------------------------
 // Signals

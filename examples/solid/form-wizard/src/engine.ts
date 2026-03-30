@@ -130,30 +130,32 @@ engine.pipe(FieldUpdated, FieldValidated, (update: FieldUpdate): FieldValidation
 // We do this reactively when any field is validated
 // ---------------------------------------------------------------------------
 
-engine.on(FieldValidated, (_validation: FieldValidation) => {
+engine.pipe(FieldValidated, StepValidated, (validation: FieldValidation) => {
   // Recheck validation for the affected step
-  const step = _validation.step
+  const step = validation.step
   const fields = STEP_FIELDS[step]
   const allValid = fields.every((field) => {
     const errors = fieldErrors.value
     return errors[field] === null && fieldValues.value[field as keyof FormData]?.trim()
   })
-  engine.emit(StepValidated, { step, valid: allValid })
+  return { step, valid: allValid }
 })
 
 // ---------------------------------------------------------------------------
 // Navigation: NextStep only advances if current step is valid
 // ---------------------------------------------------------------------------
 
+// NextStep on final step -> submit the form
+engine.pipeIf(NextStep, FormSubmitted, () => {
+  const step = currentStep.value
+  return step >= 2 ? fieldValues.value as FormData : null
+})
+
+// NextStep on earlier steps -> advance if valid, show errors if not
 engine.on(NextStep, () => {
   const step = currentStep.value
-  if (step >= 2) {
-    // On step 2, submit the form
-    engine.emit(FormSubmitted, fieldValues.value as FormData)
-    return
-  }
+  if (step >= 2) return // handled by pipeIf above
 
-  // Check step validity
   const fields = STEP_FIELDS[step]
   const allValid = fields.every((field) => {
     const errors = fieldErrors.value
@@ -173,11 +175,9 @@ engine.on(NextStep, () => {
   }
 })
 
-engine.on(PrevStep, () => {
+engine.pipeIf(PrevStep, StepChanged, () => {
   const step = currentStep.value
-  if (step > 0) {
-    engine.emit(StepChanged, { step: (step - 1) as StepId, direction: 'prev' })
-  }
+  return step > 0 ? { step: (step - 1) as StepId, direction: 'prev' as const } : null
 })
 
 // ---------------------------------------------------------------------------

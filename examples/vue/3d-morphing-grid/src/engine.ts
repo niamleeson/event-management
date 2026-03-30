@@ -112,9 +112,9 @@ for (let r = 0; r < GRID; r++) {
 /* ------------------------------------------------------------------ */
 
 let shapeIndex = 0
-engine.on(CycleShape, () => {
+engine.pipe(CycleShape, MorphToShape, () => {
   shapeIndex = (shapeIndex + 1) % SHAPES.length
-  engine.emit(MorphToShape, SHAPES[shapeIndex])
+  return SHAPES[shapeIndex]
 })
 
 // Auto-cycle every 3 seconds

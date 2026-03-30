@@ -282,7 +282,7 @@ function Editor() {
       const pos = textareaRef.current.selectionStart
       emit(CursorMoved, { user: 'local', pos })
       const target = cursorSpringTargets.get('local')
-      if (target) target._set(pos)
+      if (target) target.set(pos)
     }
   }, [emit])
 

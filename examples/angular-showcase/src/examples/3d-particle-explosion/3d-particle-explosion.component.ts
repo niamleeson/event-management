@@ -84,6 +84,7 @@ export class ThreeDParticleExplosionComponent implements OnInit, OnDestroy, Afte
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   ngAfterViewInit(): void {

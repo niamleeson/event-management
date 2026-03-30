@@ -99,7 +99,7 @@ engine['_signals'].push(exitingIds)
 // ---------------------------------------------------------------------------
 
 engine.on(DragStart, ({ index, x, y, offsetX, offsetY }) => {
-  dragState._set({
+  dragState.set({
     active: true,
     dragIndex: index,
     overIndex: index,
@@ -115,13 +115,13 @@ engine.on(DragStart, ({ index, x, y, offsetX, offsetY }) => {
 engine.on(DragMove, ({ x, y }) => {
   const ds = dragState.value
   if (!ds.active) return
-  dragState._set({ ...ds, currentX: x, currentY: y })
+  dragState.set({ ...ds, currentX: x, currentY: y })
 })
 
 engine.on(DragOver, ({ index }) => {
   const ds = dragState.value
   if (!ds.active) return
-  dragState._set({ ...ds, overIndex: index })
+  dragState.set({ ...ds, overIndex: index })
 })
 
 engine.on(DragEnd, () => {
@@ -132,7 +132,7 @@ engine.on(DragEnd, () => {
     engine.emit(ItemMoved, { from: ds.dragIndex, to: ds.overIndex })
   }
 
-  dragState._set({
+  dragState.set({
     active: false,
     dragIndex: -1,
     overIndex: -1,
@@ -149,7 +149,7 @@ engine.on(ItemMoved, ({ from, to }) => {
   const arr = [...items.value]
   const [moved] = arr.splice(from, 1)
   arr.splice(to, 0, moved)
-  items._set(arr)
+  items.set(arr)
 })
 
 engine.on(ShuffleAll, () => {
@@ -159,21 +159,21 @@ engine.on(ShuffleAll, () => {
     const j = Math.floor(Math.random() * (i + 1))
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
-  items._set(arr)
+  items.set(arr)
 })
 
 engine.on(AddItem, () => {
   const newItem = makeItem()
   const entering = new Set(enteringIds.value)
   entering.add(newItem.id)
-  enteringIds._set(entering)
-  items._set([...items.value, newItem])
+  enteringIds.set(entering)
+  items.set([...items.value, newItem])
 
   // Clear entering state after animation
   setTimeout(() => {
     const current = new Set(enteringIds.value)
     current.delete(newItem.id)
-    enteringIds._set(current)
+    enteringIds.set(current)
   }, 400)
 })
 
@@ -185,14 +185,14 @@ engine.on(RemoveItem, (index) => {
   // Mark as exiting
   const exiting = new Set(exitingIds.value)
   exiting.add(item.id)
-  exitingIds._set(exiting)
+  exitingIds.set(exiting)
 
   // Actually remove after animation
   setTimeout(() => {
-    items._set(items.value.filter((i) => i.id !== item.id))
+    items.set(items.value.filter((i) => i.id !== item.id))
     const current = new Set(exitingIds.value)
     current.delete(item.id)
-    exitingIds._set(current)
+    exitingIds.set(current)
   }, 300)
 })
 

@@ -86,7 +86,7 @@ export const notificationCount = engine.signal<number>(
 
 // Keep notificationCount in sync on removal too
 engine.on(NotificationRemoved, () => {
-  notificationCount._set(notifications.value.length)
+  notificationCount.set(notifications.value.length)
 })
 
 // ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ engine.pipe(NotifyError, NotificationAdded, (data) => makeNotification('error', 
 engine.on(NotificationAdded, (notif) => {
   const current = notifications.value
   const updated = sortByPriority([...current, notif])
-  notifications._set(updated)
+  notifications.set(updated)
 
   // Mark enter done after a frame cycle
   setTimeout(() => engine.emit(NotificationEnterDone, notif.id), 50)
@@ -141,7 +141,7 @@ engine.on(NotificationAdded, (notif) => {
 
 engine.on(NotificationEnterDone, (id) => {
   const current = notifications.value
-  notifications._set(
+  notifications.set(
     current.map((n) => (n.id === id ? { ...n, entering: false } : n)),
   )
 })
@@ -178,7 +178,7 @@ engine.on(DismissAll, () => {
 engine.on(NotificationExitStart, (id) => {
   const current = notifications.value
   if (!current.find((n) => n.id === id)) return
-  notifications._set(
+  notifications.set(
     current.map((n) => (n.id === id ? { ...n, exiting: true } : n)),
   )
   // Remove after exit animation completes
@@ -191,7 +191,7 @@ engine.on(NotificationExitStart, (id) => {
 
 engine.on(NotificationRemoved, (id) => {
   const current = notifications.value
-  notifications._set(current.filter((n) => n.id !== id))
+  notifications.set(current.filter((n) => n.id !== id))
   engine.emit(ReflowTrigger, undefined)
 })
 

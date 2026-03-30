@@ -178,6 +178,7 @@ export class ComplexAnimationComponent implements AfterViewInit, OnInit, OnDestr
 
   ngOnDestroy(): void {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   ngAfterViewInit(): void {

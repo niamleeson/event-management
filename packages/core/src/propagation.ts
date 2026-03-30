@@ -13,6 +13,7 @@ export function propagate(
   mailboxes: Map<EventType, Mailbox>,
   emitFn: (type: EventType, payload: any) => void,
   maxRounds: number,
+  onError?: (error: Error, rule: Rule, event: any) => void,
 ): void {
   let rounds = 0
   let work = true
@@ -34,16 +35,24 @@ export function propagate(
         while (mb.hasReadyEvent(rule)) {
           const ev = mb.consume(rule)
           if (rule.guard && !rule.guard(ev.payload)) continue
-          const result = rule.action(ev.payload)
-          if (result !== undefined && rule.outputs.length > 0) {
-            if (rule.outputs.length > 1 && Array.isArray(result)) {
-              for (let i = 0; i < rule.outputs.length; i++) {
-                depositEvent(mailboxes, rule.outputs[i], result[i])
+          try {
+            const result = rule.action(ev.payload)
+            if (result !== undefined && result !== null && rule.outputs.length > 0) {
+              if (rule.outputs.length > 1 && Array.isArray(result)) {
+                for (let i = 0; i < rule.outputs.length; i++) {
+                  depositEvent(mailboxes, rule.outputs[i], result[i])
+                }
+              } else {
+                depositEvent(mailboxes, rule.outputs[0], result)
               }
-            } else {
-              depositEvent(mailboxes, rule.outputs[0], result)
+              work = true
             }
-            work = true
+          } catch (err) {
+            if (onError) {
+              onError(err as Error, rule, ev.payload)
+            } else {
+              throw err
+            }
           }
         }
       } else if (rule.mode === 'join') {
@@ -68,10 +77,18 @@ export function propagate(
             }
             continue
           }
-          const result = rule.action(...payloads)
-          if (result !== undefined && rule.outputs.length > 0) {
-            depositEvent(mailboxes, rule.outputs[0], result)
-            work = true
+          try {
+            const result = rule.action(...payloads)
+            if (result !== undefined && result !== null && rule.outputs.length > 0) {
+              depositEvent(mailboxes, rule.outputs[0], result)
+              work = true
+            }
+          } catch (err) {
+            if (onError) {
+              onError(err as Error, rule, payloads)
+            } else {
+              throw err
+            }
           }
         }
       }

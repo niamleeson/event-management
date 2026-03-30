@@ -423,6 +423,7 @@ export class FormWizardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   getFieldLabel(field: string): string {

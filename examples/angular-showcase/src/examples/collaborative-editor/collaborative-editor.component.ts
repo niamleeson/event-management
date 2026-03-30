@@ -188,6 +188,7 @@ export class CollaborativeEditorComponent implements OnInit, OnDestroy, AfterVie
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
     stopBots()
+    engine.destroy()
   }
 
   ngAfterViewInit(): void {

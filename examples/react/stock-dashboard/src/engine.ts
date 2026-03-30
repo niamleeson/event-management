@@ -131,14 +131,14 @@ export const selectedStock = engine.signal<string>(
 
 let alertCounter = 0
 
-engine.pipe(PriceUpdate, AlertTriggered, (data) => {
+engine.pipeIf(PriceUpdate, AlertTriggered, (data) => {
   if (Math.abs(data.change) > 5) {
     return {
       symbol: data.symbol,
       message: `${data.symbol} ${data.change > 0 ? 'surged' : 'dropped'} ${Math.abs(data.change).toFixed(2)}%`,
     }
   }
-  return undefined as any
+  return null
 })
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ engine.on(PriceUpdate, (data) => {
     flashDirection: direction,
     flashTime: Date.now(),
   })
-  prices._set(current)
+  prices.set(current)
 
   // Clear flash after 800ms
   setTimeout(() => engine.emit(FlashClear, data.symbol), 800)
@@ -172,7 +172,7 @@ engine.on(FlashClear, (symbol) => {
   const stock = current.get(symbol)
   if (!stock) return
   current.set(symbol, { ...stock, flashDirection: null })
-  prices._set(current)
+  prices.set(current)
 })
 
 // ---------------------------------------------------------------------------
@@ -182,11 +182,11 @@ engine.on(FlashClear, (symbol) => {
 engine.on(AlertTriggered, ({ symbol, message }) => {
   const id = `alert-${++alertCounter}`
   const alert: AlertData = { id, symbol, message, timestamp: Date.now() }
-  alerts._set([alert, ...alerts.value].slice(0, 20))
+  alerts.set([alert, ...alerts.value].slice(0, 20))
 })
 
 engine.on(AlertDismissed, (id) => {
-  alerts._set(alerts.value.filter((a) => a.id !== id))
+  alerts.set(alerts.value.filter((a) => a.id !== id))
 })
 
 // ---------------------------------------------------------------------------

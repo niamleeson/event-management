@@ -116,8 +116,8 @@ engine.on(engine.frame, ({ dt }) => {
   }
 
   // Force signal update by setting new array reference
-  particles._set(next)
-  activeParticleCount._set(alive)
+  particles.set(next)
+  activeParticleCount.set(alive)
 })
 
 // Start frame loop

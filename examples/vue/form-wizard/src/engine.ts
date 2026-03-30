@@ -129,14 +129,14 @@ engine.pipe(FieldUpdated, FieldValidated, (update: FieldUpdate): FieldValidation
 // Step validation: check if all fields in current step are valid
 // ---------------------------------------------------------------------------
 
-engine.on(FieldValidated, (_validation: FieldValidation) => {
+engine.pipe(FieldValidated, StepValidated, (_validation: FieldValidation) => {
   const step = _validation.step
   const fields = STEP_FIELDS[step]
   const allValid = fields.every((field) => {
     const errors = fieldErrors.value
     return errors[field] === null && fieldValues.value[field as keyof FormData]?.trim()
   })
-  engine.emit(StepValidated, { step, valid: allValid })
+  return { step, valid: allValid }
 })
 
 // ---------------------------------------------------------------------------
@@ -171,11 +171,9 @@ engine.on(NextStep, () => {
   }
 })
 
-engine.on(PrevStep, () => {
+engine.pipeIf(PrevStep, StepChanged, () => {
   const step = currentStep.value
-  if (step > 0) {
-    engine.emit(StepChanged, { step: (step - 1) as StepId, direction: 'prev' })
-  }
+  return step > 0 ? { step: (step - 1) as StepId, direction: 'prev' as const } : null
 })
 
 // ---------------------------------------------------------------------------

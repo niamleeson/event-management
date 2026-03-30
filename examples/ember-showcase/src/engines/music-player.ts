@@ -104,7 +104,7 @@ engine.on(engine.frame, ({ dt }) => {
     return
   }
 
-  currentTime._set(newTime)
+  currentTime.set(newTime)
 
   // Update visualizer bars with simulated audio data
   const bars = new Array(BAR_COUNT)
@@ -114,7 +114,7 @@ engine.on(engine.frame, ({ dt }) => {
     const noise = Math.random() * 0.4
     bars[i] = Math.min(1, Math.max(0.05, base + noise))
   }
-  visualizerBars._set(bars)
+  visualizerBars.set(bars)
 
   // Beat pulse every ~0.5 seconds
   if (Math.floor(newTime * 2) !== Math.floor((newTime - dtSec) * 2)) {

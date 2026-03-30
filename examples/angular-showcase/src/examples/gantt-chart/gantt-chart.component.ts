@@ -244,6 +244,7 @@ export class GanttChartComponent implements OnInit, OnDestroy {
     (window as any).__pulseEngine = null
     document.removeEventListener('mousemove', this.onMouseMove)
     document.removeEventListener('mouseup', this.onMouseUp)
+    engine.destroy()
   }
 
   setZoom(z: number): void {

@@ -183,14 +183,7 @@ engine.on(ScrollChanged, (scrollTop) => {
 // Debounced filter
 // ---------------------------------------------------------------------------
 
-let filterTimer: ReturnType<typeof setTimeout> | null = null
-
-engine.on(FilterChanged, (text) => {
-  if (filterTimer) clearTimeout(filterTimer)
-  filterTimer = setTimeout(() => {
-    engine.emit(DebounceFilterApply, text)
-  }, 300)
-})
+engine.debounce(FilterChanged, 300, DebounceFilterApply)
 
 // ---------------------------------------------------------------------------
 // Load initial page

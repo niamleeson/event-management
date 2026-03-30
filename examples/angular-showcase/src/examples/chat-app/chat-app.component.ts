@@ -209,6 +209,7 @@ export class ChatAppComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
     stopBots()
+    engine.destroy()
   }
 
   ngAfterViewInit(): void {

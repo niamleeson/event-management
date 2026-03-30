@@ -112,8 +112,8 @@ engine.on(UndoFilter, () => {
   const history = undoHistory.value
   if (history.length > 0) {
     const prev = history[history.length - 1]
-    filters._set(prev.filters)
-    undoHistory._set(history.slice(0, -1))
+    filters.set(prev.filters)
+    undoHistory.set(history.slice(0, -1))
   }
 })
 
@@ -122,8 +122,8 @@ engine.on(RedoFilter, () => {
   const redo = redoHistory.value
   if (redo.length > 0) {
     const next = redo[redo.length - 1]
-    filters._set(next.filters)
-    redoHistory._set(redo.slice(0, -1))
+    filters.set(next.filters)
+    redoHistory.set(redo.slice(0, -1))
   }
 })
 

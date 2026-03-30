@@ -325,6 +325,7 @@ export class ApiCallComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   onSearch(event: Event): void {

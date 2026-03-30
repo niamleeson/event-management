@@ -164,6 +164,7 @@ export class StockDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
     stopFeed()
+    engine.destroy()
   }
 
   toggleFeed(): void {

@@ -112,6 +112,7 @@ export class ThreeDCardFlipComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   flip(index: number): void {

@@ -352,6 +352,7 @@ export function mount(container: HTMLElement): () => void {
 
   return () => {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
     window.removeEventListener('mousemove', handleMouseMove)
     window.removeEventListener('mouseup', handleMouseUp)
     unsubs.forEach((u) => u())

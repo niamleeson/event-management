@@ -184,6 +184,7 @@ export class ModalSystemComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   @HostListener('window:keydown.escape')

@@ -105,8 +105,8 @@ engine.on(FrameTick, () => {
     })
     .filter((p) => p.life > 0)
 
-  particles._set(updated)
-  particleCount._set(updated.length)
+  particles.set(updated)
+  particleCount.set(updated.length)
 })
 
 // Start frame loop

@@ -192,6 +192,7 @@ export function mount(container: HTMLElement): () => void {
 
   return () => {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
     document.removeEventListener('keydown', onKeyDown)
     overlayContainer.remove()
     unsubs.forEach((u) => u())

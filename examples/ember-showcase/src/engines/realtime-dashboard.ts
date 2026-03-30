@@ -66,12 +66,9 @@ engine.pipe(MetricReceived, ChartDataUpdated, (metric: Metric) => ({
 }))
 
 // MetricReceived -> ThresholdBreached (conditional: only when value > threshold)
-// pipe() always emits its output, so we use on() + emit() for conditional dispatch
-engine.on(MetricReceived, (metric: Metric) => {
+engine.pipeIf(MetricReceived, ThresholdBreached, (metric: Metric) => {
   const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value > config.threshold) {
-    engine.emit(ThresholdBreached, metric)
-  }
+  return config && metric.value > config.threshold ? metric : null
 })
 
 // Join: 3 consecutive threshold breaches for the same metric -> AlertCreated
@@ -98,9 +95,7 @@ engine.on(ThresholdBreached, (metric: Metric) => {
 // Reset breach count when metric goes back below threshold
 engine.on(MetricReceived, (metric: Metric) => {
   const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value <= config.threshold) {
-    breachCounts[metric.name] = 0
-  }
+  if (config && metric.value <= config.threshold) breachCounts[metric.name] = 0
 })
 
 // ---------------------------------------------------------------------------

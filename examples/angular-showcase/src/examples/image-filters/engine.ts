@@ -97,7 +97,7 @@ engine.on(Undo, () => {
   redoStack.push({ filters: current, timestamp: Date.now() })
   const snapshot = undoStack.pop()!
   for (const f of snapshot.filters) {
-    filterValues._set({ ...filterValues.value, [f.id]: f.value })
+    filterValues.set({ ...filterValues.value, [f.id]: f.value })
   }
 })
 
@@ -107,7 +107,7 @@ engine.on(Redo, () => {
   undoStack.push({ filters: current, timestamp: Date.now() })
   const snapshot = redoStack.pop()!
   for (const f of snapshot.filters) {
-    filterValues._set({ ...filterValues.value, [f.id]: f.value })
+    filterValues.set({ ...filterValues.value, [f.id]: f.value })
   }
 })
 

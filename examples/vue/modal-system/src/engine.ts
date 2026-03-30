@@ -101,16 +101,15 @@ engine.on(OpenModal, ({ title, content, size }) => {
   engine.emit(BackdropStart, undefined)
 })
 
-engine.on(CloseModal, (id) => {
-  engine.emit(ModalClosed, id)
+engine.pipe(CloseModal, ModalClosed, (id) => id)
+
+engine.on(ModalClosed, () => {
   setTimeout(() => engine.emit(BackdropStart, undefined), 50)
 })
 
-engine.on(CloseTopModal, () => {
+engine.pipeIf(CloseTopModal, CloseModal, () => {
   const stack = modalStack.value
-  if (stack.length > 0) {
-    engine.emit(CloseModal, stack[stack.length - 1].id)
-  }
+  return stack.length > 0 ? stack[stack.length - 1].id : null
 })
 
 // Escape key handling is done in the component

@@ -186,9 +186,9 @@ export function getProcessedData(): { rows: TableRow[]; total: number } {
 }
 
 // Trigger initial load
-engine.on(SetPage, () => engine.emit(LoadPage, currentPage.value))
-engine.on(SetSort, () => engine.emit(LoadPage, 0))
-engine.on(SetFilter, () => engine.emit(LoadPage, 0))
+engine.pipe(SetPage, LoadPage, () => currentPage.value)
+engine.pipe(SetSort, LoadPage, () => 0)
+engine.pipe(SetFilter, LoadPage, () => 0)
 
 // Start frame loop
 engine.startFrameLoop()

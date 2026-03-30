@@ -89,18 +89,19 @@ export const alerts = engine.signal<{ symbol: string; message: string; ts: numbe
 // Alert logic: check for big moves
 // ---------------------------------------------------------------------------
 
-engine.on(PriceUpdate, (update) => {
+engine.pipeIf(PriceUpdate, AlertTriggered, (update) => {
   const stock = stocks.value.find((s) => s.symbol === update.symbol)
-  if (!stock || stock.history.length < 2) return
+  if (!stock || stock.history.length < 2) return null
   const prevPrice = stock.price
   const changePct = Math.abs((update.price - prevPrice) / prevPrice) * 100
   if (changePct > ALERT_THRESHOLD) {
     const direction = update.price > prevPrice ? 'surged' : 'dropped'
-    engine.emit(AlertTriggered, {
+    return {
       symbol: update.symbol,
       message: `${stock.name} ${direction} ${changePct.toFixed(1)}%`,
-    })
+    }
   }
+  return null
 })
 
 // ---------------------------------------------------------------------------

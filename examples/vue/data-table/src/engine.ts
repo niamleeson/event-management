@@ -150,10 +150,9 @@ engine.async(FetchData, {
 /*  Bulk delete                                                       */
 /* ------------------------------------------------------------------ */
 
-engine.on(BulkDelete, () => {
+engine.pipe(BulkDelete, DataLoaded, () => {
   const sel = selectedRows.value
-  const filtered = allData.value.filter(r => !sel.has(r.id))
-  engine.emit(DataLoaded, filtered)
+  return allData.value.filter(r => !sel.has(r.id))
 })
 
 // Load initial data

@@ -66,33 +66,31 @@ engine.pipe(MetricReceived, ChartDataUpdated, (metric: Metric) => ({
 }))
 
 // MetricReceived -> ThresholdBreached (conditional: only when value > threshold)
-// pipe() always emits its output, so we use on() + emit() for conditional dispatch
-engine.on(MetricReceived, (metric: Metric) => {
+engine.pipeIf(MetricReceived, ThresholdBreached, (metric: Metric) => {
   const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value > config.threshold) {
-    engine.emit(ThresholdBreached, metric)
-  }
+  return config && metric.value > config.threshold ? metric : null
 })
 
 // Join: 3 consecutive threshold breaches for the same metric -> AlertCreated
 // We track breach counts per metric and create alert when count hits 3
 let breachCounts: Record<string, number> = {}
 
-engine.on(ThresholdBreached, (metric: Metric) => {
+engine.pipeIf(ThresholdBreached, AlertCreated, (metric: Metric) => {
   const key = metric.name
   breachCounts[key] = (breachCounts[key] ?? 0) + 1
   if (breachCounts[key] >= 3) {
     breachCounts[key] = 0
     const config = METRICS.find((m) => m.name === metric.name)
-    engine.emit(AlertCreated, {
+    return {
       id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       metric: metric.name,
       value: metric.value,
       threshold: config?.threshold ?? 0,
       timestamp: Date.now(),
       message: `${metric.name} exceeded threshold ${config?.threshold}${config?.unit} (current: ${metric.value.toFixed(1)}${config?.unit})`,
-    })
+    }
   }
+  return null
 })
 
 // Reset breach count when metric goes back below threshold

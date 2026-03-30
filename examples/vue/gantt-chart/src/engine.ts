@@ -91,16 +91,14 @@ function shiftDependents(taskList: Task[], movedId: number): Task[] {
   return result
 }
 
-engine.on(TaskMoved, ({ id, newStart }) => {
+engine.pipe(TaskMoved, TasksUpdated, ({ id, newStart }) => {
   let updated = tasks.value.map(t => t.id === id ? { ...t, start: Math.max(0, newStart) } : { ...t })
-  updated = shiftDependents(updated, id)
-  engine.emit(TasksUpdated, updated)
+  return shiftDependents(updated, id)
 })
 
-engine.on(TaskResized, ({ id, newDuration }) => {
+engine.pipe(TaskResized, TasksUpdated, ({ id, newDuration }) => {
   let updated = tasks.value.map(t => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : { ...t })
-  updated = shiftDependents(updated, id)
-  engine.emit(TasksUpdated, updated)
+  return shiftDependents(updated, id)
 })
 
 /* ------------------------------------------------------------------ */

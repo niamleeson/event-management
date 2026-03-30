@@ -57,8 +57,8 @@ engine.on(OpenModal, ({ id, title, content, size }) => {
   if (current.find((m) => m.id === id)) return
 
   const modal: ModalData = { id, title, content, size, state: 'entering' }
-  modalStack._set([...current, modal])
-  activeModalId._set(id)
+  modalStack.set([...current, modal])
+  activeModalId.set(id)
 
   // After entrance animation, mark as open and fire ModalOpened
   setTimeout(() => {
@@ -69,7 +69,7 @@ engine.on(OpenModal, ({ id, title, content, size }) => {
 // Join: ModalEnterDone waits for entrance animation to complete
 engine.on(ModalEnterDone, (id) => {
   const current = modalStack.value
-  modalStack._set(
+  modalStack.set(
     current.map((m) => (m.id === id ? { ...m, state: 'open' as const } : m)),
   )
   engine.emit(ModalOpened, id)
@@ -84,7 +84,7 @@ engine.on(CloseModal, (id) => {
   const modal = current.find((m) => m.id === id)
   if (!modal || modal.state === 'exiting') return
 
-  modalStack._set(
+  modalStack.set(
     current.map((m) => (m.id === id ? { ...m, state: 'exiting' as const } : m)),
   )
 
@@ -97,13 +97,13 @@ engine.on(CloseModal, (id) => {
 engine.on(ModalExitDone, (id) => {
   const current = modalStack.value
   const newStack = current.filter((m) => m.id !== id)
-  modalStack._set(newStack)
+  modalStack.set(newStack)
 
   // Update active modal
   if (newStack.length > 0) {
-    activeModalId._set(newStack[newStack.length - 1].id)
+    activeModalId.set(newStack[newStack.length - 1].id)
   } else {
-    activeModalId._set(null)
+    activeModalId.set(null)
   }
 
   engine.emit(ModalClosed, id)

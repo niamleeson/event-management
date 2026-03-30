@@ -217,6 +217,7 @@ export class ImageFiltersComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   getFilter(id: string): FilterConfig | undefined {

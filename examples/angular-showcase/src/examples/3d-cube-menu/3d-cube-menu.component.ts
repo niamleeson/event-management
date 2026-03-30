@@ -154,6 +154,7 @@ export class ThreeDCubeMenuComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   onMouseDown(e: MouseEvent): void {
@@ -175,8 +176,8 @@ export class ThreeDCubeMenuComponent implements OnInit, OnDestroy {
     this.lastX = e.clientX
     this.lastY = e.clientY
     // Update target directly for spring to chase
-    targetRotX._set(this.dragAccX)
-    targetRotY._set(this.dragAccY)
+    targetRotX.set(this.dragAccX)
+    targetRotY.set(this.dragAccY)
   }
 
   @HostListener('window:mouseup')

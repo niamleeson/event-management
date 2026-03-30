@@ -103,14 +103,14 @@ engine.on(UndoDraw, () => {
   if (undoHistory.length === 0) return
   const entry = undoHistory.pop()!
   redoHistory.push(entry)
-  strokes._set(strokes.value.filter((s) => s.id !== entry.stroke.id))
+  strokes.set(strokes.value.filter((s) => s.id !== entry.stroke.id))
 })
 
 engine.on(RedoDraw, () => {
   if (redoHistory.length === 0) return
   const entry = redoHistory.pop()!
   undoHistory.push(entry)
-  strokes._set([...strokes.value, entry.stroke])
+  strokes.set([...strokes.value, entry.stroke])
 })
 
 // Track current stroke in-progress for live drawing

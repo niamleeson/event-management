@@ -158,7 +158,7 @@ engine.on(LocalEdit, (payload) => {
 
   // Update spring target
   const target = cursorSpringTargets.get('local')
-  if (target) target._set(newPos)
+  if (target) target.set(newPos)
 
   // Add to history
   engine.emit(HistoryAdded, {
@@ -198,7 +198,7 @@ engine.on(RemoteEdit, (payload) => {
   engine.emit(CursorMoved, { user: payload.user, pos: newPos })
 
   const target = cursorSpringTargets.get(payload.user)
-  if (target) target._set(newPos)
+  if (target) target.set(newPos)
 
   // History
   const userName = allUsers.find(u => u.id === payload.user)?.name ?? payload.user

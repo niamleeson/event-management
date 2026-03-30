@@ -79,9 +79,9 @@ engine.on(engine.frame, ({ dt }) => {
   const newProgress = progress.value + increment
   if (newProgress >= 1) {
     engine.emit(NextTrack, undefined)
-    progress._set(0)
+    progress.set(0)
   } else {
-    progress._set(newProgress)
+    progress.set(newProgress)
   }
 
   // Generate beat-reactive bar heights
@@ -93,16 +93,16 @@ engine.on(engine.frame, ({ dt }) => {
     const beat = Math.sin(time * 8 + i * 0.2) > 0.7 ? 25 : 0
     return Math.max(5, base + beat + Math.random() * 10)
   })
-  barHeights._set(newBars)
+  barHeights.set(newBars)
 
   // Rotate album art
-  albumRotation._set(albumRotation.value + dt * 0.05)
+  albumRotation.set(albumRotation.value + dt * 0.05)
 })
 
 // Reset on track change
-engine.on(NextTrack, () => { progress._set(0) })
-engine.on(PrevTrack, () => { progress._set(0) })
-engine.on(SelectTrack, () => { progress._set(0) })
+engine.on(NextTrack, () => { progress.set(0) })
+engine.on(PrevTrack, () => { progress.set(0) })
+engine.on(SelectTrack, () => { progress.set(0) })
 
 // ---------------------------------------------------------------------------
 // Tween: progress bar

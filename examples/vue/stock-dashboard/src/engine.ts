@@ -82,20 +82,19 @@ engine.signalUpdate(alerts, DismissAlert, (prev, id) => prev.filter(a => a.id !=
 /*  Alert on >5% change                                               */
 /* ------------------------------------------------------------------ */
 
-engine.on(PriceUpdate, ({ symbol, price }) => {
+engine.pipeIf(PriceUpdate, AlertTriggered, ({ symbol, price }) => {
   const stock = stocks.value.find(s => s.symbol === symbol)
-  if (!stock || stock.history.length < 2) return
+  if (!stock || stock.history.length < 2) return null
   const basePrice = stock.history[0]
   const percentChange = Math.abs((price - basePrice) / basePrice * 100)
-  if (percentChange > 5) {
-    const direction = price > basePrice ? 'up' : 'down'
-    engine.emit(AlertTriggered, {
-      id: alertId++,
-      symbol,
-      message: `${symbol} moved ${direction === 'up' ? '+' : ''}${percentChange.toFixed(1)}% since open`,
-      time: Date.now(),
-      type: direction,
-    })
+  if (percentChange <= 5) return null
+  const direction = price > basePrice ? 'up' : 'down'
+  return {
+    id: alertId++,
+    symbol,
+    message: `${symbol} moved ${direction === 'up' ? '+' : ''}${percentChange.toFixed(1)}% since open`,
+    time: Date.now(),
+    type: direction,
   }
 })
 

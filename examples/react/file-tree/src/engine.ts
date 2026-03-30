@@ -268,38 +268,38 @@ engine.on(ToggleFolder, (id) => {
   } else {
     current.add(id)
   }
-  expandedIds._set(current)
+  expandedIds.set(current)
 })
 
 engine.on(CreateFile, ({ parentId, name }) => {
   const id = `file-${++nodeCounter}`
   const newNode: TreeNode = { id, name, type: 'file', parentId }
-  tree._set(addChild(deepCloneTree(tree.value), parentId, newNode))
+  tree.set(addChild(deepCloneTree(tree.value), parentId, newNode))
   // Auto-expand parent
   const exp = new Set(expandedIds.value)
   exp.add(parentId)
-  expandedIds._set(exp)
+  expandedIds.set(exp)
 })
 
 engine.on(CreateFolder, ({ parentId, name }) => {
   const id = `folder-${++nodeCounter}`
   const newNode: TreeNode = { id, name, type: 'folder', parentId, children: [] }
-  tree._set(addChild(deepCloneTree(tree.value), parentId, newNode))
+  tree.set(addChild(deepCloneTree(tree.value), parentId, newNode))
   const exp = new Set(expandedIds.value)
   exp.add(parentId)
-  expandedIds._set(exp)
+  expandedIds.set(exp)
 })
 
 engine.on(DeleteItem, (id) => {
   if (id === 'root') return
-  tree._set(removeNode(deepCloneTree(tree.value), id))
+  tree.set(removeNode(deepCloneTree(tree.value), id))
   if (selectedId.value === id) {
     engine.emit(SelectItem, '')
   }
 })
 
 engine.on(RenameItem, ({ id, name }) => {
-  tree._set(renameNode(deepCloneTree(tree.value), id, name))
+  tree.set(renameNode(deepCloneTree(tree.value), id, name))
 })
 
 engine.on(DragItem, ({ id, targetId }) => {
@@ -310,19 +310,19 @@ engine.on(DragItem, ({ id, targetId }) => {
   const target = findNode(current, targetId)
   if (!target || target.type !== 'folder') return
   const without = removeNode(current, id)
-  tree._set(addChild(without, targetId, { ...node, parentId: targetId }))
+  tree.set(addChild(without, targetId, { ...node, parentId: targetId }))
 })
 
 engine.on(ContextMenuOpen, ({ x, y, targetId }) => {
-  contextMenu._set({ visible: true, x, y, targetId })
+  contextMenu.set({ visible: true, x, y, targetId })
 })
 
 engine.on(ContextMenuClose, () => {
-  contextMenu._set({ visible: false, x: 0, y: 0, targetId: null })
+  contextMenu.set({ visible: false, x: 0, y: 0, targetId: null })
 })
 
 engine.on(ClipboardCopy, (id) => {
-  clipboard._set(id)
+  clipboard.set(id)
 })
 
 engine.on(ClipboardPaste, (parentId) => {
@@ -333,7 +333,7 @@ engine.on(ClipboardPaste, (parentId) => {
   if (!node) return
   const newId = `copy-${++nodeCounter}`
   const copy: TreeNode = { ...node, id: newId, parentId, name: `${node.name} (copy)` }
-  tree._set(addChild(current, parentId, copy))
+  tree.set(addChild(current, parentId, copy))
 })
 
 // Export helpers for components

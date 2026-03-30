@@ -245,6 +245,7 @@ export class CanvasPaintComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   ngAfterViewInit(): void {

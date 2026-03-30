@@ -110,23 +110,18 @@ export const UserDetailsError = engine.event<string>('UserDetailsError')
 
 // ---------------------------------------------------------------------------
 // Async: SearchInput -> debounced search -> SearchDone
-// Uses 'latest' strategy so new searches cancel pending ones
+// Uses engine.debounce() for the 300ms delay, then 'latest' strategy cancels pending searches
 // ---------------------------------------------------------------------------
 
-engine.async(SearchInput, {
+const SearchInputDebounced = engine.event<string>('SearchInputDebounced')
+engine.debounce(SearchInput, 300, SearchInputDebounced)
+
+engine.async(SearchInputDebounced, {
   pending: SearchPending,
   done: SearchDone,
   error: SearchError,
   strategy: 'latest',
   do: async (query: string, { signal }) => {
-    // Debounce: wait 300ms before firing the request
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(resolve, 300)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
     if (query.trim().length === 0) return []
     return searchUsers(query, signal)
   },

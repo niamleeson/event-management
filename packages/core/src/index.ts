@@ -22,6 +22,9 @@ export type {
   CycleInfo,
   DAGEdge,
   DAGGraph,
+  EngineSnapshot,
+  Middleware,
+  RecordedEvent,
 } from './types.js'
 
 // Event creation (for advanced usage)

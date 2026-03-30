@@ -115,14 +115,13 @@ engine.on(DragMove, ({ x, y }) => {
 /*  Shuffle                                                           */
 /* ------------------------------------------------------------------ */
 
-engine.on(ShuffleItems, () => {
+engine.pipe(ShuffleItems, [ItemsChanged, PositionsUpdated], () => {
   const shuffled = [...items.value]
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
   }
-  engine.emit(ItemsChanged, shuffled)
-  engine.emit(PositionsUpdated, undefined)
+  return [shuffled, undefined]
 })
 
 /* ------------------------------------------------------------------ */
@@ -135,9 +134,8 @@ engine.on(AddItem, () => {
   engine.emit(PositionsUpdated, undefined)
 })
 
-engine.on(RemoveItem, (id) => {
-  engine.emit(ItemsChanged, items.value.filter(it => it.id !== id))
-  engine.emit(PositionsUpdated, undefined)
+engine.pipe(RemoveItem, [ItemsChanged, PositionsUpdated], (id) => {
+  return [items.value.filter(it => it.id !== id), undefined]
 })
 
 export { COLS, CELL_SIZE, GAP }

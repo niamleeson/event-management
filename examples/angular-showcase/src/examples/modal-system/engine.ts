@@ -84,7 +84,7 @@ engine.on(OpenModal, (config) => {
   const current = modalStack.value
   if (current.length >= MAX_MODALS) return
   const next = [...current, config]
-  modalStack._set(next)
+  modalStack.set(next)
   engine.emit(ModalOpened, config.id)
   // Trigger fade-in for the new modal
   const slot = current.length % MAX_MODALS
@@ -93,12 +93,12 @@ engine.on(OpenModal, (config) => {
 
 engine.on(CloseModal, (id) => {
   const current = modalStack.value
-  modalStack._set(current.filter((m) => m.id !== id))
+  modalStack.set(current.filter((m) => m.id !== id))
   engine.emit(ModalClosed, id)
 })
 
 engine.on(CloseAll, () => {
-  modalStack._set([])
+  modalStack.set([])
 })
 
 // Backdrop blur intensity: increases with stack depth

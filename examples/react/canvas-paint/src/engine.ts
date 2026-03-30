@@ -110,7 +110,7 @@ let lastMoveTime = 0
 engine.on(StrokeStart, ({ x, y }) => {
   const id = `stroke-${++strokeCounter}`
   lastMoveTime = Date.now()
-  currentStroke._set({
+  currentStroke.set({
     id,
     tool: currentTool.value,
     color: currentTool.value === 'eraser' ? '#1a1a2e' : currentColor.value,
@@ -135,7 +135,7 @@ engine.on(StrokeMove, ({ x, y, pressure }) => {
   // Higher speed = less pressure (thinner line)
   const simulatedPressure = pressure ?? Math.max(0.2, Math.min(1, 1 - speed * 0.3))
 
-  currentStroke._set({
+  currentStroke.set({
     ...stroke,
     points: [...stroke.points, { x, y, pressure: simulatedPressure }],
   })
@@ -145,11 +145,11 @@ engine.on(StrokeEnd, () => {
   const stroke = currentStroke.value
   if (!stroke) return
   if (stroke.points.length > 1) {
-    strokes._set([...strokes.value, stroke])
-    undoStack._set([...undoStack.value, stroke])
-    redoStack._set([])
+    strokes.set([...strokes.value, stroke])
+    undoStack.set([...undoStack.value, stroke])
+    redoStack.set([])
   }
-  currentStroke._set(null)
+  currentStroke.set(null)
 })
 
 // ---------------------------------------------------------------------------
@@ -160,18 +160,18 @@ engine.on(UndoStroke, () => {
   const stack = undoStack.value
   if (stack.length === 0) return
   const last = stack[stack.length - 1]
-  undoStack._set(stack.slice(0, -1))
-  redoStack._set([...redoStack.value, last])
-  strokes._set(strokes.value.filter((s) => s.id !== last.id))
+  undoStack.set(stack.slice(0, -1))
+  redoStack.set([...redoStack.value, last])
+  strokes.set(strokes.value.filter((s) => s.id !== last.id))
 })
 
 engine.on(RedoStroke, () => {
   const stack = redoStack.value
   if (stack.length === 0) return
   const last = stack[stack.length - 1]
-  redoStack._set(stack.slice(0, -1))
-  undoStack._set([...undoStack.value, last])
-  strokes._set([...strokes.value, last])
+  redoStack.set(stack.slice(0, -1))
+  undoStack.set([...undoStack.value, last])
+  strokes.set([...strokes.value, last])
 })
 
 // ---------------------------------------------------------------------------
@@ -179,10 +179,10 @@ engine.on(RedoStroke, () => {
 // ---------------------------------------------------------------------------
 
 engine.on(ClearCanvas, () => {
-  strokes._set([])
-  undoStack._set([])
-  redoStack._set([])
-  currentStroke._set(null)
+  strokes.set([])
+  undoStack.set([])
+  redoStack.set([])
+  currentStroke.set(null)
 })
 
 // ---------------------------------------------------------------------------
@@ -194,12 +194,12 @@ let layerCounter = 1
 engine.on(LayerAdded, () => {
   layerCounter++
   const newLayer: Layer = { id: layerCounter, name: `Layer ${layerCounter}`, visible: true }
-  layers._set([...layers.value, newLayer])
+  layers.set([...layers.value, newLayer])
   engine.emit(LayerSelected, layerCounter)
 })
 
 engine.on(LayerToggled, (id) => {
-  layers._set(
+  layers.set(
     layers.value.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)),
   )
 })

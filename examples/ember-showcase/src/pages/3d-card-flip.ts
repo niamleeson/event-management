@@ -110,6 +110,7 @@ export function mount(container: HTMLElement): () => void {
 
   return () => {
     ;(window as any).__pulseEngine = null
+    engine.destroy()
     unsubs.forEach((u) => u())
     container.removeChild(wrapper)
   }

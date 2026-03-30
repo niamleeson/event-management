@@ -210,6 +210,7 @@ export class SpreadsheetComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   getCellId(row: number, col: number): CellId {

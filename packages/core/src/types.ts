@@ -43,6 +43,8 @@ export interface EngineOptions {
 export interface Signal<T = any> {
   value: T
   subscribe(callback: (value: T, prev: T) => void): () => void
+  /** Public imperative setter */
+  set(next: T): void
   /** internal */
   _subscribers: Set<(value: T, prev: T) => void>
   _set(next: T): void
@@ -145,4 +147,17 @@ export interface CycleInfo {
   rulesEvaluated?: number
   eventsDeposited?: number
   duration?: number
+}
+
+/** Snapshot of engine signal state for serialization */
+export type EngineSnapshot = Map<string, any>
+
+/** Middleware function type */
+export type Middleware = (event: { type: EventType; payload: any }) => { type: EventType; payload: any } | null
+
+/** Recorded event for replay */
+export interface RecordedEvent {
+  type: EventType
+  payload: any
+  timestamp: number
 }

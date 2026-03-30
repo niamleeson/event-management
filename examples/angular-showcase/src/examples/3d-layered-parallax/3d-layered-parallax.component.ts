@@ -132,6 +132,7 @@ export class ThreeDLayeredParallaxComponent implements OnInit, OnDestroy, AfterV
 
   ngOnDestroy(): void {
     (window as any).__pulseEngine = null
+    engine.destroy()
   }
 
   ngAfterViewInit(): void {
