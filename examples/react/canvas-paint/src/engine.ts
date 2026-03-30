@@ -317,6 +317,18 @@ engine.on(engine.frame, () => {
 })
 
 // ---------------------------------------------------------------------------
+// Snapshot / Restore: save and load the project state
+// ---------------------------------------------------------------------------
+
+export function saveProject() {
+  return engine.snapshot()
+}
+
+export function loadProject(snap: any) {
+  engine.restore(snap)
+}
+
+// ---------------------------------------------------------------------------
 // Start frame loop
 // ---------------------------------------------------------------------------
 

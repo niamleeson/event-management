@@ -55,12 +55,51 @@ export const AlertDismissed = engine.event<string>('AlertDismissed')
 export const ChartDataUpdated = engine.event<{ name: string; point: ChartDataPoint }>('ChartDataUpdated')
 export const FeedToggled = engine.event<boolean>('FeedToggled')
 
+// Throttled version of MetricReceived for chart updates (max once per second)
+const ChartThrottled = engine.event<Metric>('ChartThrottled')
+engine.throttle(MetricReceived, 1000, ChartThrottled)
+
+// Time-windowed join: 3 threshold breaches within 10 seconds -> AlertCreated
+// Separate event types for each breach slot (joinWithin needs distinct inputs)
+const Breach1 = engine.event<Metric>('Breach1')
+const Breach2 = engine.event<Metric>('Breach2')
+const Breach3 = engine.event<Metric>('Breach3')
+let breachSlot = 0
+
+engine.on(ThresholdBreached, (metric: Metric) => {
+  const slot = breachSlot % 3
+  breachSlot++
+  if (slot === 0) engine.emit(Breach1, metric)
+  else if (slot === 1) engine.emit(Breach2, metric)
+  else engine.emit(Breach3, metric)
+})
+
+engine.joinWithin(
+  [Breach1, Breach2, Breach3],
+  AlertCreated,
+  10000,
+  {
+    do: (a: Metric, _b: Metric, c: Metric) => {
+      const metric = c
+      const config = METRICS.find((m) => m.name === metric.name)
+      return {
+        id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        metric: metric.name,
+        value: metric.value,
+        threshold: config?.threshold ?? 0,
+        timestamp: Date.now(),
+        message: `${metric.name} exceeded threshold ${config?.threshold}${config?.unit} (current: ${metric.value.toFixed(1)}${config?.unit})`,
+      }
+    },
+  },
+)
+
 // ---------------------------------------------------------------------------
 // Pipes & Rules
 // ---------------------------------------------------------------------------
 
-// MetricReceived -> ChartDataUpdated (always fires for every metric)
-engine.pipe(MetricReceived, ChartDataUpdated, (metric: Metric) => ({
+// ChartThrottled -> ChartDataUpdated (throttled to max once per second)
+engine.pipe(ChartThrottled, ChartDataUpdated, (metric: Metric) => ({
   name: metric.name,
   point: { timestamp: metric.timestamp, value: metric.value },
 }))
@@ -71,34 +110,7 @@ engine.pipeIf(MetricReceived, ThresholdBreached, (metric: Metric) => {
   return config && metric.value > config.threshold ? metric : null
 })
 
-// Join: 3 consecutive threshold breaches for the same metric -> AlertCreated
-// We track breach counts per metric and create alert when count hits 3
-let breachCounts: Record<string, number> = {}
-
-engine.on(ThresholdBreached, (metric: Metric) => {
-  const key = metric.name
-  breachCounts[key] = (breachCounts[key] ?? 0) + 1
-  if (breachCounts[key] >= 3) {
-    breachCounts[key] = 0
-    const config = METRICS.find((m) => m.name === metric.name)
-    engine.emit(AlertCreated, {
-      id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      metric: metric.name,
-      value: metric.value,
-      threshold: config?.threshold ?? 0,
-      timestamp: Date.now(),
-      message: `${metric.name} exceeded threshold ${config?.threshold}${config?.unit} (current: ${metric.value.toFixed(1)}${config?.unit})`,
-    })
-  }
-})
-
-// Reset breach count when metric goes back below threshold
-engine.on(MetricReceived, (metric: Metric) => {
-  const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value <= config.threshold) {
-    breachCounts[metric.name] = 0
-  }
-})
+// (Breach counting is handled above by joinWithin — 3 breaches within 10s triggers alert)
 
 // ---------------------------------------------------------------------------
 // Signals

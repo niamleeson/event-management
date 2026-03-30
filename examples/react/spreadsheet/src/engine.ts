@@ -6,6 +6,11 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
+// Error boundary: catch formula evaluation errors in rules
+engine.onError = (error, rule, _event) => {
+  console.warn(`[Pulse] Error in ${rule.name}:`, error.message)
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

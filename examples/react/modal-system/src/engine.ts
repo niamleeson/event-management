@@ -48,6 +48,17 @@ export const activeModalId: Signal<string | null> = createSignal<string | null>(
 engine['_signals'].push(activeModalId)
 
 // ---------------------------------------------------------------------------
+// Child engines: each modal gets its own child engine for local state isolation.
+// Child engines are automatically destroyed when the parent is destroyed.
+// ---------------------------------------------------------------------------
+
+const modalEngines = new Map<string, ReturnType<typeof engine.createChild>>()
+
+export function getModalEngine(id: string) {
+  return modalEngines.get(id) ?? null
+}
+
+// ---------------------------------------------------------------------------
 // Open modal: add to stack in "entering" state
 // ---------------------------------------------------------------------------
 
@@ -55,6 +66,10 @@ engine.on(OpenModal, ({ id, title, content, size }) => {
   const current = modalStack.value
   // Prevent duplicate ids
   if (current.find((m) => m.id === id)) return
+
+  // Create a child engine for this modal's local state
+  const childEngine = engine.createChild()
+  modalEngines.set(id, childEngine)
 
   const modal: ModalData = { id, title, content, size, state: 'entering' }
   modalStack.set([...current, modal])
@@ -98,6 +113,13 @@ engine.on(ModalExitDone, (id) => {
   const current = modalStack.value
   const newStack = current.filter((m) => m.id !== id)
   modalStack.set(newStack)
+
+  // Destroy the child engine for this modal
+  const childEngine = modalEngines.get(id)
+  if (childEngine) {
+    childEngine.destroy()
+    modalEngines.delete(id)
+  }
 
   // Update active modal
   if (newStack.length > 0) {

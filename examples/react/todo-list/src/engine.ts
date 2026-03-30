@@ -89,3 +89,14 @@ export const validationError = engine.signal<ValidationResult>(
   { valid: false, error: null },
   (_prev, result) => result,
 )
+
+// Computed signals: derived from todoList and activeFilter
+export const remainingCount = engine.computed([todoList, activeFilter], (todos: Todo[], _filter: Filter) => {
+  return todos.filter(t => !t.completed).length
+})
+
+export const filteredTodos = engine.computed([todoList, activeFilter], (todos: Todo[], filter: Filter) => {
+  if (filter === 'active') return todos.filter(t => !t.completed)
+  if (filter === 'completed') return todos.filter(t => t.completed)
+  return todos
+})

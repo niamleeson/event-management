@@ -5,6 +5,8 @@ import {
   activeFilter,
   currentText,
   validationError,
+  remainingCount,
+  filteredTodos,
   TodoAdded,
   TodoRemoved,
   TodoToggled,
@@ -232,15 +234,8 @@ function TodoItem({ todo }: { todo: Todo }) {
 
 function TodoList() {
   const todos = useSignal(todoList)
-  const filter = useSignal(activeFilter)
-
-  const filtered = todos.filter((t) => {
-    if (filter === 'active') return !t.completed
-    if (filter === 'completed') return t.completed
-    return true
-  })
-
-  const remaining = todos.filter((t) => !t.completed).length
+  const filtered = useSignal(filteredTodos)
+  const remaining = useSignal(remainingCount)
 
   return (
     <div>

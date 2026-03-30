@@ -35,7 +35,6 @@ export const CARDS: CardData[] = [
 
 export const PageLoaded = engine.event<void>('PageLoaded')
 export const AllCardsEntered = engine.event<void>('AllCardsEntered')
-export const WelcomeFadeStart = engine.event<void>('WelcomeFadeStart')
 export const WelcomeFadeDone = engine.event<void>('WelcomeFadeDone')
 
 // Per-card events
@@ -131,29 +130,17 @@ engine.join(
   },
 )
 
-// After all cards enter, trigger welcome fade
-engine.pipe(AllCardsEntered, WelcomeFadeStart, () => undefined)
-
 // ---------------------------------------------------------------------------
-// Welcome message tween
+// Welcome message tweens (sequenced: opacity then translateY)
+// After AllCardsEntered, sequence two tweens: fade in then slide up
 // ---------------------------------------------------------------------------
 
-export const welcomeOpacity = engine.tween({
-  start: WelcomeFadeStart,
-  done: WelcomeFadeDone,
-  from: 0,
-  to: 1,
-  duration: 800,
-  easing: (t: number) => t * t * (3 - 2 * t), // smoothstep
-})
-
-export const welcomeTranslateY = engine.tween({
-  start: WelcomeFadeStart,
-  from: 20,
-  to: 0,
-  duration: 800,
-  easing: (t: number) => 1 - Math.pow(1 - t, 3),
-})
+const welcomeTweens = engine.sequence(AllCardsEntered, [
+  { from: 0, to: 1, duration: 500, easing: 'easeOut' },
+  { from: 20, to: 0, duration: 400, easing: 'easeOut' },
+], WelcomeFadeDone)
+export const welcomeOpacity = welcomeTweens[0]
+export const welcomeTranslateY = welcomeTweens[1]
 
 // ---------------------------------------------------------------------------
 // Signals to track state

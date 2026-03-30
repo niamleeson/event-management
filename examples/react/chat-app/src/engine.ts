@@ -7,6 +7,17 @@ import { createEngine, type Signal } from '@pulse/core'
 export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
+// Middleware: log all non-frame events
+// ---------------------------------------------------------------------------
+
+engine.use((event) => {
+  if (event.type.name !== '__frame__') {
+    console.log(`[Pulse] ${event.type.name}`, event.payload)
+  }
+  return event
+})
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 

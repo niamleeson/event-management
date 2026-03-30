@@ -71,6 +71,10 @@ const INITIAL_CARDS: KanbanCard[] = [
 export const DragStart = engine.event<DragInfo>('DragStart')
 export const DragMove = engine.event<DragMoveInfo>('DragMove')
 export const DragEnd = engine.event<void>('DragEnd')
+
+// Coalesce DragMove events to reduce processing (batches to next frame tick)
+const DragMoveCoalesced = engine.event<DragMoveInfo>('DragMoveCoalesced')
+engine.coalesce(DragMove, DragMoveCoalesced)
 export const DropTarget = engine.event<DropInfo>('DropTarget')
 export const CardMoved = engine.event<MoveInfo>('CardMoved')
 export const SavePending = engine.event<string>('SavePending')
@@ -207,9 +211,9 @@ export const dragState = engine.signal<DragInfo | null>(
 )
 engine.signalUpdate(dragState, DragEnd, () => null)
 
-// Drag position
+// Drag position (uses coalesced DragMove for reduced update frequency)
 export const dragPosition = engine.signal<{ x: number; y: number }>(
-  DragMove,
+  DragMoveCoalesced,
   { x: 0, y: 0 },
   (_prev, pos) => pos,
 )
@@ -237,10 +241,10 @@ engine.signalUpdate(cardStatuses, CardSettled, (prev, cardId) => ({
   [cardId]: 'settled' as CardStatus,
 }))
 
-// Spring-driven drag position for smooth feel
+// Spring-driven drag position for smooth feel (uses coalesced events)
 export const dragSpringX = engine.spring(
   (() => {
-    const sig = engine.signal<number>(DragMove, 0, (_prev, pos) => pos.x)
+    const sig = engine.signal<number>(DragMoveCoalesced, 0, (_prev, pos) => pos.x)
     engine.signalUpdate(sig, DragStart, (_prev, info) => info.startX)
     return sig
   })(),
@@ -249,7 +253,7 @@ export const dragSpringX = engine.spring(
 
 export const dragSpringY = engine.spring(
   (() => {
-    const sig = engine.signal<number>(DragMove, 0, (_prev, pos) => pos.y)
+    const sig = engine.signal<number>(DragMoveCoalesced, 0, (_prev, pos) => pos.y)
     engine.signalUpdate(sig, DragStart, (_prev, info) => info.startY)
     return sig
   })(),

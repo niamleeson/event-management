@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSignal, useEmit } from '@pulse/react'
 import {
   currentStep,
@@ -11,6 +12,9 @@ import {
   FieldUpdated,
   NextStep,
   PrevStep,
+  startRec,
+  stopRec,
+  replayRec,
   STEP_FIELDS,
   STEP_LABELS,
   type StepId,
@@ -390,6 +394,8 @@ export default function App() {
   const submitting = useSignal(isSubmitting)
   const result = useSignal(submitResult)
   const shake = useSignal(shakeActive)
+  const [recording, setRecording] = useState(false)
+  const [recorded, setRecorded] = useState<any[] | null>(null)
 
   // Show success screen after submit
   if (result?.success) {
@@ -478,6 +484,84 @@ export default function App() {
                 : 'Continue'}
           </button>
         </div>
+      </div>
+
+      {/* Record & Replay controls (engine.startRecording / stopRecording / replay) */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          marginTop: 16,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        {!recording ? (
+          <button
+            onClick={() => {
+              startRec()
+              setRecording(true)
+              setRecorded(null)
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: `1px solid ${colors.error}40`,
+              background: `${colors.error}10`,
+              color: colors.error,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Record
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              const events = stopRec()
+              setRecording(false)
+              setRecorded(events)
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: `1px solid ${colors.error}`,
+              background: colors.error,
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Stop
+          </button>
+        )}
+        <button
+          onClick={() => {
+            if (recorded && recorded.length > 0) {
+              replayRec(recorded)
+            }
+          }}
+          disabled={!recorded || recorded.length === 0}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 8,
+            border: `1px solid ${colors.primary}40`,
+            background: recorded ? `${colors.primary}10` : colors.border,
+            color: recorded ? colors.primary : colors.muted,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: recorded ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Replay{recorded ? ` (${recorded.length})` : ''}
+        </button>
+        {recording && (
+          <span style={{ fontSize: 12, color: colors.error, fontWeight: 600 }}>
+            Recording...
+          </span>
+        )}
       </div>
     </div>
   )

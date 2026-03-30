@@ -288,5 +288,21 @@ export const shakeActive = engine.signal<number>(
   (prev) => prev + 1,
 )
 
+// ---------------------------------------------------------------------------
+// Recording / Replay: record and replay user interactions
+// ---------------------------------------------------------------------------
+
+export function startRec() {
+  engine.startRecording()
+}
+
+export function stopRec() {
+  return engine.stopRecording()
+}
+
+export function replayRec(events: any[]) {
+  engine.replay(events)
+}
+
 // Start frame loop for animations
 engine.startFrameLoop()

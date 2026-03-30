@@ -23,6 +23,8 @@ import {
   LayerSelected,
   LayerToggled,
   setCanvasRef,
+  saveProject,
+  loadProject,
 } from './engine'
 import type { Tool } from './engine'
 
@@ -315,6 +317,52 @@ export default function App() {
           }}
         >
           Clear
+        </button>
+
+        <div style={{ width: 1, height: 24, background: '#334155' }} />
+
+        {/* Save / Load project via engine.snapshot() / engine.restore() */}
+        <button
+          onClick={() => {
+            const snap = saveProject()
+            const serializable = Object.fromEntries(snap)
+            localStorage.setItem('pulse-paint-project', JSON.stringify(serializable))
+          }}
+          title="Save project to localStorage"
+          style={{
+            padding: '4px 10px',
+            borderRadius: 6,
+            border: '1px solid #10b98140',
+            background: 'transparent',
+            color: '#34d399',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Save
+        </button>
+        <button
+          onClick={() => {
+            const raw = localStorage.getItem('pulse-paint-project')
+            if (!raw) return
+            const parsed = JSON.parse(raw)
+            const snap = new Map(Object.entries(parsed))
+            loadProject(snap)
+          }}
+          title="Load project from localStorage"
+          style={{
+            padding: '4px 10px',
+            borderRadius: 6,
+            border: '1px solid #6366f140',
+            background: 'transparent',
+            color: '#818cf8',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Load
         </button>
 
         <div style={{ flex: 1 }} />
