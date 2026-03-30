@@ -1,0 +1,2544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulse - Deterministic Event Engine with DAG-Ordered Propagation</title>
+  <meta name="description" content="Pulse is a deterministic, synchronous event engine with DAG-ordered propagation, reactive signals, and built-in animation primitives.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Mobile hamburger -->
+<button class="hamburger" aria-label="Toggle navigation">
+  <span></span>
+  <span></span>
+  <span></span>
+</button>
+<div class="sidebar-overlay"></div>
+
+<div class="layout">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">Pulse</span>
+      <span class="sidebar-version">v1.0</span>
+    </div>
+    <div class="sidebar-search">
+      <input type="text" placeholder="Search docs...">
+    </div>
+    <nav class="sidebar-nav">
+
+      <div class="nav-section">
+        <div class="nav-section-title">Overview <span class="chevron">&#9660;</span></div>
+        <ul class="nav-links">
+          <li><a href="#key-concepts" class="nav-link">Key Concepts</a></li>
+          <li><a href="#quick-start" class="nav-link">Quick Start</a></li>
+        </ul>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Core API <span class="chevron">&#9660;</span></div>
+        <ul class="nav-links">
+          <li><a href="#engine-creation" class="nav-link sub">Engine Creation</a></li>
+          <li><a href="#event-types" class="nav-link sub">Event Types</a></li>
+          <li><a href="#event-emission" class="nav-link sub">Event Emission</a></li>
+          <li><a href="#rules" class="nav-link sub">Rules</a></li>
+          <li><a href="#signals" class="nav-link sub">Signals</a></li>
+          <li><a href="#animation" class="nav-link sub">Animation</a></li>
+          <li><a href="#async" class="nav-link sub">Async</a></li>
+          <li><a href="#rate-limiting" class="nav-link sub">Rate Limiting</a></li>
+          <li><a href="#middleware" class="nav-link sub">Middleware</a></li>
+          <li><a href="#error-handling" class="nav-link sub">Error Handling</a></li>
+          <li><a href="#lifecycle" class="nav-link sub">Lifecycle</a></li>
+          <li><a href="#serialization" class="nav-link sub">Serialization</a></li>
+          <li><a href="#recording-replay" class="nav-link sub">Recording &amp; Replay</a></li>
+          <li><a href="#debug-hooks" class="nav-link sub">Debug Hooks</a></li>
+          <li><a href="#introspection" class="nav-link sub">Introspection</a></li>
+        </ul>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Frameworks <span class="chevron">&#9660;</span></div>
+        <ul class="nav-links">
+          <li><a href="#framework-adapters" class="nav-link sub">React</a></li>
+          <li><a href="#framework-adapters" class="nav-link sub">Vue</a></li>
+          <li><a href="#framework-adapters" class="nav-link sub">Solid</a></li>
+          <li><a href="#framework-adapters" class="nav-link sub">Angular</a></li>
+          <li><a href="#framework-adapters" class="nav-link sub">Ember</a></li>
+        </ul>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">More <span class="chevron">&#9660;</span></div>
+        <ul class="nav-links">
+          <li><a href="#devtools" class="nav-link">DevTools</a></li>
+          <li><a href="#examples" class="nav-link">Examples</a></li>
+          <li><a href="#architecture" class="nav-link">Architecture</a></li>
+        </ul>
+      </div>
+
+    </nav>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main">
+
+    <!-- ===== HERO ===== -->
+    <section class="hero">
+      <div class="hero-content">
+        <h1 class="hero-title">Pulse</h1>
+        <p class="hero-tagline">Deterministic event engine with DAG-ordered propagation, reactive signals, and built-in animation primitives.</p>
+        <div class="hero-pills">
+          <span class="pill">Synchronous</span>
+          <span class="pill">Framework Agnostic</span>
+          <span class="pill">Built-in Animation</span>
+          <span class="pill">Type-Safe</span>
+        </div>
+        <div class="hero-install">
+          <div class="install-box">
+            <span class="dollar">$</span>
+            <span>npm install @pulse/core</span>
+          </div>
+        </div>
+        <div class="hero-buttons">
+          <a href="#quick-start" class="btn btn-primary">Get Started</a>
+          <a href="https://github.com/pulse-engine/pulse" class="btn btn-outline" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+
+      <!-- Animated DAG -->
+      <div class="hero-dag" aria-hidden="true">
+        <div class="dag-edge e1"></div>
+        <div class="dag-edge e2"></div>
+        <div class="dag-edge e3"></div>
+        <div class="dag-edge e4"></div>
+        <div class="dag-edge e5"></div>
+        <div class="dag-edge e6"></div>
+        <div class="dag-node"><div class="dot"></div></div>
+        <div class="dag-node"><div class="dot"></div></div>
+        <div class="dag-node"><div class="dot"></div></div>
+        <div class="dag-node"><div class="dot"></div></div>
+        <div class="dag-node"><div class="dot"></div></div>
+        <div class="dag-node"><div class="dot"></div></div>
+      </div>
+    </section>
+
+    <div class="content">
+
+      <!-- ========== INTRO ========== -->
+      <section class="doc-section" id="intro">
+        <div class="section-card">
+          <p>Pulse is a state and event management library that treats events as persistent, ref-counted objects flowing through a directed acyclic graph (DAG) of rules. Unlike Redux (which is a single-reducer state container), MobX (which uses transparent reactivity via proxies), RxJS (which chains asynchronous observable streams), or XState (which models explicit finite state machines), Pulse models your application as a graph of event transformations that propagate synchronously in topological order &mdash; guaranteeing deterministic, glitch-free execution with no stale intermediate states.</p>
+        </div>
+      </section>
+
+      <!-- ========== KEY CONCEPTS ========== -->
+      <section class="doc-section" id="key-concepts">
+        <div class="section-card">
+          <h2>Key Concepts</h2>
+
+          <div class="concept-grid">
+            <div class="concept-card">
+              <h4>Events are persistent and ref-counted</h4>
+              <p>Events in Pulse are not fire-and-forget callbacks. When you emit an event, it is deposited into a <strong>mailbox</strong> and remains there until every registered consumer (rule) has processed it. Each event tracks its pending consumers via a ref-count. Only after all consumers have consumed the event is it removed and recycled back to an object pool.</p>
+            </div>
+            <div class="concept-card">
+              <h4>Synchronous DAG propagation</h4>
+              <p>Rules form a directed acyclic graph based on their input and output event types. When an event is emitted, Pulse computes a topological ordering of the rule graph (using Kahn's algorithm) and drains mailboxes in that order. Downstream rules always see events from upstream rules in the same propagation cycle &mdash; no glitches, no stale reads, fully deterministic execution.</p>
+            </div>
+            <div class="concept-card">
+              <h4>Join patterns (barrier synchronization)</h4>
+              <p>A <strong>join</strong> rule waits until one event from each of its input types is available in the mailboxes before firing. This is barrier synchronization: the join will not fire until all required inputs are present. An optional guard function can reject a match and return the consumed events to the mailboxes.</p>
+            </div>
+            <div class="concept-card">
+              <h4>Signals (derived reactive state)</h4>
+              <p>Signals are reactive values that accumulate state from events via a reducer function. They support subscriptions, imperative sets, and can be composed into derived (computed) signals. Signals bridge the event world into the continuous-value world.</p>
+            </div>
+            <div class="concept-card">
+              <h4>Tweens and Springs</h4>
+              <p>Tweens interpolate a numeric value over time using an easing function. Springs simulate physics-based motion toward a target. Both integrate with the engine's frame loop and emit events when they complete, letting you chain animations into the event graph.</p>
+            </div>
+            <div class="concept-card">
+              <h4>Async boundaries</h4>
+              <p>The <code>async</code> API bridges the external asynchronous world (fetch calls, timers, WebSocket messages) into the synchronous engine. You configure strategy (<code>latest</code>, <code>first</code>, <code>all</code>, <code>queue</code>), and the engine manages cancellation, pending/done/error event emission, and progress reporting.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== QUICK START ========== -->
+      <section class="doc-section" id="quick-start">
+        <div class="section-card">
+          <h2>Quick Start</h2>
+
+          <h3>Install</h3>
+          <div class="code-block" data-lang="bash">
+            <div class="code-block-header">
+              <span class="code-lang">bash</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>npm install @pulse/core</code></pre>
+          </div>
+
+          <h3>Create an engine, declare events, wire rules, emit, and observe</h3>
+          <div class="code-block" data-lang="typescript">
+            <div class="code-block-header">
+              <span class="code-lang">typescript</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>import { createEngine } from '@pulse/core'
+
+// 1. Create an engine
+const engine = createEngine()
+
+// 2. Declare event types
+const click = engine.event&lt;{ x: number; y: number }&gt;('click')
+const highlight = engine.event&lt;string&gt;('highlight')
+
+// 3. Wire a rule: transform click events into highlight events
+engine.pipe(click, highlight, (payload) =&gt; {
+  return `Clicked at (${payload.x}, ${payload.y})`
+})
+
+// 4. Observe the output
+engine.on(highlight, (message) =&gt; {
+  console.log(message)
+})
+
+// 5. Emit an event
+engine.emit(click, { x: 100, y: 200 })
+// logs: "Clicked at (100, 200)"</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== CORE API REFERENCE ========== -->
+
+      <!-- Engine Creation -->
+      <section class="doc-section" id="engine-creation">
+        <div class="section-card">
+          <h2>Engine Creation</h2>
+
+          <div class="api-method">
+            <h4><code>createEngine(options?)</code></h4>
+            <p>Factory function that creates a new <code>Engine</code> instance.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>function createEngine(options?: EngineOptions): Engine</code></pre>
+            </div>
+
+            <table>
+              <thead>
+                <tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>maxPropagationRounds</code></td><td><code>number</code></td><td><code>100</code></td><td>Maximum propagation rounds before throwing (cycle protection)</td></tr>
+              </tbody>
+            </table>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>import { createEngine } from '@pulse/core'
+
+const engine = createEngine()
+
+// With custom propagation limit
+const engine = createEngine({ maxPropagationRounds: 200 })</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Event Types -->
+      <section class="doc-section" id="event-types">
+        <div class="section-card">
+          <h2>Event Types</h2>
+
+          <div class="api-method">
+            <h4><code>engine.event&lt;T&gt;(name)</code></h4>
+            <p>Create a named event type. The type parameter <code>T</code> defines the payload shape. Event types are channels &mdash; they are declarations, not instances.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>event&lt;T = void&gt;(name: string): EventType&lt;T&gt;</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>// Void payload (no data)
+const reset = engine.event('reset')
+
+// Typed payload
+const userLogin = engine.event&lt;{ userId: string; timestamp: number }&gt;('user-login')
+
+// Generic payload
+const message = engine.event&lt;string&gt;('message')</code></pre>
+            </div>
+
+            <p>The <code>EventType&lt;T&gt;</code> interface:</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface EventType&lt;T = any&gt; {
+  name: string
+  _consumers: Set&lt;Rule&gt;
+}</code></pre>
+            </div>
+
+            <p>Note: the engine appends a unique counter to the name (e.g., <code>'click'</code> becomes <code>'click#0'</code>), so two calls to <code>engine.event('click')</code> produce distinct types.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Event Emission -->
+      <section class="doc-section" id="event-emission">
+        <div class="section-card">
+          <h2>Event Emission</h2>
+
+          <div class="api-method">
+            <h4><code>engine.emit(type, payload)</code></h4>
+            <p>Emit an event. This deposits the event into the mailbox, triggers synchronous DAG propagation, and drains any pending emissions that occur during propagation.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>emit&lt;T&gt;(type: EventType&lt;T&gt;, payload: T): void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const increment = engine.event&lt;number&gt;('increment')
+
+engine.emit(increment, 1)
+engine.emit(increment, 5)</code></pre>
+            </div>
+
+            <p>If <code>emit</code> is called while propagation is already in progress (e.g., from inside a rule action), the emission is queued and processed after the current propagation cycle completes.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Rules -->
+      <section class="doc-section" id="rules">
+        <div class="section-card">
+          <h2>Rules</h2>
+
+          <div class="api-method">
+            <h4><code>engine.pipe(input, output, transform)</code></h4>
+            <p>Transform events from one type to another. For fan-out, pass an array of output types and return an array of payloads.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>pipe&lt;In, Out&gt;(
+  input: EventType&lt;In&gt;,
+  output: EventType&lt;Out&gt; | EventType&lt;any&gt;[],
+  transform: (payload: In) =&gt; Out | any[],
+): () =&gt; void</code></pre>
+            </div>
+
+            <p>Returns an unsubscribe function.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const rawTemp = engine.event&lt;number&gt;('raw-temp')
+const celsius = engine.event&lt;number&gt;('celsius')
+const fahrenheit = engine.event&lt;number&gt;('fahrenheit')
+
+// Single output
+engine.pipe(rawTemp, celsius, (kelvin) =&gt; kelvin - 273.15)
+
+// Fan-out: one input, multiple outputs
+engine.pipe(rawTemp, [celsius, fahrenheit], (kelvin) =&gt; {
+  return [kelvin - 273.15, (kelvin - 273.15) * 9 / 5 + 32]
+})</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.pipeIf(input, output, handler)</code></h4>
+            <p>Conditional pipe. The output event is only emitted when the handler returns a non-null, non-undefined value.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>pipeIf&lt;In, Out&gt;(
+  input: EventType&lt;In&gt;,
+  output: EventType&lt;Out&gt;,
+  handler: (payload: In) =&gt; Out | null | undefined,
+): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const keypress = engine.event&lt;string&gt;('keypress')
+const enterPressed = engine.event&lt;string&gt;('enter-pressed')
+
+engine.pipeIf(keypress, enterPressed, (key) =&gt; {
+  return key === 'Enter' ? key : null
+})</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.join(inputs, output, config)</code></h4>
+            <p>Barrier join: waits for one event from each input type to be available, then fires the action with all payloads. An optional <code>guard</code> can reject the match.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>join&lt;Out&gt;(
+  inputs: EventType[],
+  output: EventType&lt;Out&gt;,
+  config: {
+    guard?: (...payloads: any[]) =&gt; boolean
+    do: (...payloads: any[]) =&gt; Out
+  },
+): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const username = engine.event&lt;string&gt;('username')
+const password = engine.event&lt;string&gt;('password')
+const loginAttempt = engine.event&lt;{ user: string; pass: string }&gt;('login-attempt')
+
+engine.join([username, password], loginAttempt, {
+  guard: (user, pass) =&gt; user.length &gt; 0 &amp;&amp; pass.length &gt; 0,
+  do: (user, pass) =&gt; ({ user, pass }),
+})
+
+engine.emit(username, 'alice')
+// loginAttempt does NOT fire yet -- waiting for password
+engine.emit(password, 's3cret')
+// loginAttempt fires with { user: 'alice', pass: 's3cret' }</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.joinWithin(inputs, output, windowMs, config)</code></h4>
+            <p>Time-windowed join. All input events must arrive within <code>windowMs</code> milliseconds of the first input. If the window expires before all inputs arrive, accumulated events are discarded.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>joinWithin&lt;Out&gt;(
+  inputs: EventType[],
+  output: EventType&lt;Out&gt;,
+  windowMs: number,
+  config: {
+    guard?: (...payloads: any[]) =&gt; boolean
+    do: (...payloads: any[]) =&gt; Out
+  },
+): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const mouseDown = engine.event&lt;{ x: number; y: number }&gt;('mouse-down')
+const mouseUp = engine.event&lt;{ x: number; y: number }&gt;('mouse-up')
+const quickClick = engine.event&lt;{ start: any; end: any }&gt;('quick-click')
+
+engine.joinWithin([mouseDown, mouseUp], quickClick, 300, {
+  do: (down, up) =&gt; ({ start: down, end: up }),
+})</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.on(type, handler)</code></h4>
+            <p>Terminal side-effect listener. Subscribes to events of a given type without producing output events. Returns an unsubscribe function.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>on&lt;T&gt;(type: EventType&lt;T&gt;, handler: (payload: T) =&gt; void): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const notification = engine.event&lt;string&gt;('notification')
+
+const unsub = engine.on(notification, (message) =&gt; {
+  console.log('Notification:', message)
+})
+
+engine.emit(notification, 'Hello!')
+// logs: "Notification: Hello!"
+
+unsub() // stop listening</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Signals -->
+      <section class="doc-section" id="signals">
+        <div class="section-card">
+          <h2>Signals</h2>
+
+          <div class="api-method">
+            <h4><code>engine.signal(type, initial, reducer)</code></h4>
+            <p>Create a signal &mdash; a reactive value that accumulates state from events using a reducer.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>signal&lt;T&gt;(type: EventType&lt;any&gt;, initial: T, reducer: (prev: T, event: any) =&gt; T): Signal&lt;T&gt;</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const increment = engine.event&lt;number&gt;('increment')
+const count = engine.signal(increment, 0, (prev, amount) =&gt; prev + amount)
+
+engine.emit(increment, 1)
+console.log(count.value) // 1
+
+engine.emit(increment, 5)
+console.log(count.value) // 6</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.signalUpdate(signal, type, reducer)</code></h4>
+            <p>Add an additional event source to an existing signal. Returns an unsubscribe function.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>signalUpdate&lt;T&gt;(sig: Signal&lt;T&gt;, type: EventType&lt;any&gt;, reducer: (prev: T, event: any) =&gt; T): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const increment = engine.event&lt;number&gt;('increment')
+const decrement = engine.event&lt;number&gt;('decrement')
+const count = engine.signal(increment, 0, (prev, n) =&gt; prev + n)
+
+engine.signalUpdate(count, decrement, (prev, n) =&gt; prev - n)
+
+engine.emit(increment, 10) // count.value === 10
+engine.emit(decrement, 3)  // count.value === 7</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.computed(deps, compute)</code></h4>
+            <p>Create a derived signal that recomputes whenever any dependency signal changes.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>computed&lt;T&gt;(deps: Signal&lt;any&gt;[], compute: (...values: any[]) =&gt; T): Signal&lt;T&gt;</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const firstName = engine.signal(firstNameChanged, '', (_, name) =&gt; name)
+const lastName = engine.signal(lastNameChanged, '', (_, name) =&gt; name)
+
+const fullName = engine.computed(
+  [firstName, lastName],
+  (first, last) =&gt; `${first} ${last}`.trim(),
+)
+
+// fullName.value auto-updates when either firstName or lastName changes</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>signal.value</code></h4>
+            <p>Read the current value of a signal.</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>console.log(count.value) // 6</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>signal.set(value)</code></h4>
+            <p>Imperatively set the signal's value. Notifies all subscribers if the value changed (uses <code>Object.is</code> for equality).</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>count.set(42)
+console.log(count.value) // 42</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>signal.subscribe(callback)</code></h4>
+            <p>Subscribe to value changes. The callback receives the new and previous values. Returns an unsubscribe function.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>subscribe(callback: (value: T, prev: T) =&gt; void): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const unsub = count.subscribe((value, prev) =&gt; {
+  console.log(`count changed from ${prev} to ${value}`)
+})
+
+engine.emit(increment, 1) // logs: "count changed from 6 to 7"
+unsub()</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.when(signal, predicate, output)</code></h4>
+            <p>Bridge a signal to the event system. Emits the output event whenever the signal's value matches the predicate (a function) or equals the given value.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>when&lt;T&gt;(sig: Signal&lt;T&gt;, predicateOrValue: T | ((val: T) =&gt; boolean), output: EventType&lt;T&gt;): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const limitReached = engine.event&lt;number&gt;('limit-reached')
+
+// Fire when count reaches 100
+engine.when(count, 100, limitReached)
+
+// Or with a predicate function
+engine.when(count, (val) =&gt; val &gt;= 100, limitReached)</code></pre>
+            </div>
+          </div>
+
+          <p>The <code>Signal&lt;T&gt;</code> interface:</p>
+          <div class="code-block" data-lang="typescript">
+            <div class="code-block-header">
+              <span class="code-lang">typescript</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>interface Signal&lt;T = any&gt; {
+  value: T
+  subscribe(callback: (value: T, prev: T) =&gt; void): () =&gt; void
+  set(next: T): void
+}</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Animation -->
+      <section class="doc-section" id="animation">
+        <div class="section-card">
+          <h2>Animation</h2>
+
+          <div class="api-method">
+            <h4><code>engine.tween(config)</code></h4>
+            <p>Create a time-based animated value. The tween starts when <code>start</code> is emitted and emits <code>done</code> when complete. Values are interpolated each frame using the easing function.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>tween(config: TweenConfig): TweenValue</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface TweenConfig {
+  start: EventType          // Event that starts the tween
+  done?: EventType          // Event emitted when tween completes
+  cancel?: EventType | EventType[]  // Event(s) that cancel the tween
+  from: number | (() =&gt; number)     // Start value (or getter)
+  to: number | (() =&gt; number)       // End value (or getter)
+  duration: number                  // Duration in milliseconds
+  easing?: string | ((t: number) =&gt; number)  // Easing function
+}</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const fadeIn = engine.event('fade-in')
+const fadeInDone = engine.event('fade-in-done')
+
+const opacity = engine.tween({
+  start: fadeIn,
+  done: fadeInDone,
+  from: 0,
+  to: 1,
+  duration: 300,
+  easing: 'easeOut',
+})
+
+engine.on(fadeInDone, () =&gt; console.log('Fade complete'))
+engine.emit(fadeIn, undefined)
+
+// opacity.value animates from 0 to 1 over 300ms
+opacity.subscribe((value) =&gt; {
+  element.style.opacity = String(value)
+})</code></pre>
+            </div>
+
+            <p>The <code>TweenValue</code> interface:</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface TweenValue {
+  value: number        // Current interpolated value
+  active: boolean      // Whether the tween is currently running
+  progress: number     // Raw progress 0..1 (before easing)
+  subscribe(callback: (value: number) =&gt; void): () =&gt; void
+}</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.spring(target, config?)</code></h4>
+            <p>Create a physics-based animated value that chases a target (a Signal or TweenValue). The spring unsettles whenever the target changes and simulates spring dynamics each frame.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>spring(target: Signal&lt;number&gt; | TweenValue, config?: SpringConfig): SpringValue</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface SpringConfig {
+  stiffness?: number      // Default: 170
+  damping?: number        // Default: 26
+  restThreshold?: number  // Default: 0.01
+  done?: EventType        // Event emitted when spring settles
+}</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const position = engine.signal(posChanged, 0, (_, pos) =&gt; pos)
+const springPos = engine.spring(position, {
+  stiffness: 200,
+  damping: 20,
+})
+
+// springPos.value smoothly follows position.value with spring physics
+springPos.subscribe((value) =&gt; {
+  element.style.transform = `translateX(${value}px)`
+})</code></pre>
+            </div>
+
+            <p>The <code>SpringValue</code> interface:</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface SpringValue {
+  value: number        // Current value
+  velocity: number     // Current velocity
+  settled: boolean     // Whether the spring has come to rest
+  subscribe(callback: (value: number) =&gt; void): () =&gt; void
+}</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.sequence(start, tweenConfigs, done?)</code></h4>
+            <p>Chain tweens so each starts after the previous one completes. Returns all created <code>TweenValue</code> objects.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>sequence(
+  start: EventType,
+  tweenConfigs: TweenConfig[],
+  done?: EventType,
+): TweenValue[]</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const animStart = engine.event('anim-start')
+const animDone = engine.event('anim-done')
+
+const [fadeIn, slideUp] = engine.sequence(animStart, [
+  { start: animStart, from: 0, to: 1, duration: 200, easing: 'easeOut' },
+  { start: animStart, from: 100, to: 0, duration: 300, easing: 'easeOutBack' },
+], animDone)
+
+// fadeIn runs first (0-&gt;1 over 200ms)
+// slideUp runs after fadeIn completes (100-&gt;0 over 300ms)
+// animDone emits after slideUp completes</code></pre>
+            </div>
+
+            <p>Note: The <code>start</code> fields in individual tween configs are overridden by the sequence logic. The first tween uses the <code>start</code> argument; subsequent tweens start when the previous one's <code>done</code> event fires.</p>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.startFrameLoop()</code> / <code>engine.stopFrameLoop()</code></h4>
+            <p>Start or stop the <code>requestAnimationFrame</code> loop that drives tweens, springs, coalesced event flushing, and emits the built-in <code>engine.frame</code> event each tick.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>engine.startFrameLoop()
+
+// Listen to frame events
+engine.on(engine.frame, ({ time, dt }) =&gt; {
+  // time: timestamp from requestAnimationFrame
+  // dt: delta time in ms since last frame (0 on first tick)
+})
+
+// Later...
+engine.stopFrameLoop()</code></pre>
+            </div>
+
+            <p>The <code>FrameData</code> interface:</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface FrameData {
+  time: number  // requestAnimationFrame timestamp
+  dt: number    // milliseconds since previous frame
+}</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.tick(time)</code></h4>
+            <p>Manually advance the frame loop by one tick. Useful for testing without <code>requestAnimationFrame</code>.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>engine.tick(0)    // first tick, dt = 0
+engine.tick(16)   // dt = 16ms
+engine.tick(32)   // dt = 16ms</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4>Built-in Easing Functions</h4>
+            <p>Pass these as strings to the <code>easing</code> field of <code>TweenConfig</code>, or provide a custom <code>(t: number) =&gt; number</code> function.</p>
+
+            <table>
+              <thead>
+                <tr><th>Name</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>'linear'</code></td><td>No easing (default)</td></tr>
+                <tr><td><code>'easeIn'</code></td><td>Cubic ease-in (<code>t^3</code>)</td></tr>
+                <tr><td><code>'easeOut'</code></td><td>Cubic ease-out</td></tr>
+                <tr><td><code>'easeInOut'</code></td><td>Cubic ease-in-out</td></tr>
+                <tr><td><code>'easeOutBack'</code></td><td>Overshoot and settle</td></tr>
+                <tr><td><code>'easeOutElastic'</code></td><td>Elastic bounce</td></tr>
+                <tr><td><code>'easeOutBounce'</code></td><td>Bouncing settle</td></tr>
+                <tr><td><code>'easeOutExpo'</code></td><td>Exponential ease-out</td></tr>
+              </tbody>
+            </table>
+
+            <p>Custom cubic bezier easing is also available via the <code>cubicBezier</code> function:</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>import { cubicBezier } from '@pulse/core'
+
+const customEasing = cubicBezier(0.25, 0.1, 0.25, 1.0)
+
+const tw = engine.tween({
+  start: go,
+  from: 0,
+  to: 100,
+  duration: 500,
+  easing: customEasing,
+})</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Async -->
+      <section class="doc-section" id="async">
+        <div class="section-card">
+          <h2>Async</h2>
+
+          <div class="api-method">
+            <h4><code>engine.async(input, config)</code></h4>
+            <p>Create an async boundary that bridges promises into the synchronous event engine. Manages cancellation, strategies, pending/done/error events, and progress reporting.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>async&lt;In, Out&gt;(input: EventType&lt;In&gt;, config: AsyncConfig&lt;In, Out&gt;): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface AsyncConfig&lt;In, Out&gt; {
+  pending?: EventType | null       // Emitted when async work starts
+  done?: EventType&lt;Out&gt;            // Emitted when the promise resolves
+  error?: EventType&lt;any&gt;           // Emitted when the promise rejects
+  cancel?: EventType               // Emitting this cancels the in-flight operation
+  cancelled?: EventType            // Emitted when an operation is cancelled
+  progress?: EventType             // Emitted when ctx.progress() is called
+  strategy?: AsyncStrategy         // 'latest' | 'first' | 'all' | 'queue'
+  do: (payload: In, ctx: AsyncContext) =&gt; Promise&lt;Out&gt;
+}
+
+interface AsyncContext {
+  signal: AbortSignal              // Abort signal for cancellation
+  progress: (data: any) =&gt; void    // Report progress
+}
+
+type AsyncStrategy = 'latest' | 'first' | 'all' | 'queue'</code></pre>
+            </div>
+
+            <p><strong>Strategies:</strong></p>
+            <ul class="strategy-list">
+              <li><strong><code>latest</code></strong> (default) &mdash; Cancels any in-flight operation when a new input arrives. Only the latest result is delivered.</li>
+              <li><strong><code>first</code></strong> &mdash; Ignores new inputs while an operation is already in-flight.</li>
+              <li><strong><code>all</code></strong> &mdash; All operations run concurrently. Every result is delivered.</li>
+              <li><strong><code>queue</code></strong> &mdash; Operations run sequentially, one at a time.</li>
+            </ul>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const searchQuery = engine.event&lt;string&gt;('search-query')
+const searchPending = engine.event('search-pending')
+const searchResults = engine.event&lt;string[]&gt;('search-results')
+const searchError = engine.event&lt;Error&gt;('search-error')
+
+engine.async(searchQuery, {
+  strategy: 'latest',
+  pending: searchPending,
+  done: searchResults,
+  error: searchError,
+  do: async (query, ctx) =&gt; {
+    const res = await fetch(`/api/search?q=${query}`, { signal: ctx.signal })
+    return res.json()
+  },
+})
+
+engine.emit(searchQuery, 'hello')
+// searchPending fires immediately
+// searchResults fires when fetch resolves (or searchError if it rejects)
+// If a new query arrives before the first resolves, the first is aborted</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Rate Limiting -->
+      <section class="doc-section" id="rate-limiting">
+        <div class="section-card">
+          <h2>Rate Limiting</h2>
+
+          <div class="api-method">
+            <h4><code>engine.debounce(input, ms, output)</code></h4>
+            <p>Emit the latest payload after <code>ms</code> milliseconds of inactivity on the input event.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>debounce&lt;T&gt;(input: EventType&lt;T&gt;, ms: number, output: EventType&lt;T&gt;): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const rawInput = engine.event&lt;string&gt;('raw-input')
+const debouncedInput = engine.event&lt;string&gt;('debounced-input')
+
+engine.debounce(rawInput, 300, debouncedInput)
+
+// Rapid emissions of rawInput only produce one debouncedInput
+// 300ms after the last rawInput</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.throttle(input, ms, output)</code></h4>
+            <p>Emit at most once per <code>ms</code> milliseconds. The first event goes through immediately; subsequent events during the window are buffered. The last buffered event fires when the window expires.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>throttle&lt;T&gt;(input: EventType&lt;T&gt;, ms: number, output: EventType&lt;T&gt;): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const mouseMove = engine.event&lt;{ x: number; y: number }&gt;('mouse-move')
+const throttledMove = engine.event&lt;{ x: number; y: number }&gt;('throttled-move')
+
+engine.throttle(mouseMove, 16, throttledMove)</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.coalesce(input, output)</code></h4>
+            <p>Batch events: buffer the latest payload and flush it on the next frame tick (when <code>startFrameLoop</code> is active or <code>tick</code> is called manually).</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>coalesce&lt;T&gt;(input: EventType&lt;T&gt;, output: EventType&lt;T&gt;): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const rawUpdate = engine.event&lt;number&gt;('raw-update')
+const batchedUpdate = engine.event&lt;number&gt;('batched-update')
+
+engine.coalesce(rawUpdate, batchedUpdate)
+
+engine.emit(rawUpdate, 1)
+engine.emit(rawUpdate, 2)
+engine.emit(rawUpdate, 3)
+
+engine.tick(0)
+// batchedUpdate fires once with payload 3 (the latest)</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Middleware -->
+      <section class="doc-section" id="middleware">
+        <div class="section-card">
+          <h2>Middleware</h2>
+
+          <div class="api-method">
+            <h4><code>engine.use(middleware)</code></h4>
+            <p>Register middleware that intercepts every event before it is deposited into a mailbox. Middleware can modify events (return a new <code>{ type, payload }</code>) or block them (return <code>null</code>). Returns an unsubscribe function.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>use(middleware: Middleware): () =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>type Middleware = (
+  event: { type: EventType; payload: any }
+) =&gt; { type: EventType; payload: any } | null</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>// Logging middleware
+engine.use((event) =&gt; {
+  console.log(`[${event.type.name}]`, event.payload)
+  return event
+})
+
+// Blocking middleware
+engine.use((event) =&gt; {
+  if (event.type.name.startsWith('__internal')) {
+    return null // block internal events
+  }
+  return event
+})
+
+// Transforming middleware
+const unsub = engine.use((event) =&gt; {
+  return {
+    type: event.type,
+    payload: { ...event.payload, timestamp: Date.now() },
+  }
+})
+
+unsub() // remove middleware</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Error Handling -->
+      <section class="doc-section" id="error-handling">
+        <div class="section-card">
+          <h2>Error Handling</h2>
+
+          <div class="api-method">
+            <h4><code>engine.onError</code></h4>
+            <p>Assign an error handler that is called when a rule action throws during propagation. If no handler is set, errors propagate normally (thrown from <code>emit</code>).</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>onError?: (error: Error, rule: Rule, event: any) =&gt; void</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>engine.onError = (error, rule, event) =&gt; {
+  console.error(`Rule "${rule.name}" failed:`, error)
+  // event is the payload that caused the error (or array of payloads for join rules)
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lifecycle -->
+      <section class="doc-section" id="lifecycle">
+        <div class="section-card">
+          <h2>Lifecycle</h2>
+
+          <div class="api-method">
+            <h4><code>engine.destroy()</code></h4>
+            <p>Full teardown. Destroys all child engines, stops the frame loop, clears all timers (debounce/throttle), unsubscribes all computed signal listeners, clears mailboxes, removes all rules from the DAG, clears all signals/tweens/springs, and detaches from parent engine.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>engine.destroy()
+// Engine is now inert. All subscriptions and timers are cleaned up.</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.createChild()</code></h4>
+            <p>Create a child engine. Child engines share the parent's frame loop (the parent ticks children automatically). Destroying the parent destroys all children.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const parent = createEngine()
+const child = parent.createChild()
+
+// child gets frame ticks from parent
+parent.startFrameLoop()
+
+parent.destroy() // also destroys child</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Serialization -->
+      <section class="doc-section" id="serialization">
+        <div class="section-card">
+          <h2>Serialization</h2>
+
+          <div class="api-method">
+            <h4><code>engine.snapshot()</code></h4>
+            <p>Capture all signal values as a <code>Map&lt;string, any&gt;</code>. Signal identity is based on the event type name used to create the signal.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>snapshot(): EngineSnapshot  // Map&lt;string, any&gt;</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const snap = engine.snapshot()
+// snap is a Map: { 'increment#0' =&gt; 6, 'firstName#1' =&gt; 'Alice', ... }</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.restore(snapshot)</code></h4>
+            <p>Restore signal values from a snapshot. Also resets all tweens (inactive, zero progress) and springs (zero velocity, settled).</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const snap = engine.snapshot()
+
+// ... time passes, state changes ...
+
+engine.restore(snap) // signals restored to snapshotted values</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recording and Replay -->
+      <section class="doc-section" id="recording-replay">
+        <div class="section-card">
+          <h2>Recording and Replay</h2>
+
+          <div class="api-method">
+            <h4><code>engine.startRecording()</code> / <code>engine.stopRecording()</code></h4>
+            <p>Record all events that pass through the engine (after middleware). <code>startRecording</code> resets the recording buffer. <code>stopRecording</code> returns the recorded events and clears the buffer.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface RecordedEvent {
+  type: EventType
+  payload: any
+  timestamp: number  // milliseconds relative to recording start
+}</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>engine.startRecording()
+
+engine.emit(click, { x: 10, y: 20 })
+// ... user interactions ...
+engine.emit(click, { x: 50, y: 60 })
+
+const recording = engine.stopRecording()
+// recording is an array of { type, payload, timestamp }</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.replay(recording)</code></h4>
+            <p>Replay a recording. Events are re-emitted with the original relative timing using <code>setTimeout</code>. The first event replays immediately; subsequent events fire after their original delay.</p>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>engine.replay(recording)
+// Events are re-emitted with their original timing</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Debug Hooks -->
+      <section class="doc-section" id="debug-hooks">
+        <div class="section-card">
+          <h2>Debug Hooks</h2>
+
+          <p>Assign callbacks to <code>engine.debug</code> to receive telemetry during propagation. These are used internally by <code>@pulse/devtools</code>.</p>
+
+          <div class="code-block" data-lang="typescript">
+            <div class="code-block-header">
+              <span class="code-lang">typescript</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>engine.debug: {
+  onCycleStart?: (cycle: { seq: number }) =&gt; void
+  onCycleEnd?: (cycle: {
+    seq: number
+    rulesEvaluated: number
+    eventsDeposited: number
+    duration: number
+  }) =&gt; void
+  onEventDeposited?: (event: {
+    type: { name: string }
+    payload: any
+    seq: number
+  }) =&gt; void
+  onEventConsumed?: (
+    event: { type: { name: string }; payload: any; seq: number },
+    rule: { id: string; name: string }
+  ) =&gt; void
+  onRuleFired?: (
+    rule: { id: string; name: string; mode: string },
+    inputs: any[],
+    outputs: any[]
+  ) =&gt; void
+  onTweenUpdate?: (tween: {
+    value: number
+    progress: number
+    active: boolean
+  }) =&gt; void
+}</code></pre>
+          </div>
+
+          <div class="code-block" data-lang="typescript">
+            <div class="code-block-header">
+              <span class="code-lang">typescript</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>engine.debug.onCycleStart = ({ seq }) =&gt; {
+  console.log(`Propagation cycle #${seq} started`)
+}
+
+engine.debug.onCycleEnd = ({ seq, rulesEvaluated, eventsDeposited, duration }) =&gt; {
+  console.log(`Cycle #${seq}: ${eventsDeposited} events, ${duration.toFixed(2)}ms`)
+}
+
+engine.debug.onRuleFired = (rule, inputs, outputs) =&gt; {
+  console.log(`Rule "${rule.name}" fired`)
+}</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Introspection -->
+      <section class="doc-section" id="introspection">
+        <div class="section-card">
+          <h2>Introspection</h2>
+
+          <p>These methods return current engine state for debugging and tooling.</p>
+
+          <div class="api-method">
+            <h4><code>engine.getRules()</code></h4>
+            <p>Returns all registered rules.</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>getRules(): Rule[]</code></pre>
+            </div>
+
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface Rule {
+  id: string
+  name: string
+  triggers: EventType[]
+  mode: 'each' | 'join'
+  guard?: (...payloads: any[]) =&gt; boolean
+  action: (...payloads: any[]) =&gt; any
+  outputs: EventType[]
+  priority: number
+}</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.getMailboxes()</code></h4>
+            <p>Returns all mailboxes (event queues) keyed by event type.</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>getMailboxes(): Map&lt;EventType, Mailbox&gt;</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.getSignals()</code></h4>
+            <p>Returns a copy of all signals registered with the engine.</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>getSignals(): Signal&lt;any&gt;[]</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.getTweens()</code></h4>
+            <p>Returns a copy of all tween values.</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>getTweens(): TweenValue[]</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.getSprings()</code></h4>
+            <p>Returns a copy of all spring values.</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>getSprings(): SpringValue[]</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4><code>engine.getDAG()</code></h4>
+            <p>Returns the rule DAG as a graph of nodes and edges for visualization.</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>getDAG(): DAGGraph</code></pre>
+            </div>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>interface DAGGraph {
+  nodes: Rule[]
+  edges: [Rule, Rule][]  // [from, to] pairs
+}</code></pre>
+            </div>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>const graph = engine.getDAG()
+console.log(`${graph.nodes.length} rules, ${graph.edges.length} edges`)</code></pre>
+            </div>
+          </div>
+
+          <div class="api-method">
+            <h4>Built-in Event: <code>engine.frame</code></h4>
+            <p>Every engine has a built-in <code>frame</code> event of type <code>EventType&lt;FrameData&gt;</code>. It is emitted automatically on every frame tick (via <code>startFrameLoop</code> or manual <code>tick</code> calls).</p>
+            <div class="code-block" data-lang="typescript">
+              <div class="code-block-header">
+                <span class="code-lang">typescript</span>
+                <button class="copy-btn">Copy</button>
+              </div>
+              <pre><code>engine.on(engine.frame, ({ time, dt }) =&gt; {
+  // runs every frame
+})</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== FRAMEWORK ADAPTERS ========== -->
+      <section class="doc-section" id="framework-adapters">
+        <div class="section-card">
+          <h2>Framework Adapters</h2>
+
+          <div class="framework-tabs">
+            <div class="tab-buttons">
+              <button class="tab-btn active" data-tab="react">React</button>
+              <button class="tab-btn" data-tab="vue">Vue</button>
+              <button class="tab-btn" data-tab="solid">Solid</button>
+              <button class="tab-btn" data-tab="angular">Angular</button>
+              <button class="tab-btn" data-tab="ember">Ember</button>
+            </div>
+
+            <!-- ===== React Tab ===== -->
+            <div class="tab-panel active" data-tab="react">
+              <h3>React Adapter</h3>
+
+              <div class="code-block" data-lang="bash">
+                <div class="code-block-header">
+                  <span class="code-lang">bash</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>npm install @pulse/react</code></pre>
+              </div>
+
+              <h4>Provider Setup</h4>
+              <p>Wrap your app with <code>PulseProvider</code> to make the engine available to all hooks via React context.</p>
+
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { createEngine } from '@pulse/core'
+import { PulseProvider } from '@pulse/react'
+
+const engine = createEngine()
+
+function App() {
+  return (
+    &lt;PulseProvider engine={engine}&gt;
+      &lt;MyComponent /&gt;
+    &lt;/PulseProvider&gt;
+  )
+}</code></pre>
+              </div>
+
+              <h4>Hooks</h4>
+
+              <p><strong><code>useEngine(): Engine</code></strong> &mdash; Access the engine instance from context.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useEngine } from '@pulse/react'
+
+function MyComponent() {
+  const engine = useEngine()
+  // ...
+}</code></pre>
+              </div>
+
+              <p><strong><code>useSignal&lt;T&gt;(signal: Signal&lt;T&gt;): T</code></strong> &mdash; Subscribe to a Pulse signal. Returns the current value and re-renders the component on change. Uses <code>useSyncExternalStore</code> internally.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useSignal } from '@pulse/react'
+
+function Counter({ countSignal }: { countSignal: Signal&lt;number&gt; }) {
+  const count = useSignal(countSignal)
+  return &lt;div&gt;{count}&lt;/div&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useTween(tween: TweenValue): number</code></strong> &mdash; Subscribe to a tween's current numeric value.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useTween } from '@pulse/react'
+
+function FadeBox({ opacity }: { opacity: TweenValue }) {
+  const value = useTween(opacity)
+  return &lt;div style={{ opacity: value }} /&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useSpring(spring: SpringValue): number</code></strong> &mdash; Subscribe to a spring's current numeric value.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useSpring } from '@pulse/react'
+
+function SpringBox({ springX }: { springX: SpringValue }) {
+  const x = useSpring(springX)
+  return &lt;div style={{ transform: `translateX(${x}px)` }} /&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useEmit(): &lt;T&gt;(type: EventType&lt;T&gt;, payload: T) =&gt; void</code></strong> &mdash; Returns a stable emit function bound to the engine.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useEmit } from '@pulse/react'
+
+function Button({ clickEvent }: { clickEvent: EventType&lt;void&gt; }) {
+  const emit = useEmit()
+  return &lt;button onClick={() =&gt; emit(clickEvent, undefined)}&gt;Click&lt;/button&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useEvent&lt;T&gt;(type: EventType&lt;T&gt;, handler: (payload: T) =&gt; void): void</code></strong> &mdash; Subscribe to raw events. The handler ref is kept current; the subscription is cleaned up on unmount.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useEvent } from '@pulse/react'
+
+function Logger({ errorEvent }: { errorEvent: EventType&lt;string&gt; }) {
+  useEvent(errorEvent, (message) =&gt; {
+    console.error('Error:', message)
+  })
+  return null
+}</code></pre>
+              </div>
+
+              <p><strong><code>usePulse&lt;T&gt;(eventType, initial, reducer): T</code></strong> &mdash; Convenience hook that creates a signal and subscribes to it in one call. The signal is created once and persists across re-renders.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { usePulse } from '@pulse/react'
+
+function Counter({ incrementEvent }: { incrementEvent: EventType&lt;number&gt; }) {
+  const count = usePulse(incrementEvent, 0, (prev, n) =&gt; prev + n)
+  return &lt;div&gt;{count}&lt;/div&gt;
+}</code></pre>
+              </div>
+            </div>
+
+            <!-- ===== Vue Tab ===== -->
+            <div class="tab-panel" data-tab="vue">
+              <h3>Vue Adapter</h3>
+
+              <div class="code-block" data-lang="bash">
+                <div class="code-block-header">
+                  <span class="code-lang">bash</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>npm install @pulse/vue</code></pre>
+              </div>
+
+              <h4>Provider Setup</h4>
+              <p>Call <code>providePulse(engine)</code> in a parent component's <code>setup()</code> to inject the engine into the component tree.</p>
+
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">vue</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;script setup lang="ts"&gt;
+import { createEngine } from '@pulse/core'
+import { providePulse } from '@pulse/vue'
+
+const engine = createEngine()
+providePulse(engine)
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;MyComponent /&gt;
+&lt;/template&gt;</code></pre>
+              </div>
+
+              <h4>Composables</h4>
+
+              <p><strong><code>usePulse(): Engine</code></strong> &mdash; Retrieve the engine from injection context.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">vue</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;script setup lang="ts"&gt;
+import { usePulse } from '@pulse/vue'
+
+const engine = usePulse()
+&lt;/script&gt;</code></pre>
+              </div>
+
+              <p><strong><code>useSignal&lt;T&gt;(signal: Signal&lt;T&gt;): Ref&lt;T&gt;</code></strong> &mdash; Bridge a Pulse signal to a reactive Vue <code>Ref</code>. Automatically unsubscribes on component unmount.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">vue</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;script setup lang="ts"&gt;
+import { useSignal } from '@pulse/vue'
+
+const count = useSignal(countSignal)
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div&gt;{{ count }}&lt;/div&gt;
+&lt;/template&gt;</code></pre>
+              </div>
+
+              <p><strong><code>useTween(tween: TweenValue): Ref&lt;number&gt;</code></strong> &mdash; Bridge a tween to a reactive Vue <code>Ref</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">vue</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;script setup lang="ts"&gt;
+import { useTween } from '@pulse/vue'
+
+const opacity = useTween(opacityTween)
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div :style="{ opacity }"&gt;Fading&lt;/div&gt;
+&lt;/template&gt;</code></pre>
+              </div>
+
+              <p><strong><code>useSpring(spring: SpringValue): Ref&lt;number&gt;</code></strong> &mdash; Bridge a spring to a reactive Vue <code>Ref</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">vue</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;script setup lang="ts"&gt;
+import { useSpring } from '@pulse/vue'
+
+const x = useSpring(springX)
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div :style="{ transform: `translateX(${x}px)` }"&gt;Bouncing&lt;/div&gt;
+&lt;/template&gt;</code></pre>
+              </div>
+
+              <p><strong><code>useEmit(): &lt;T&gt;(type: EventType&lt;T&gt;, payload: T) =&gt; void</code></strong> &mdash; Returns an emit function bound to the injected engine.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">vue</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;script setup lang="ts"&gt;
+import { useEmit } from '@pulse/vue'
+
+const emit = useEmit()
+const handleClick = () =&gt; emit(clickEvent, undefined)
+&lt;/script&gt;</code></pre>
+              </div>
+
+              <p><strong><code>useEvent&lt;T&gt;(type, handler): void</code></strong> &mdash; Subscribe to events with automatic cleanup on unmount.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">vue</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;script setup lang="ts"&gt;
+import { useEvent } from '@pulse/vue'
+
+useEvent(errorEvent, (message) =&gt; {
+  console.error('Error:', message)
+})
+&lt;/script&gt;</code></pre>
+              </div>
+
+              <p><strong>Injection key:</strong> <code>PulseKey</code> (<code>InjectionKey&lt;Engine&gt;</code>) is exported for advanced use cases.</p>
+            </div>
+
+            <!-- ===== Solid Tab ===== -->
+            <div class="tab-panel" data-tab="solid">
+              <h3>Solid Adapter</h3>
+
+              <div class="code-block" data-lang="bash">
+                <div class="code-block-header">
+                  <span class="code-lang">bash</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>npm install @pulse/solid</code></pre>
+              </div>
+
+              <h4>Provider Setup</h4>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { createEngine } from '@pulse/core'
+import { PulseProvider } from '@pulse/solid'
+
+const engine = createEngine()
+
+function App() {
+  return (
+    &lt;PulseProvider engine={engine}&gt;
+      &lt;MyComponent /&gt;
+    &lt;/PulseProvider&gt;
+  )
+}</code></pre>
+              </div>
+
+              <h4>Accessors</h4>
+
+              <p><strong><code>usePulse(): Engine</code></strong> &mdash; Access the engine from context.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { usePulse } from '@pulse/solid'
+
+function MyComponent() {
+  const engine = usePulse()
+}</code></pre>
+              </div>
+
+              <p><strong><code>useSignal&lt;T&gt;(signal: Signal&lt;T&gt;): Accessor&lt;T&gt;</code></strong> &mdash; Bridge a Pulse signal to a SolidJS <code>Accessor</code>. Leverages Solid's fine-grained reactivity &mdash; only the reading site re-renders, not the component.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useSignal } from '@pulse/solid'
+
+function Counter(props: { countSignal: Signal&lt;number&gt; }) {
+  const count = useSignal(props.countSignal)
+  return &lt;div&gt;{count()}&lt;/div&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useTween(tween: TweenValue): Accessor&lt;number&gt;</code></strong> &mdash; Bridge a tween to a Solid <code>Accessor</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useTween } from '@pulse/solid'
+
+function FadeBox(props: { opacity: TweenValue }) {
+  const value = useTween(props.opacity)
+  return &lt;div style={{ opacity: value() }} /&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useSpring(spring: SpringValue): Accessor&lt;number&gt;</code></strong> &mdash; Bridge a spring to a Solid <code>Accessor</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useSpring } from '@pulse/solid'
+
+function SpringBox(props: { springX: SpringValue }) {
+  const x = useSpring(props.springX)
+  return &lt;div style={{ transform: `translateX(${x()}px)` }} /&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useEmit()</code></strong> &mdash; Returns an emit function.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useEmit } from '@pulse/solid'
+
+function Button(props: { clickEvent: EventType&lt;void&gt; }) {
+  const emit = useEmit()
+  return &lt;button onClick={() =&gt; emit(props.clickEvent, undefined)}&gt;Click&lt;/button&gt;
+}</code></pre>
+              </div>
+
+              <p><strong><code>useEvent&lt;T&gt;(type, handler): void</code></strong> &mdash; Subscribe with automatic cleanup via <code>onCleanup</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">tsx</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { useEvent } from '@pulse/solid'
+
+function Logger(props: { errorEvent: EventType&lt;string&gt; }) {
+  useEvent(props.errorEvent, (msg) =&gt; console.error(msg))
+  return null
+}</code></pre>
+              </div>
+            </div>
+
+            <!-- ===== Angular Tab ===== -->
+            <div class="tab-panel" data-tab="angular">
+              <h3>Angular Adapter</h3>
+
+              <div class="code-block" data-lang="bash">
+                <div class="code-block-header">
+                  <span class="code-lang">bash</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>npm install @pulse/angular</code></pre>
+              </div>
+
+              <h4>Provider Setup</h4>
+              <p>Provide the engine using <code>providePulse()</code> in your application bootstrap or module providers.</p>
+
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { bootstrapApplication } from '@angular/platform-browser'
+import { createEngine } from '@pulse/core'
+import { providePulse, PulseService } from '@pulse/angular'
+
+const engine = createEngine()
+
+bootstrapApplication(AppComponent, {
+  providers: [providePulse(engine), PulseService],
+})</code></pre>
+              </div>
+
+              <h4>PulseService</h4>
+              <p>Inject <code>PulseService</code> into components. All subscriptions are automatically cleaned up when the component is destroyed (via Angular's <code>DestroyRef</code>).</p>
+
+              <p><strong><code>getEngine(): Engine</code></strong> &mdash; Get the underlying engine instance.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { Component, inject } from '@angular/core'
+import { PulseService } from '@pulse/angular'
+
+@Component({ /* ... */ })
+export class MyComponent {
+  private pulse = inject(PulseService)
+  private engine = this.pulse.getEngine()
+}</code></pre>
+              </div>
+
+              <p><strong><code>emit&lt;T&gt;(type, payload): void</code></strong> &mdash; Emit a Pulse event.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>this.pulse.emit(clickEvent, { x: 10, y: 20 })</code></pre>
+              </div>
+
+              <p><strong><code>signal&lt;T&gt;(pulseSignal): WritableSignal&lt;T&gt;</code></strong> &mdash; Bridge a Pulse signal to an Angular <code>WritableSignal</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>@Component({
+  template: `&lt;div&gt;{{ count() }}&lt;/div&gt;`,
+})
+export class CounterComponent {
+  private pulse = inject(PulseService)
+  count = this.pulse.signal(countSignal)  // Angular WritableSignal
+}</code></pre>
+              </div>
+
+              <p><strong><code>tween(tween): WritableSignal&lt;number&gt;</code></strong> &mdash; Bridge a tween to an Angular signal.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>opacity = this.pulse.tween(opacityTween)
+// Use in template: [style.opacity]="opacity()"</code></pre>
+              </div>
+
+              <p><strong><code>spring(spring): WritableSignal&lt;number&gt;</code></strong> &mdash; Bridge a spring to an Angular signal.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>x = this.pulse.spring(springX)
+// Use in template: [style.transform]="'translateX(' + x() + 'px)'"</code></pre>
+              </div>
+
+              <p><strong><code>on&lt;T&gt;(type, handler): void</code></strong> &mdash; Subscribe to events with automatic cleanup.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>ngOnInit() {
+  this.pulse.on(errorEvent, (msg) =&gt; console.error(msg))
+}</code></pre>
+              </div>
+
+              <p><strong>Injection token:</strong> <code>PULSE_ENGINE</code> (<code>InjectionToken&lt;Engine&gt;</code>) is exported for direct injection.</p>
+            </div>
+
+            <!-- ===== Ember Tab ===== -->
+            <div class="tab-panel" data-tab="ember">
+              <h3>Ember Adapter</h3>
+
+              <div class="code-block" data-lang="bash">
+                <div class="code-block-header">
+                  <span class="code-lang">bash</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>npm install @pulse/ember</code></pre>
+              </div>
+
+              <h4>Service Setup</h4>
+              <p>Create a <code>PulseService</code> instance bound to your engine and share it with components.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { createEngine } from '@pulse/core'
+import { createPulseService } from '@pulse/ember'
+
+const engine = createEngine()
+export const pulse = createPulseService(engine)</code></pre>
+              </div>
+
+              <h4>Tracked Wrappers</h4>
+              <p>The Ember adapter bridges Pulse primitives into Ember's <code>@tracked</code> autotracking system.</p>
+
+              <p><strong><code>TrackedSignal&lt;T&gt;</code></strong> &mdash; Wraps a Pulse signal. The <code>value</code> property is <code>@tracked</code>, so templates auto-re-render.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { TrackedSignal } from '@pulse/ember'
+
+class MyComponent extends Component {
+  trackedCount = new TrackedSignal(countSignal)
+
+  willDestroy() {
+    this.trackedCount.destroy()
+  }
+}</code></pre>
+              </div>
+
+              <div class="code-block" data-lang="hbs">
+                <div class="code-block-header">
+                  <span class="code-lang">hbs</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>{{this.trackedCount.value}}</code></pre>
+              </div>
+
+              <p><strong><code>TrackedTween</code></strong> &mdash; Wraps a Pulse TweenValue. Exposes <code>@tracked</code> properties: <code>value</code>, <code>active</code>, <code>progress</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { TrackedTween } from '@pulse/ember'
+
+class MyComponent extends Component {
+  trackedOpacity = new TrackedTween(opacityTween)
+
+  willDestroy() {
+    this.trackedOpacity.destroy()
+  }
+}</code></pre>
+              </div>
+
+              <div class="code-block" data-lang="hbs">
+                <div class="code-block-header">
+                  <span class="code-lang">hbs</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>&lt;div style="opacity: {{this.trackedOpacity.value}}"&gt;Fading&lt;/div&gt;</code></pre>
+              </div>
+
+              <p><strong><code>TrackedSpring</code></strong> &mdash; Wraps a Pulse SpringValue. Exposes <code>@tracked</code> properties: <code>value</code>, <code>velocity</code>, <code>settled</code>.</p>
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { TrackedSpring } from '@pulse/ember'
+
+class MyComponent extends Component {
+  trackedX = new TrackedSpring(springX)
+
+  willDestroy() {
+    this.trackedX.destroy()
+  }
+}</code></pre>
+              </div>
+
+              <h4>PulseService Methods</h4>
+              <ul>
+                <li><strong><code>pulse.emit(type, payload)</code></strong> &mdash; Emit events.</li>
+                <li><strong><code>pulse.createSignal(pulseSignal)</code></strong> &mdash; Create a <code>TrackedSignal</code> with automatic cleanup tracking.</li>
+                <li><strong><code>pulse.createTween(tween)</code></strong> &mdash; Create a <code>TrackedTween</code> with automatic cleanup tracking.</li>
+                <li><strong><code>pulse.createSpring(spring)</code></strong> &mdash; Create a <code>TrackedSpring</code> with automatic cleanup tracking.</li>
+                <li><strong><code>pulse.on(type, handler)</code></strong> &mdash; Subscribe to events. Returns an unsubscribe function.</li>
+                <li><strong><code>pulse.destroy()</code></strong> &mdash; Dispose of all tracked subscriptions.</li>
+              </ul>
+
+              <div class="code-block" data-lang="typescript">
+                <div class="code-block-header">
+                  <span class="code-lang">typescript</span>
+                  <button class="copy-btn">Copy</button>
+                </div>
+                <pre><code>import { pulse } from '../engine'
+
+class MyComponent extends Component {
+  count = pulse.createSignal(countSignal)
+  opacity = pulse.createTween(opacityTween)
+  springX = pulse.createSpring(springXValue)
+
+  willDestroy() {
+    this.count.destroy()
+    this.opacity.destroy()
+    this.springX.destroy()
+  }
+}</code></pre>
+              </div>
+            </div>
+          </div><!-- end framework-tabs -->
+        </div>
+      </section>
+
+      <!-- ========== DEVTOOLS ========== -->
+      <section class="doc-section" id="devtools">
+        <div class="section-card">
+          <h2>DevTools</h2>
+
+          <div class="code-block" data-lang="bash">
+            <div class="code-block-header">
+              <span class="code-lang">bash</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>npm install @pulse/devtools</code></pre>
+          </div>
+
+          <h3>Usage</h3>
+
+          <div class="code-block" data-lang="typescript">
+            <div class="code-block-header">
+              <span class="code-lang">typescript</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>import { createEngine } from '@pulse/core'
+import { createDevTools } from '@pulse/devtools'
+
+const engine = createEngine()
+
+// Mount as a floating panel (default)
+const devtools = createDevTools(engine)
+
+// Mount into a specific DOM element
+const devtools = createDevTools(engine, {
+  container: document.getElementById('devtools'),
+  position: 'bottom',   // 'bottom' | 'right' | 'floating'
+  theme: 'dark',         // 'dark' | 'light'
+  collapsed: false,
+})</code></pre>
+          </div>
+
+          <h3>Configuration</h3>
+          <div class="code-block" data-lang="typescript">
+            <div class="code-block-header">
+              <span class="code-lang">typescript</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>interface DevToolsOptions {
+  container?: HTMLElement | null   // Target element (null creates a floating panel)
+  position?: 'bottom' | 'right' | 'floating'
+  collapsed?: boolean              // Start collapsed
+  theme?: 'dark' | 'light'
+}</code></pre>
+          </div>
+
+          <h3>API</h3>
+          <div class="code-block" data-lang="typescript">
+            <div class="code-block-header">
+              <span class="code-lang">typescript</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code>devtools.pause()    // Pause engine propagation (intercepts emit)
+devtools.resume()   // Resume and flush queued events
+devtools.step()     // Process one queued event while paused
+devtools.destroy()  // Remove devtools and restore engine</code></pre>
+          </div>
+
+          <h3>Features</h3>
+          <table>
+            <thead>
+              <tr><th>Tab</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Graph</strong></td><td>Interactive DAG visualization showing rules, event types, and edges. Edges animate when events flow through them.</td></tr>
+              <tr><td><strong>Timeline</strong></td><td>Chronological log of propagation cycles, events deposited, events consumed, and rule firings.</td></tr>
+              <tr><td><strong>Inspector</strong></td><td>Live view of all signals (with current values), tweens (value/active/progress), springs (value/velocity/settled), and mailbox contents. Includes pause/step controls.</td></tr>
+              <tr><td><strong>Fire Event</strong></td><td>Manually emit events into the engine by selecting an event type and providing a JSON payload.</td></tr>
+            </tbody>
+          </table>
+
+          <p>The floating panel is draggable and collapsible. The titlebar shows a <code>RUNNING</code> or <code>PAUSED</code> status badge.</p>
+        </div>
+      </section>
+
+      <!-- ========== EXAMPLES ========== -->
+      <section class="doc-section" id="examples">
+        <div class="section-card">
+          <h2>Examples</h2>
+
+          <p>The repository includes 27 example applications, each implemented across multiple framework adapters. All examples for a given framework are also bundled into a routed <strong>showcase</strong> app.</p>
+
+          <h3>Running Examples</h3>
+          <div class="code-block" data-lang="bash">
+            <div class="code-block-header">
+              <span class="code-lang">bash</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code># Interactive picker
+./run.sh
+
+# Run all frameworks simultaneously (master showcase on localhost:3000)
+./run.sh all
+
+# Run a specific example
+./run.sh react todo-list
+./run.sh vue drag-api-animation
+
+# Run all examples for a framework (showcase with sidebar routing)
+./run.sh showcase react
+
+# List all available examples
+./run.sh list
+
+# Build all packages
+./run.sh build
+
+# Run core tests
+./run.sh test</code></pre>
+          </div>
+
+          <h3>Example Catalog</h3>
+
+          <!-- Basics -->
+          <div class="example-category">
+            <div class="example-category-title">Basics</div>
+            <div class="example-grid">
+              <div class="example-card">
+                <div class="example-card-title">todo-list</div>
+                <div class="example-card-desc">Classic todo app with add, toggle, delete, filter</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">pipe</span><span class="example-tag">on</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">api-call</div>
+                <div class="example-card-desc">Fetch data from an API with loading/error states</div>
+                <div class="example-card-tags"><span class="example-tag">Async</span><span class="example-tag">pending/done/error</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">simple-animation</div>
+                <div class="example-card-desc">Basic tween animation</div>
+                <div class="example-card-tags"><span class="example-tag">Tween</span><span class="example-tag">easing</span><span class="example-tag">frame loop</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">complex-animation</div>
+                <div class="example-card-desc">Multi-step orchestrated animations</div>
+                <div class="example-card-tags"><span class="example-tag">Tween sequence</span><span class="example-tag">springs</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">drag-api-animation</div>
+                <div class="example-card-desc">Drag gesture triggers API call with animated result</div>
+                <div class="example-card-tags"><span class="example-tag">Async</span><span class="example-tag">tween</span><span class="example-tag">signals</span><span class="example-tag">join</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">form-wizard</div>
+                <div class="example-card-desc">Multi-step form with validation</div>
+                <div class="example-card-tags"><span class="example-tag">Join</span><span class="example-tag">pipeIf</span><span class="example-tag">signals</span><span class="example-tag">middleware</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3D -->
+          <div class="example-category">
+            <div class="example-category-title">3D &amp; Visual</div>
+            <div class="example-grid">
+              <div class="example-card">
+                <div class="example-card-title">3d-card-flip</div>
+                <div class="example-card-desc">3D card flip animation on hover</div>
+                <div class="example-card-tags"><span class="example-tag">Tween</span><span class="example-tag">spring</span><span class="example-tag">easing</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">3d-cube-menu</div>
+                <div class="example-card-desc">Rotating 3D cube navigation menu</div>
+                <div class="example-card-tags"><span class="example-tag">Tween sequence</span><span class="example-tag">signals</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">3d-particle-explosion</div>
+                <div class="example-card-desc">Particle system with explosion effect</div>
+                <div class="example-card-tags"><span class="example-tag">Frame loop</span><span class="example-tag">springs</span><span class="example-tag">signals</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">3d-carousel</div>
+                <div class="example-card-desc">3D carousel with perspective transforms</div>
+                <div class="example-card-tags"><span class="example-tag">Tween</span><span class="example-tag">signals</span><span class="example-tag">computed</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">3d-layered-parallax</div>
+                <div class="example-card-desc">Multi-layer parallax depth effect</div>
+                <div class="example-card-tags"><span class="example-tag">Frame loop</span><span class="example-tag">signals</span><span class="example-tag">springs</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">3d-morphing-grid</div>
+                <div class="example-card-desc">Grid with morphing 3D transforms</div>
+                <div class="example-card-tags"><span class="example-tag">Tween</span><span class="example-tag">springs</span><span class="example-tag">frame loop</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Complex UI -->
+          <div class="example-category">
+            <div class="example-category-title">Complex UI</div>
+            <div class="example-grid">
+              <div class="example-card">
+                <div class="example-card-title">realtime-dashboard</div>
+                <div class="example-card-desc">Live-updating metrics dashboard</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">computed</span><span class="example-tag">throttle</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">spreadsheet</div>
+                <div class="example-card-desc">Reactive spreadsheet with formula cells</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">computed</span><span class="example-tag">pipe</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">chat-app</div>
+                <div class="example-card-desc">Real-time chat with message history</div>
+                <div class="example-card-tags"><span class="example-tag">Async</span><span class="example-tag">signals</span><span class="example-tag">on</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">music-player</div>
+                <div class="example-card-desc">Audio player with playback controls</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">tween</span><span class="example-tag">frame loop</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">virtual-scroll</div>
+                <div class="example-card-desc">Virtualized list rendering for large datasets</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">computed</span><span class="example-tag">throttle</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">collaborative-editor</div>
+                <div class="example-card-desc">Multi-cursor collaborative text editor</div>
+                <div class="example-card-tags"><span class="example-tag">Async</span><span class="example-tag">signals</span><span class="example-tag">join</span><span class="example-tag">debounce</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">image-filters</div>
+                <div class="example-card-desc">Image processing with adjustable filters</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">computed</span><span class="example-tag">debounce</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">gantt-chart</div>
+                <div class="example-card-desc">Project timeline Gantt chart</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">computed</span><span class="example-tag">tween</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">notification-system</div>
+                <div class="example-card-desc">Toast notifications with auto-dismiss</div>
+                <div class="example-card-tags"><span class="example-tag">Tween</span><span class="example-tag">signals</span><span class="example-tag">debounce</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">file-tree</div>
+                <div class="example-card-desc">Hierarchical file explorer</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">pipe</span><span class="example-tag">pipeIf</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">stock-dashboard</div>
+                <div class="example-card-desc">Real-time stock price ticker</div>
+                <div class="example-card-tags"><span class="example-tag">Async</span><span class="example-tag">signals</span><span class="example-tag">throttle</span><span class="example-tag">computed</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">sortable-grid</div>
+                <div class="example-card-desc">Drag-and-drop sortable grid</div>
+                <div class="example-card-tags"><span class="example-tag">Springs</span><span class="example-tag">signals</span><span class="example-tag">frame loop</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">modal-system</div>
+                <div class="example-card-desc">Stacked modal dialogs with animations</div>
+                <div class="example-card-tags"><span class="example-tag">Tween</span><span class="example-tag">signals</span><span class="example-tag">sequence</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">canvas-paint</div>
+                <div class="example-card-desc">Drawing canvas with brush tools</div>
+                <div class="example-card-tags"><span class="example-tag">Frame loop</span><span class="example-tag">signals</span><span class="example-tag">throttle</span></div>
+              </div>
+              <div class="example-card">
+                <div class="example-card-title">data-table</div>
+                <div class="example-card-desc">Sortable, filterable data table</div>
+                <div class="example-card-tags"><span class="example-tag">Signals</span><span class="example-tag">computed</span><span class="example-tag">debounce</span></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Framework Coverage</h3>
+          <table>
+            <thead>
+              <tr><th>Framework</th><th>Examples</th><th>Showcase</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>React</td><td>All 27</td><td><code>./run.sh showcase react</code></td></tr>
+              <tr><td>Vue</td><td>All 27</td><td><code>./run.sh showcase vue</code></td></tr>
+              <tr><td>Solid</td><td>All 27</td><td><code>./run.sh showcase solid</code></td></tr>
+              <tr><td>Angular</td><td>7 (core subset)</td><td><code>./run.sh showcase angular</code></td></tr>
+              <tr><td>Ember</td><td>7 (core subset)</td><td><code>./run.sh showcase ember</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ========== ARCHITECTURE ========== -->
+      <section class="doc-section" id="architecture">
+        <div class="section-card">
+          <h2>Architecture</h2>
+
+          <h3>Propagation Algorithm</h3>
+          <p>When <code>engine.emit(type, payload)</code> is called:</p>
+
+          <ol>
+            <li><strong>Deposit:</strong> The event is created (from an object pool for zero-allocation hot paths), stamped with a monotonic sequence number, and its <code>_pendingConsumers</code> set is populated from all rules registered on that event type. The event is enqueued in the type's mailbox.</li>
+            <li><strong>Middleware:</strong> Before deposit, each registered middleware function runs in order. Middleware can transform the event or return <code>null</code> to block it entirely.</li>
+            <li><strong>Propagate:</strong> The propagation loop runs:
+              <ul>
+                <li>Compute the <strong>topological order</strong> of all rules (cached, recomputed only when the DAG changes).</li>
+                <li>For each rule in order:
+                  <ul>
+                    <li><strong><code>each</code> mode:</strong> While the rule's input mailbox has a ready event (one where this rule is still in <code>_pendingConsumers</code>), consume it, run the guard (if any), execute the action, and deposit any output events.</li>
+                    <li><strong><code>join</code> mode:</strong> Check if all input mailboxes have a ready event. If so, consume one from each, run the guard, execute the action, and deposit the output. If the guard rejects, events are returned to their mailboxes via <code>unconsume</code>.</li>
+                  </ul>
+                </li>
+                <li>Repeat until no mailbox produces new work (quiescent) or the round limit is exceeded.</li>
+              </ul>
+            </li>
+            <li><strong>Drain pending:</strong> If <code>emit</code> was called during propagation (e.g., from an <code>on</code> handler or async callback), those emissions were queued. They are now drained one at a time, each triggering a new propagation pass.</li>
+          </ol>
+
+          <h3>DAG Construction</h3>
+          <p>Rules are nodes. Edges connect producer rules to consumer rules: if rule A outputs event type X, and rule B triggers on event type X, there is an edge from A to B. The DAG maintains both forward (<code>_adj</code>) and reverse (<code>_radj</code>) adjacency lists. Cycle detection uses DFS with three-color marking. Topological sort uses Kahn's algorithm with priority-based tie-breaking for deterministic ordering among peers.</p>
+
+          <h3>Mailboxes and Ref-Counted Consumption</h3>
+          <p>Each event type has a <code>Mailbox</code> &mdash; a queue of <code>PulseEvent</code> objects. Each event tracks which rules still need to consume it (<code>_pendingConsumers</code> set). When a rule consumes an event, it removes itself from that set. When the set is empty, the event is removed from the queue and recycled to the object pool (max 512 pooled objects). This ref-counting ensures that events are available to all downstream rules in the same propagation cycle.</p>
+
+          <h3>Frame Loop Integration</h3>
+          <p>Tweens and springs are advanced each frame. The frame tick sequence is:</p>
+          <ol>
+            <li>Flush coalesced events (batched from <code>coalesce</code>)</li>
+            <li>Advance all active tweens by <code>dt</code>, emit <code>done</code> events for completed tweens</li>
+            <li>Advance all unsettled springs by <code>dt</code>, emit <code>done</code> events for newly settled springs</li>
+            <li>Emit the built-in <code>engine.frame</code> event with <code>{ time, dt }</code></li>
+            <li>Recursively tick all child engines</li>
+          </ol>
+        </div>
+      </section>
+
+    </div><!-- end content -->
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="footer">
+      <div class="footer-tagline">Built with Pulse</div>
+      <p><a href="https://github.com/pulse-engine/pulse" target="_blank" rel="noopener">GitHub</a> &middot; MIT License</p>
+    </footer>
+
+  </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
