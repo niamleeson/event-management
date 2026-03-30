@@ -1,0 +1,28 @@
+{
+  "name": "@pulse/ember",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@pulse/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@glimmer/tracking": ">=1.1.0",
+    "ember-source": ">=5.0.0"
+  },
+  "devDependencies": {
+    "@glimmer/tracking": "^1.1.0",
+    "typescript": "^5.4.0"
+  }
+}

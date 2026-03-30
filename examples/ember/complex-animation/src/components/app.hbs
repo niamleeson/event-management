@@ -1,0 +1,55 @@
+{{!-- StaggeredCardsApp template --}}
+{{!-- Multiple TrackedTween instances drive staggered card entrance animations --}}
+
+<div class="staggered-app">
+  <header>
+    <h1>Staggered Card Entrance</h1>
+    <p class="subtitle">Multiple tweens with join pattern for AllCardsEntered</p>
+  </header>
+
+  {{!-- Controls --}}
+  <div class="controls">
+    <button
+      type="button"
+      class="btn trigger"
+      disabled={{if this.canTrigger false true}}
+      {{on "click" this.triggerEntrance}}
+    >
+      {{if this.animatingSignal.value "Animating..." "Trigger Entrance"}}
+    </button>
+    {{#if this.allEnteredSignal.value}}
+      <button
+        type="button"
+        class="btn reset"
+        {{on "click" this.reset}}
+      >
+        Reset
+      </button>
+    {{/if}}
+  </div>
+
+  {{!-- Success banner --}}
+  {{#if this.showSuccessMessage}}
+    <div class="success-banner">
+      All cards have entered! (join pattern fired AllCardsEntered)
+    </div>
+  {{/if}}
+
+  {{!-- Card grid --}}
+  <div class="card-grid">
+    {{#each this.trackedCards as |tc|}}
+      <div class="card" style={{tc.style}}>
+        <h3 class="card-title">{{tc.card.title}}</h3>
+        <p class="card-description">{{tc.card.description}}</p>
+        {{#if tc.opacity.active}}
+          <span class="card-badge">animating</span>
+        {{/if}}
+      </div>
+    {{/each}}
+  </div>
+
+  <p class="hint">
+    Each card has independent opacity, translateY, and scale tweens.
+    They start with a 120ms stagger delay. A join rule fires when all are done.
+  </p>
+</div>

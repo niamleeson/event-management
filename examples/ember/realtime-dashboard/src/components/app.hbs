@@ -1,0 +1,103 @@
+{{!-- DashboardApp template --}}
+{{!-- Realtime metrics with TrackedSignal, threshold alerts via join, TrackedTween for charts --}}
+
+<div class="dashboard-app">
+  <header>
+    <h1>Realtime Dashboard</h1>
+    <p class="subtitle">Mock data feed with threshold detection and animated charts</p>
+    <button
+      type="button"
+      class="btn {{if this.running.value 'stop' 'start'}}"
+      {{on "click" this.toggleFeed}}
+    >
+      {{if this.running.value "Stop Feed" "Start Feed"}}
+    </button>
+  </header>
+
+  {{!-- Metric cards --}}
+  <div class="metrics-grid">
+    {{!-- CPU --}}
+    <div class="metric-card">
+      <h3>CPU Usage</h3>
+      <div class="metric-value" style="color: {{this.cpuColor}}">
+        {{this.cpu.value}} %
+      </div>
+      <div class="bar-container">
+        <div class="bar-fill" style="width: {{this.cpuBarWidth}}; background: {{this.cpuColor}}"></div>
+      </div>
+      <div class="sparkline">
+        {{#each (this.cpuSparklineBars) as |bar|}}
+          <div class="spark-bar" style="height: {{bar.height}}; background: {{bar.color}}"></div>
+        {{/each}}
+      </div>
+    </div>
+
+    {{!-- Memory --}}
+    <div class="metric-card">
+      <h3>Memory Usage</h3>
+      <div class="metric-value" style="color: {{this.memoryColor}}">
+        {{this.memory.value}} %
+      </div>
+      <div class="bar-container">
+        <div class="bar-fill" style="width: {{this.memoryBarWidth}}; background: {{this.memoryColor}}"></div>
+      </div>
+      <div class="sparkline">
+        {{#each (this.memorySparklineBars) as |bar|}}
+          <div class="spark-bar" style="height: {{bar.height}}; background: {{bar.color}}"></div>
+        {{/each}}
+      </div>
+    </div>
+
+    {{!-- Requests --}}
+    <div class="metric-card">
+      <h3>Total Requests</h3>
+      <div class="metric-value">
+        {{this.requests.value}}
+      </div>
+    </div>
+
+    {{!-- Error Rate --}}
+    <div class="metric-card">
+      <h3>Error Rate</h3>
+      <div class="metric-value {{if (gt this.errRate.value 5) 'danger'}}">
+        {{this.formattedErrorRate}}
+      </div>
+    </div>
+
+    {{!-- Latency --}}
+    <div class="metric-card">
+      <h3>Latency</h3>
+      <div class="metric-value {{if (gt this.latency.value 150) 'danger'}}">
+        {{this.formattedLatency}}
+      </div>
+    </div>
+  </div>
+
+  {{!-- Alerts panel --}}
+  <div class="alerts-panel">
+    <h2>Alerts {{if this.hasAlerts (concat "(" this.alertList.value.length ")")}}</h2>
+    {{#if this.hasAlerts}}
+      {{#each this.alertList.value as |alert|}}
+        <div class="alert-item {{alert.severity}}">
+          <span class="alert-badge">{{alert.severity}}</span>
+          <span class="alert-message">{{alert.message}}</span>
+          <button
+            type="button"
+            class="dismiss-btn"
+            {{on "click" (fn this.dismissAlert alert.id)}}
+          >
+            Dismiss
+          </button>
+        </div>
+      {{/each}}
+    {{else}}
+      <p class="no-alerts">No active alerts</p>
+    {{/if}}
+  </div>
+
+  <p class="hint">
+    Start the feed to see live metrics. CPU &gt; 85% or Memory &gt; 90% triggers
+    threshold alerts. When both breach simultaneously, a join pattern fires a
+    critical alert.
+  </p>
+</div>

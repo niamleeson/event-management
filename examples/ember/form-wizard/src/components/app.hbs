@@ -1,0 +1,193 @@
+{{!-- FormWizardApp template --}}
+{{!-- Multi-step form with validation pipes and TrackedTween step transitions --}}
+
+<div class="wizard-app">
+  <header>
+    <h1>Registration Wizard</h1>
+    <p class="subtitle">Multi-step form with validation pipes and animated transitions</p>
+  </header>
+
+  {{!-- Success state --}}
+  {{#if this.done.value}}
+    <div class="success-panel">
+      <h2>Registration Complete!</h2>
+      <p>Thank you, {{this.personal.value.firstName}} {{this.personal.value.lastName}}.</p>
+      <p>A confirmation has been sent to {{this.contact.value.email}}.</p>
+      <button type="button" class="btn" {{on "click" this.reset}}>
+        Start Over
+      </button>
+    </div>
+  {{else}}
+    {{!-- Progress bar --}}
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: {{this.progressPercent}}"></div>
+      </div>
+      <div class="step-indicators">
+        {{#each this.steps as |stepId index|}}
+          <div class="step-dot {{if (this.isStepActive stepId) 'active'}} {{if (this.isStepCompleted stepId) 'completed'}}">
+            {{add index 1}}
+          </div>
+        {{/each}}
+      </div>
+    </div>
+
+    {{!-- Step header --}}
+    <h2 class="step-title">{{this.stepLabel}}</h2>
+
+    {{!-- Step content with transition animation --}}
+    <div class="step-content" style={{this.stepContentStyle}}>
+
+      {{!-- Step 1: Personal Info --}}
+      {{#if (eq this.step.value "personal")}}
+        <div class="form-group">
+          <label for="firstName">First Name *</label>
+          <input
+            id="firstName"
+            type="text"
+            value={{this.personal.value.firstName}}
+            placeholder="Enter your first name"
+            {{on "input" this.updateFirstName}}
+          />
+          {{#if (this.fieldError "firstName")}}
+            <p class="field-error">{{this.fieldError "firstName"}}</p>
+          {{/if}}
+        </div>
+        <div class="form-group">
+          <label for="lastName">Last Name *</label>
+          <input
+            id="lastName"
+            type="text"
+            value={{this.personal.value.lastName}}
+            placeholder="Enter your last name"
+            {{on "input" this.updateLastName}}
+          />
+          {{#if (this.fieldError "lastName")}}
+            <p class="field-error">{{this.fieldError "lastName"}}</p>
+          {{/if}}
+        </div>
+      {{/if}}
+
+      {{!-- Step 2: Contact Info --}}
+      {{#if (eq this.step.value "contact")}}
+        <div class="form-group">
+          <label for="email">Email *</label>
+          <input
+            id="email"
+            type="email"
+            value={{this.contact.value.email}}
+            placeholder="you@example.com"
+            {{on "input" this.updateEmail}}
+          />
+          {{#if (this.fieldError "email")}}
+            <p class="field-error">{{this.fieldError "email"}}</p>
+          {{/if}}
+        </div>
+        <div class="form-group">
+          <label for="phone">Phone (optional)</label>
+          <input
+            id="phone"
+            type="tel"
+            value={{this.contact.value.phone}}
+            placeholder="+1 555-123-4567"
+            {{on "input" this.updatePhone}}
+          />
+          {{#if (this.fieldError "phone")}}
+            <p class="field-error">{{this.fieldError "phone"}}</p>
+          {{/if}}
+        </div>
+      {{/if}}
+
+      {{!-- Step 3: Preferences --}}
+      {{#if (eq this.step.value "preferences")}}
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              checked={{this.prefs.value.newsletter}}
+              {{on "change" this.toggleNewsletter}}
+            />
+            Subscribe to newsletter
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="theme">Theme</label>
+          <select
+            id="theme"
+            value={{this.prefs.value.theme}}
+            {{on "change" this.setTheme}}
+          >
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      {{/if}}
+
+      {{!-- Step 4: Review --}}
+      {{#if (eq this.step.value "review")}}
+        <div class="review-section">
+          <h3>Personal Information</h3>
+          <p>{{this.personal.value.firstName}} {{this.personal.value.lastName}}</p>
+        </div>
+        <div class="review-section">
+          <h3>Contact Details</h3>
+          <p>Email: {{this.contact.value.email}}</p>
+          {{#if this.contact.value.phone}}
+            <p>Phone: {{this.contact.value.phone}}</p>
+          {{/if}}
+        </div>
+        <div class="review-section">
+          <h3>Preferences</h3>
+          <p>Newsletter: {{if this.prefs.value.newsletter "Yes" "No"}}</p>
+          <p>Theme: {{this.prefs.value.theme}}</p>
+        </div>
+      {{/if}}
+    </div>
+
+    {{!-- Validation errors --}}
+    {{#if this.hasErrors}}
+      <div class="error-list">
+        {{#each this.currentErrors as |err|}}
+          <p class="error-item">{{err.message}}</p>
+        {{/each}}
+      </div>
+    {{/if}}
+
+    {{!-- Submit error --}}
+    {{#if this.error.value}}
+      <div class="submit-error">{{this.error.value}}</div>
+    {{/if}}
+
+    {{!-- Navigation buttons --}}
+    <div class="nav-buttons">
+      {{#unless this.isFirstStep}}
+        <button
+          type="button"
+          class="btn prev"
+          {{on "click" this.prevStep}}
+        >
+          Back
+        </button>
+      {{/unless}}
+      <div class="spacer"></div>
+      {{#if this.isLastStep}}
+        <button
+          type="button"
+          class="btn submit"
+          disabled={{this.submitting.value}}
+          {{on "click" this.submit}}
+        >
+          {{if this.submitting.value "Submitting..." "Submit"}}
+        </button>
+      {{else}}
+        <button
+          type="button"
+          class="btn next"
+          {{on "click" this.nextStep}}
+        >
+          Next
+        </button>
+      {{/if}}
+    </div>
+  {{/if}}
+</div>

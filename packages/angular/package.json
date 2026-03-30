@@ -1,0 +1,26 @@
+{
+  "name": "@pulse/angular",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@pulse/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@angular/core": ">=17.0.0 || >=18.0.0 || >=19.0.0 || >=20.0.0 || >=21.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

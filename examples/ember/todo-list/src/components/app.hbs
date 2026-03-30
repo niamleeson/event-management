@@ -1,0 +1,83 @@
+{{!-- TodoApp template --}}
+{{!-- The @tracked TrackedSignal wrappers auto-update the template --}}
+
+<div class="todo-app">
+  <header>
+    <h1>Pulse Todos</h1>
+    <p class="subtitle">All state managed through Pulse events and signals</p>
+  </header>
+
+  {{!-- Input row --}}
+  <div class="input-row">
+    <input
+      type="text"
+      value={{this.text.value}}
+      placeholder="What needs to be done?"
+      {{on "input" this.updateText}}
+      {{on "keydown" this.handleKeyDown}}
+    />
+    <button
+      type="button"
+      disabled={{this.isAddDisabled}}
+      {{on "click" this.addTodo}}
+    >
+      Add
+    </button>
+  </div>
+
+  {{!-- Validation error --}}
+  <p class="error">{{if this.errorMessage this.errorMessage "&nbsp;"}}</p>
+
+  {{!-- Filter bar --}}
+  <div class="filter-bar">
+    <button
+      type="button"
+      class={{if (eq this.filter.value "all") "active"}}
+      {{on "click" (fn this.setFilter "all")}}
+    >
+      All
+    </button>
+    <button
+      type="button"
+      class={{if (eq this.filter.value "active") "active"}}
+      {{on "click" (fn this.setFilter "active")}}
+    >
+      Active
+    </button>
+    <button
+      type="button"
+      class={{if (eq this.filter.value "completed") "active"}}
+      {{on "click" (fn this.setFilter "completed")}}
+    >
+      Completed
+    </button>
+  </div>
+
+  {{!-- Todo list --}}
+  {{#if this.filteredTodos.length}}
+    {{#each this.filteredTodos as |todo|}}
+      <div class="todo-item {{if todo.completed 'completed'}}">
+        <input
+          type="checkbox"
+          checked={{todo.completed}}
+          {{on "change" (fn this.toggleTodo todo.id)}}
+        />
+        <span class="todo-text">{{todo.text}}</span>
+        <button
+          type="button"
+          class="remove-btn"
+          {{on "click" (fn this.removeTodo todo.id)}}
+        >
+          &times;
+        </button>
+      </div>
+    {{/each}}
+  {{else}}
+    <p class="empty">
+      {{if this.todos.value.length "No matching todos." "No todos yet. Add one above!"}}
+    </p>
+  {{/if}}
+
+  {{!-- Footer --}}
+  <p class="footer">{{this.remainingCount}} item{{if (not-eq this.remainingCount 1) "s"}} remaining</p>
+</div>

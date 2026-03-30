@@ -1,0 +1,16 @@
+{
+  "name": "@pulse-examples/ember-realtime-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Ember + Pulse: Realtime dashboard with mock data feed and threshold alerts",
+  "dependencies": {
+    "@pulse/core": "workspace:*",
+    "@pulse/ember": "workspace:*"
+  },
+  "devDependencies": {
+    "@glimmer/component": "^1.1.0",
+    "@glimmer/tracking": "^1.1.0",
+    "ember-source": "^5.0.0",
+    "typescript": "^5.4.0"
+  }
+}

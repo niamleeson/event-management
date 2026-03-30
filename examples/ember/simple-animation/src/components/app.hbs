@@ -1,0 +1,58 @@
+{{!-- AnimatedCounterApp template --}}
+{{!-- TrackedTween.value updates each animation frame, triggering re-render --}}
+
+<div class="counter-app">
+  <header>
+    <h1>Animated Counter</h1>
+    <p class="subtitle">TrackedTween smoothly interpolates between values</p>
+  </header>
+
+  {{!-- Animated number display --}}
+  <div class="counter-display">
+    <span class="counter-value {{if this.isAnimating 'animating'}}">
+      {{this.displayValue}}
+    </span>
+    <span class="actual-value">
+      Actual: {{this.countSignal.value}}
+    </span>
+  </div>
+
+  {{!-- Tween progress bar --}}
+  {{#if this.isAnimating}}
+    <div class="progress-bar">
+      <div class="progress-fill" style="width: {{this.progressPercent}}"></div>
+    </div>
+    <p class="progress-label">Tween progress: {{this.progressPercent}}</p>
+  {{/if}}
+
+  {{!-- Controls --}}
+  <div class="controls">
+    <button
+      type="button"
+      class="btn decrement"
+      disabled={{this.isZero}}
+      {{on "click" this.decrement}}
+    >
+      -1
+    </button>
+    <button
+      type="button"
+      class="btn increment"
+      {{on "click" this.increment}}
+    >
+      +1
+    </button>
+    <button
+      type="button"
+      class="btn reset"
+      disabled={{this.isZero}}
+      {{on "click" this.reset}}
+    >
+      Reset
+    </button>
+  </div>
+
+  <p class="hint">
+    Click rapidly to see the tween smoothly chase the target value.
+  </p>
+</div>

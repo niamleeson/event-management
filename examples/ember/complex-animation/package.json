@@ -1,0 +1,16 @@
+{
+  "name": "@pulse-examples/ember-complex-animation",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Ember + Pulse: Staggered card entrance with multiple tweens and join pattern",
+  "dependencies": {
+    "@pulse/core": "workspace:*",
+    "@pulse/ember": "workspace:*"
+  },
+  "devDependencies": {
+    "@glimmer/component": "^1.1.0",
+    "@glimmer/tracking": "^1.1.0",
+    "ember-source": "^5.0.0",
+    "typescript": "^5.4.0"
+  }
+}

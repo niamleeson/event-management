@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "paths": {
+      "@pulse/core": ["../../packages/core/src/index.ts"],
+      "@pulse/react": ["../../packages/react/src/index.ts"]
+    }
+  },
+  "include": ["src", "../react/*/src"]
+}

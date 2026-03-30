@@ -1,0 +1,16 @@
+{
+  "name": "@pulse-examples/ember-form-wizard",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Ember + Pulse: Multi-step form wizard with validation pipes and step transitions",
+  "dependencies": {
+    "@pulse/core": "workspace:*",
+    "@pulse/ember": "workspace:*"
+  },
+  "devDependencies": {
+    "@glimmer/component": "^1.1.0",
+    "@glimmer/tracking": "^1.1.0",
+    "ember-source": "^5.0.0",
+    "typescript": "^5.4.0"
+  }
+}

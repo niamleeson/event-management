@@ -1,0 +1,12 @@
+{
+  "name": "pulse-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "dev": "pnpm -r --parallel dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

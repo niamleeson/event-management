@@ -1,0 +1,27 @@
+{
+  "name": "@pulse/vue",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@pulse/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": ">=3.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vue": "^3.4.0"
+  }
+}

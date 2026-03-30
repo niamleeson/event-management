@@ -1,0 +1,27 @@
+{
+  "name": "@pulse/solid",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@pulse/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "solid-js": ">=1.8.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "solid-js": "^1.8.0"
+  }
+}

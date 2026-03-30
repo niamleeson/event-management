@@ -1,0 +1,87 @@
+{{!-- KanbanApp template --}}
+{{!-- TrackedSpring for drag physics, TrackedTween for error shake, async save --}}
+
+<div class="kanban-app" style={{this.shakeTransform}}>
+  <header>
+    <h1>Kanban Board</h1>
+    <p class="subtitle">Spring-based drag, async save, error animations, undo</p>
+  </header>
+
+  {{!-- Toolbar --}}
+  <div class="toolbar">
+    {{#if this.saving.value}}
+      <span class="status saving">Saving...</span>
+    {{/if}}
+    {{#if this.error.value}}
+      <span class="status error">{{this.error.value}}</span>
+    {{/if}}
+    <button
+      type="button"
+      class="btn undo"
+      disabled={{if this.undoAvailable.value false true}}
+      {{on "click" this.undo}}
+    >
+      Undo
+    </button>
+  </div>
+
+  {{!-- Board columns --}}
+  <div class="board">
+    {{#each this.columns as |col|}}
+      <div class="column">
+        <h2 class="column-header">{{col.label}}</h2>
+        <div class="column-body" data-column={{col.id}}>
+          {{#each (this.cardsForColumn col.id) as |card|}}
+            <div
+              class="kanban-card {{if (eq this.drag.value.cardId card.id) 'dragging'}}"
+              {{on "mousedown" (fn this.startDrag card.id)}}
+            >
+              <span class="card-title">{{card.title}}</span>
+              {{!-- Quick-move buttons (alternative to drag) --}}
+              <div class="card-actions">
+                {{#if (not-eq col.id "todo")}}
+                  <button
+                    type="button"
+                    class="move-btn"
+                    title="Move left"
+                    {{on "click" (fn this.moveCard card.id
+                      (if (eq col.id "done") "in-progress" "todo")
+                    )}}
+                  >
+                    &larr;
+                  </button>
+                {{/if}}
+                {{#if (not-eq col.id "done")}}
+                  <button
+                    type="button"
+                    class="move-btn"
+                    title="Move right"
+                    {{on "click" (fn this.moveCard card.id
+                      (if (eq col.id "todo") "in-progress" "done")
+                    )}}
+                  >
+                    &rarr;
+                  </button>
+                {{/if}}
+              </div>
+            </div>
+          {{/each}}
+        </div>
+      </div>
+    {{/each}}
+  </div>
+
+  {{!-- Spring debug info --}}
+  {{#if this.isDragging}}
+    <div class="debug-info">
+      <p>Spring X: {{this.springX.value}} (velocity: {{this.springX.velocity}})</p>
+      <p>Settled: {{this.springX.settled}}</p>
+    </div>
+  {{/if}}
+
+  <p class="hint">
+    Click arrow buttons to move cards between columns. Each move is async-saved
+    with a ~15% chance of failure. Failures trigger a shake animation. Use Undo
+    to revert moves.
+  </p>
+</div>

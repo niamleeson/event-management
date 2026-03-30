@@ -1,0 +1,68 @@
+{{!-- UserSearchApp template --}}
+{{!-- TrackedSignal wrappers drive all reactive updates --}}
+
+<div class="search-app">
+  <header>
+    <h1>User Search</h1>
+    <p class="subtitle">Async events with loading, error, and results states</p>
+  </header>
+
+  {{!-- Search input --}}
+  <div class="search-row">
+    <input
+      type="text"
+      value={{this.query.value}}
+      placeholder="Search users by name or email..."
+      {{on "input" this.updateQuery}}
+    />
+    {{#if this.query.value}}
+      <button type="button" class="clear-btn" {{on "click" this.clearSearch}}>
+        Clear
+      </button>
+    {{/if}}
+  </div>
+
+  {{!-- Loading indicator --}}
+  {{#if this.loading.value}}
+    <div class="loading">
+      <div class="spinner"></div>
+      <span>Searching...</span>
+    </div>
+  {{/if}}
+
+  {{!-- Error message --}}
+  {{#if this.error.value}}
+    <div class="error-banner">
+      <span class="error-icon">!</span>
+      <span>{{this.error.value}}</span>
+    </div>
+  {{/if}}
+
+  {{!-- Results --}}
+  {{#if this.hasResults}}
+    <div class="results">
+      <p class="result-count">{{this.results.value.length}} user(s) found</p>
+      {{#each this.results.value as |user|}}
+        <div class="user-card">
+          <div class="avatar">{{user.avatar}}</div>
+          <div class="user-info">
+            <div class="user-name">{{user.name}}</div>
+            <div class="user-email">{{user.email}}</div>
+          </div>
+        </div>
+      {{/each}}
+    </div>
+  {{/if}}
+
+  {{!-- Empty state --}}
+  {{#if this.showEmpty}}
+    <div class="empty">
+      No users found matching "{{this.query.value}}"
+    </div>
+  {{/if}}
+
+  {{!-- Hint --}}
+  <p class="hint">
+    Try searching for "Alice", "Bob", or type "error" to simulate a failure.
+  </p>
+</div>
