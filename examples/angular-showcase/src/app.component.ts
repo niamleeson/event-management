@@ -223,6 +223,108 @@ export class AppComponent implements OnDestroy {
       label: 'Form Wizard',
       description: 'Multi-step form with validation',
     },
+    // 3D Examples
+    {
+      path: '3d-card-flip',
+      label: '3D Card Flip',
+      description: '4x2 grid with flip tweens',
+    },
+    {
+      path: '3d-cube-menu',
+      label: '3D Cube Menu',
+      description: 'Drag-rotate cube, spring snap',
+    },
+    {
+      path: '3d-particle-explosion',
+      label: 'Particle Explosion',
+      description: 'Canvas particles with physics',
+    },
+    {
+      path: '3d-carousel',
+      label: '3D Carousel',
+      description: 'Auto-rotate 3D circle layout',
+    },
+    {
+      path: '3d-layered-parallax',
+      label: 'Layered Parallax',
+      description: '5-layer spring camera tilt',
+    },
+    {
+      path: '3d-morphing-grid',
+      label: 'Morphing Grid',
+      description: '4x4 staggered shape morph',
+    },
+    // Complex UI
+    {
+      path: 'spreadsheet',
+      label: 'Spreadsheet',
+      description: '8x8 grid with formula cascade',
+    },
+    {
+      path: 'chat-app',
+      label: 'Chat App',
+      description: '2 bots, typing, read receipts',
+    },
+    {
+      path: 'music-player',
+      label: 'Music Player',
+      description: '32-bar visualizer, playlist',
+    },
+    {
+      path: 'virtual-scroll',
+      label: 'Virtual Scroll',
+      description: '10K items, async page load',
+    },
+    {
+      path: 'collaborative-editor',
+      label: 'Collaborative Editor',
+      description: 'Multi-user cursors, edit history',
+    },
+    {
+      path: 'image-filters',
+      label: 'Image Filters',
+      description: 'CSS filter pipeline, undo/redo',
+    },
+    {
+      path: 'gantt-chart',
+      label: 'Gantt Chart',
+      description: 'Drag tasks, SVG arrows, zoom',
+    },
+    {
+      path: 'notification-system',
+      label: 'Notifications',
+      description: 'Toast stack, auto-dismiss',
+    },
+    {
+      path: 'file-tree',
+      label: 'File Tree',
+      description: 'Nested expand, keyboard nav',
+    },
+    {
+      path: 'stock-dashboard',
+      label: 'Stock Dashboard',
+      description: '8 stocks, sparklines, alerts',
+    },
+    {
+      path: 'sortable-grid',
+      label: 'Sortable Grid',
+      description: '4-col drag reorder, shuffle',
+    },
+    {
+      path: 'modal-system',
+      label: 'Modal System',
+      description: 'Stacked modals, blur, escape',
+    },
+    {
+      path: 'canvas-paint',
+      label: 'Canvas Paint',
+      description: 'Draw tools, layers, undo/redo',
+    },
+    {
+      path: 'data-table',
+      label: 'Data Table',
+      description: '1K rows, sort/filter/paginate',
+    },
   ]
 
   devtoolsOpen = false

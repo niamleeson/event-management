@@ -23,6 +23,9 @@ importers:
       '@angular/core':
         specifier: ^21.0.0
         version: 21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1)
+      '@angular/forms':
+        specifier: ^21.2.6
+        version: 21.2.6(@angular/common@21.2.6(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(@angular/platform-browser@21.2.6(@angular/common@21.2.6(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1)))(rxjs@7.8.2)
       '@angular/platform-browser':
         specifier: ^21.0.0
         version: 21.2.6(@angular/common@21.2.6(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))
@@ -605,6 +608,192 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
 
+  examples/react/3d-card-flip:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/3d-carousel:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/3d-cube-menu:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/3d-layered-parallax:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/3d-morphing-grid:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/3d-particle-explosion:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
   examples/react/api-call:
     dependencies:
       '@pulse/core':
@@ -636,7 +825,131 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
 
+  examples/react/canvas-paint:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/chat-app:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/collaborative-editor:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
   examples/react/complex-animation:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/data-table:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -701,7 +1014,193 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
 
+  examples/react/file-tree:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
   examples/react/form-wizard:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/gantt-chart:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/image-filters:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/modal-system:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/music-player:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/notification-system:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -794,7 +1293,131 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
 
+  examples/react/sortable-grid:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/spreadsheet:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/stock-dashboard:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
   examples/react/todo-list:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+
+  examples/react/virtual-scroll:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -853,7 +1476,205 @@ importers:
         specifier: ^2.10.0
         version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
 
+  examples/solid/3d-card-flip:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/3d-carousel:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/3d-cube-menu:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/3d-layered-parallax:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/3d-morphing-grid:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/3d-particle-explosion:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
   examples/solid/api-call:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/canvas-paint:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/chat-app:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/collaborative-editor:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -897,6 +1718,28 @@ importers:
         specifier: ^2.10.0
         version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
 
+  examples/solid/data-table:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
   examples/solid/drag-api-animation:
     dependencies:
       '@pulse/core':
@@ -919,7 +1762,139 @@ importers:
         specifier: ^2.10.0
         version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
 
+  examples/solid/file-tree:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
   examples/solid/form-wizard:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/gantt-chart:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/image-filters:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/modal-system:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/music-player:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/notification-system:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -985,7 +1960,95 @@ importers:
         specifier: ^2.10.0
         version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
 
+  examples/solid/sortable-grid:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/spreadsheet:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/stock-dashboard:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
   examples/solid/todo-list:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/solid':
+        specifier: workspace:*
+        version: link:../../../packages/solid
+      solid-js:
+        specifier: ^1.8.0
+        version: 1.9.12
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vite-plugin-solid:
+        specifier: ^2.10.0
+        version: 2.11.11(solid-js@1.9.12)(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))
+
+  examples/solid/virtual-scroll:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -1038,7 +2101,232 @@ importers:
         specifier: ^2.0.0
         version: 2.2.12(typescript@5.9.3)
 
+  examples/vue/3d-card-flip:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/3d-carousel:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/3d-cube-menu:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/3d-layered-parallax:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/3d-morphing-grid:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/3d-particle-explosion:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
   examples/vue/api-call:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/canvas-paint:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/chat-app:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/collaborative-editor:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -1088,6 +2376,31 @@ importers:
         specifier: ^2.0.0
         version: 2.2.12(typescript@5.9.3)
 
+  examples/vue/data-table:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
   examples/vue/drag-api-animation:
     dependencies:
       '@pulse/core':
@@ -1113,7 +2426,157 @@ importers:
         specifier: ^2.0.0
         version: 2.2.12(typescript@5.9.3)
 
+  examples/vue/file-tree:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
   examples/vue/form-wizard:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/gantt-chart:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/image-filters:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/modal-system:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/music-player:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/notification-system:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -1188,7 +2651,107 @@ importers:
         specifier: ^2.0.0
         version: 2.2.12(typescript@5.9.3)
 
+  examples/vue/sortable-grid:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/spreadsheet:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/stock-dashboard:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
   examples/vue/todo-list:
+    dependencies:
+      '@pulse/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@pulse/vue':
+        specifier: workspace:*
+        version: link:../../../packages/vue
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1))(vue@3.5.31(typescript@5.9.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@25.5.0)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  examples/vue/virtual-scroll:
     dependencies:
       '@pulse/core':
         specifier: workspace:*
@@ -1629,6 +3192,15 @@ packages:
         optional: true
       zone.js:
         optional: true
+
+  '@angular/forms@21.2.6':
+    resolution: {integrity: sha512-i8BoWxBAm0g2xOMcQ8wTdj07gqMPIFYIyefCOo0ezcGj5XhYjd+C2UrYnKsup0aMZqqEAO1l2aZbmfHx9xLheQ==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+    peerDependencies:
+      '@angular/common': 21.2.6
+      '@angular/core': 21.2.6
+      '@angular/platform-browser': 21.2.6
+      rxjs: ^6.5.3 || ^7.4.0
 
   '@angular/platform-browser-dynamic@17.3.12':
     resolution: {integrity: sha512-DQwV7B2x/DRLRDSisngZRdLqHdYbbrqZv2Hmu4ZbnNYaWPC8qvzgE/0CvY+UkDat3nCcsfwsMnlDeB6TL7/IaA==}
@@ -3932,6 +5504,9 @@ packages:
     resolution: {integrity: sha512-5B8LVgvvXijfXyXWPVLUm7RQ05BhjIpAyRkYVDZtrR3OaSvftXobWc6qSEwk4ICLoGi/IE9CUp2LUdCBIs9AXg==}
     peerDependencies:
       solid-js: ^1.8.6
+
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
   '@tufjs/canonical-json@2.0.0':
     resolution: {integrity: sha512-yVtV8zsdo8qFHe+/3kw81dSLyF7D576A5cCFCi4X7B39tWT7SekaEFUnvnWJHz+9qO7qJTah1JbrDjWKqFtdWA==}
@@ -9201,6 +10776,15 @@ snapshots:
       '@angular/compiler': 21.2.6
       zone.js: 0.15.1
 
+  '@angular/forms@21.2.6(@angular/common@21.2.6(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(@angular/platform-browser@21.2.6(@angular/common@21.2.6(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1)))(rxjs@7.8.2)':
+    dependencies:
+      '@angular/common': 21.2.6(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2)
+      '@angular/core': 21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1)
+      '@angular/platform-browser': 21.2.6(@angular/common@21.2.6(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.6(@angular/compiler@21.2.6)(rxjs@7.8.2)(zone.js@0.15.1))
+      '@standard-schema/spec': 1.1.0
+      rxjs: 7.8.2
+      tslib: 2.8.1
+
   '@angular/platform-browser-dynamic@17.3.12(@angular/common@17.3.12(@angular/core@17.3.12(rxjs@7.8.2)(zone.js@0.14.10))(rxjs@7.8.2))(@angular/compiler@17.3.12(@angular/core@17.3.12(rxjs@7.8.2)(zone.js@0.14.10)))(@angular/core@17.3.12(rxjs@7.8.2)(zone.js@0.14.10))(@angular/platform-browser@17.3.12(@angular/common@17.3.12(@angular/core@17.3.12(rxjs@7.8.2)(zone.js@0.14.10))(rxjs@7.8.2))(@angular/core@17.3.12(rxjs@7.8.2)(zone.js@0.14.10)))':
     dependencies:
       '@angular/common': 17.3.12(@angular/core@17.3.12(rxjs@7.8.2)(zone.js@0.14.10))(rxjs@7.8.2)
@@ -12148,6 +13732,8 @@ snapshots:
   '@solidjs/router@0.14.10(solid-js@1.9.12)':
     dependencies:
       solid-js: 1.9.12
+
+  '@standard-schema/spec@1.1.0': {}
 
   '@tufjs/canonical-json@2.0.0': {}
 

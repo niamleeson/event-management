@@ -13,7 +13,12 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 FRAMEWORKS=(react vue solid angular ember)
-EXAMPLES=(todo-list api-call simple-animation complex-animation drag-api-animation realtime-dashboard form-wizard)
+EXAMPLES=(
+  todo-list api-call simple-animation complex-animation drag-api-animation realtime-dashboard form-wizard
+  3d-card-flip 3d-cube-menu 3d-particle-explosion 3d-carousel 3d-layered-parallax 3d-morphing-grid
+  spreadsheet chat-app music-player virtual-scroll collaborative-editor image-filters gantt-chart
+  notification-system file-tree stock-dashboard sortable-grid modal-system canvas-paint data-table
+)
 
 usage() {
   echo -e "${BOLD}Pulse Example Runner${RESET}"

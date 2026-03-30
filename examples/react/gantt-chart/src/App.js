@@ -1,0 +1,357 @@
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { useRef, useCallback } from 'react';
+import { useSignal, useEmit, useSpring } from '@pulse/react';
+import { tasks, view, zoom, dragState, snapSpring, TaskDragStart, TaskDragMove, TaskDragEnd, ZoomChanged, formatDate, dayToDate, categoryColors, } from './engine';
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+const TASK_ROW_HEIGHT = 44;
+const HEADER_HEIGHT = 60;
+const SIDEBAR_WIDTH = 240;
+function getDayWidth(z) {
+    switch (z) {
+        case 'day': return 40;
+        case 'week': return 20;
+        case 'month': return 8;
+    }
+}
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+const styles = {
+    container: {
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        background: '#f8f9fa',
+        overflow: 'hidden',
+    },
+    topBar: {
+        background: '#fff',
+        borderBottom: '1px solid #e0e0e0',
+        padding: '10px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        zIndex: 20,
+    },
+    title: {
+        fontSize: 18,
+        fontWeight: 700,
+        color: '#1a1a2e',
+    },
+    zoomControls: {
+        display: 'flex',
+        gap: 4,
+    },
+    zoomBtn: (active) => ({
+        padding: '6px 14px',
+        fontSize: 12,
+        fontWeight: 600,
+        border: '1px solid #d0d0d0',
+        borderRadius: 6,
+        background: active ? '#4361ee' : '#fff',
+        color: active ? '#fff' : '#333',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+    }),
+    legend: {
+        display: 'flex',
+        gap: 12,
+        fontSize: 12,
+        alignItems: 'center',
+    },
+    legendItem: (color) => ({
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        color: '#666',
+    }),
+    legendDot: (color) => ({
+        width: 10,
+        height: 10,
+        borderRadius: 3,
+        background: color,
+    }),
+    body: {
+        flex: 1,
+        display: 'flex',
+        overflow: 'hidden',
+    },
+    sidebar: {
+        width: SIDEBAR_WIDTH,
+        background: '#fff',
+        borderRight: '1px solid #e0e0e0',
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        zIndex: 10,
+    },
+    sidebarHeader: {
+        height: HEADER_HEIGHT,
+        padding: '0 16px',
+        display: 'flex',
+        alignItems: 'center',
+        borderBottom: '1px solid #e0e0e0',
+        fontWeight: 700,
+        fontSize: 13,
+        color: '#666',
+        background: '#fafafa',
+    },
+    sidebarRow: (isActive) => ({
+        height: TASK_ROW_HEIGHT,
+        padding: '0 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        borderBottom: '1px solid #f0f0f0',
+        background: isActive ? '#f0f4ff' : '#fff',
+        fontSize: 13,
+        cursor: 'default',
+    }),
+    taskDot: (color) => ({
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        background: color,
+        flexShrink: 0,
+    }),
+    taskLabel: {
+        flex: 1,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        fontSize: 13,
+        color: '#333',
+    },
+    taskDates: {
+        fontSize: 11,
+        color: '#999',
+        whiteSpace: 'nowrap',
+    },
+    chart: {
+        flex: 1,
+        overflow: 'auto',
+        position: 'relative',
+    },
+    timeHeader: {
+        position: 'sticky',
+        top: 0,
+        height: HEADER_HEIGHT,
+        background: '#fafafa',
+        borderBottom: '1px solid #e0e0e0',
+        zIndex: 5,
+        display: 'flex',
+    },
+    timeCell: (width, isWeekend) => ({
+        width,
+        minWidth: width,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRight: '1px solid #eee',
+        fontSize: 11,
+        color: isWeekend ? '#bbb' : '#888',
+        background: isWeekend ? '#f5f5f5' : 'transparent',
+    }),
+    gridArea: {
+        position: 'relative',
+    },
+    gridLine: (left, isWeekend) => ({
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left,
+        width: 1,
+        background: isWeekend ? '#f0f0f0' : '#f8f8f8',
+    }),
+    todayLine: (left) => ({
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left,
+        width: 2,
+        background: '#e63946',
+        zIndex: 8,
+    }),
+    todayLabel: {
+        position: 'absolute',
+        top: -HEADER_HEIGHT + 4,
+        left: -14,
+        fontSize: 10,
+        fontWeight: 700,
+        color: '#e63946',
+        background: '#fff',
+        padding: '1px 4px',
+        borderRadius: 3,
+        border: '1px solid #e63946',
+    },
+    taskBar: (left, width, top, color, isDragging) => ({
+        position: 'absolute',
+        left,
+        width: Math.max(width, 8),
+        top: top + 8,
+        height: TASK_ROW_HEIGHT - 16,
+        background: color,
+        borderRadius: 4,
+        cursor: isDragging ? 'grabbing' : 'grab',
+        display: 'flex',
+        alignItems: 'center',
+        paddingLeft: 8,
+        fontSize: 11,
+        fontWeight: 600,
+        color: '#fff',
+        boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.15)',
+        transition: isDragging ? 'none' : 'box-shadow 0.2s',
+        zIndex: isDragging ? 9 : 1,
+        overflow: 'hidden',
+        whiteSpace: 'nowrap',
+        userSelect: 'none',
+    }),
+    resizeHandle: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 8,
+        cursor: 'ew-resize',
+        background: 'rgba(255,255,255,0.3)',
+        borderRadius: '0 4px 4px 0',
+    },
+    depLine: {
+        stroke: '#999',
+        strokeWidth: 1.5,
+        fill: 'none',
+        markerEnd: 'url(#arrowhead)',
+    },
+};
+const globalStyle = `
+body { margin: 0; overflow: hidden; }
+`;
+// ---------------------------------------------------------------------------
+// Components
+// ---------------------------------------------------------------------------
+function TopBar() {
+    const emit = useEmit();
+    const currentZoom = useSignal(zoom);
+    const zoomLevels = ['day', 'week', 'month'];
+    const categories = Object.entries(categoryColors);
+    return (_jsxs("div", { style: styles.topBar, children: [_jsx("div", { style: styles.title, children: "Pulse Gantt Chart" }), _jsx("div", { style: styles.legend, children: categories.map(([name, color]) => (_jsxs("div", { style: styles.legendItem(color), children: [_jsx("div", { style: styles.legendDot(color) }), name] }, name))) }), _jsx("div", { style: styles.zoomControls, children: zoomLevels.map(z => (_jsx("button", { style: styles.zoomBtn(currentZoom === z), onClick: () => emit(ZoomChanged, z), children: z.charAt(0).toUpperCase() + z.slice(1) }, z))) })] }));
+}
+function Sidebar() {
+    const allTasks = useSignal(tasks);
+    const drag = useSignal(dragState);
+    return (_jsxs("div", { style: styles.sidebar, children: [_jsx("div", { style: styles.sidebarHeader, children: "Task" }), allTasks.map(task => (_jsxs("div", { style: styles.sidebarRow(drag.taskId === task.id), children: [_jsx("div", { style: styles.taskDot(task.color) }), _jsx("div", { style: styles.taskLabel, title: task.title, children: task.title }), _jsxs("div", { style: styles.taskDates, children: [formatDate(task.start), " - ", formatDate(task.start + task.duration)] })] }, task.id)))] }));
+}
+function DependencyArrows({ taskList, dayWidth, viewStart }) {
+    const taskMap = new Map(taskList.map(t => [t.id, t]));
+    const taskIndexMap = new Map(taskList.map((t, i) => [t.id, i]));
+    const lines = [];
+    taskList.forEach((task, _toIdx) => {
+        task.dependencies.forEach(depId => {
+            const depTask = taskMap.get(depId);
+            if (!depTask)
+                return;
+            const fromIdx = taskIndexMap.get(depId);
+            const toIdx = taskIndexMap.get(task.id);
+            const fromX = (depTask.start + depTask.duration - viewStart) * dayWidth;
+            const fromY = fromIdx * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT / 2;
+            const toX = (task.start - viewStart) * dayWidth;
+            const toY = toIdx * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT / 2;
+            const midX = fromX + (toX - fromX) / 2;
+            lines.push(_jsx("path", { d: `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`, style: styles.depLine }, `${depId}-${task.id}`));
+        });
+    });
+    return (_jsxs("svg", { style: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: taskList.length * TASK_ROW_HEIGHT,
+            pointerEvents: 'none',
+            zIndex: 2,
+        }, children: [_jsx("defs", { children: _jsx("marker", { id: "arrowhead", markerWidth: "8", markerHeight: "6", refX: "8", refY: "3", orient: "auto", children: _jsx("polygon", { points: "0 0, 8 3, 0 6", fill: "#999" }) }) }), lines] }));
+}
+function ChartBody() {
+    const emit = useEmit();
+    const allTasks = useSignal(tasks);
+    const currentView = useSignal(view);
+    const currentZoom = useSignal(zoom);
+    const drag = useSignal(dragState);
+    const snapVal = useSpring(snapSpring);
+    const dayWidth = getDayWidth(currentZoom);
+    const totalDays = currentView.end - currentView.start;
+    const totalWidth = totalDays * dayWidth;
+    const dragStartX = useRef(0);
+    const handleMouseDown = useCallback((taskId, type, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragStartX.current = e.clientX;
+        emit(TaskDragStart, { id: taskId, type });
+    }, [emit]);
+    const handleMouseMove = useCallback((e) => {
+        if (!drag.taskId)
+            return;
+        const dx = e.clientX - dragStartX.current;
+        emit(TaskDragMove, { id: drag.taskId, dx });
+    }, [drag.taskId, emit]);
+    const handleMouseUp = useCallback(() => {
+        if (drag.taskId) {
+            emit(TaskDragEnd, { id: drag.taskId });
+        }
+    }, [drag.taskId, emit]);
+    // Time header cells
+    const headerCells = [];
+    const gridLines = [];
+    for (let d = 0; d < totalDays; d++) {
+        const day = currentView.start + d;
+        const date = dayToDate(day);
+        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+        const left = d * dayWidth;
+        if (currentZoom === 'day') {
+            headerCells.push(_jsxs("div", { style: styles.timeCell(dayWidth, isWeekend), children: [_jsx("span", { style: { fontSize: 10, color: '#bbb' }, children: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()] }), _jsx("span", { children: date.getDate() })] }, d));
+        }
+        else if (currentZoom === 'week' && date.getDay() === 1) {
+            headerCells.push(_jsx("div", { style: styles.timeCell(dayWidth * 7, false), children: _jsx("span", { children: formatDate(day) }) }, d));
+        }
+        else if (currentZoom === 'month' && date.getDate() === 1) {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            headerCells.push(_jsx("div", { style: styles.timeCell(dayWidth * 30, false), children: _jsxs("span", { children: [months[date.getMonth()], " ", date.getFullYear()] }) }, d));
+        }
+        gridLines.push(_jsx("div", { style: styles.gridLine(left, isWeekend) }, `gl-${d}`));
+    }
+    // Today marker
+    const today = new Date();
+    const todayOffset = Math.floor((today.getTime() - dayToDate(currentView.start).getTime()) / (1000 * 60 * 60 * 24));
+    const todayLeft = todayOffset * dayWidth;
+    // Task bars
+    const taskBars = allTasks.map((task, i) => {
+        const left = (task.start - currentView.start) * dayWidth;
+        const width = task.duration * dayWidth;
+        const top = i * TASK_ROW_HEIGHT;
+        const isDragging = drag.taskId === task.id;
+        return (_jsxs("div", { style: styles.taskBar(left, width, top, task.color, isDragging), onMouseDown: (e) => handleMouseDown(task.id, 'move', e), children: [_jsx("span", { style: { overflow: 'hidden', textOverflow: 'ellipsis' }, children: task.title }), _jsx("div", { style: styles.resizeHandle, onMouseDown: (e) => {
+                        e.stopPropagation();
+                        handleMouseDown(task.id, 'resize', e);
+                    } })] }, task.id));
+    });
+    const gridHeight = allTasks.length * TASK_ROW_HEIGHT;
+    return (_jsxs("div", { style: styles.chart, onMouseMove: handleMouseMove, onMouseUp: handleMouseUp, onMouseLeave: handleMouseUp, children: [_jsx("div", { style: { ...styles.timeHeader, width: totalWidth }, children: headerCells }), _jsxs("div", { style: { ...styles.gridArea, width: totalWidth, height: gridHeight }, children: [gridLines, todayLeft > 0 && todayLeft < totalWidth && (_jsx("div", { style: styles.todayLine(todayLeft), children: _jsx("div", { style: styles.todayLabel, children: "Today" }) })), _jsx(DependencyArrows, { taskList: allTasks, dayWidth: dayWidth, viewStart: currentView.start }), taskBars, allTasks.map((_, i) => (_jsx("div", { style: {
+                            position: 'absolute',
+                            top: (i + 1) * TASK_ROW_HEIGHT,
+                            left: 0,
+                            right: 0,
+                            height: 1,
+                            background: '#f0f0f0',
+                        } }, `row-${i}`)))] })] }));
+}
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+export default function App() {
+    return (_jsxs(_Fragment, { children: [_jsx("style", { children: globalStyle }), _jsxs("div", { style: styles.container, children: [_jsx(TopBar, {}), _jsxs("div", { style: styles.body, children: [_jsx(Sidebar, {}), _jsx(ChartBody, {})] })] })] }));
+}

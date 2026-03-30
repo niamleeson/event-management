@@ -2,7 +2,7 @@ import { For, Suspense, createSignal, onCleanup } from 'solid-js'
 import { A, useLocation, type RouteSectionProps } from '@solidjs/router'
 import { createDevTools } from '@pulse/devtools'
 import type { DevTools } from '@pulse/devtools'
-import { routeInfos } from './routes'
+import { routeInfos, sectionLabels } from './routes'
 
 function Sidebar() {
   const location = useLocation()
@@ -69,16 +69,23 @@ function Sidebar() {
         </div>
       </div>
       <div class="sidebar-nav">
-        <For each={routeInfos}>
-          {(route) => (
-            <A
-              href={route.path}
-              class="nav-link"
-              classList={{ active: location.pathname === route.path }}
-            >
-              <span class="nav-label">{route.label}</span>
-              <span class="nav-desc">{route.description}</span>
-            </A>
+        <For each={['basics', '3d', 'complex'] as const}>
+          {(section) => (
+            <div class="nav-section">
+              <div class="nav-section-title">{sectionLabels[section]}</div>
+              <For each={routeInfos.filter((r) => r.section === section)}>
+                {(route) => (
+                  <A
+                    href={route.path}
+                    class="nav-link"
+                    classList={{ active: location.pathname === route.path }}
+                  >
+                    <span class="nav-label">{route.label}</span>
+                    <span class="nav-desc">{route.description}</span>
+                  </A>
+                )}
+              </For>
+            </div>
           )}
         </For>
       </div>
@@ -199,6 +206,19 @@ const layoutStyles = `
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .nav-section {
+    margin-bottom: 8px;
+  }
+
+  .nav-section-title {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    padding: 10px 14px 4px;
   }
 
   .nav-link {

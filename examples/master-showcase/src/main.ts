@@ -6,15 +6,43 @@ const FRAMEWORKS = [
   { id: 'ember', name: 'Ember', port: 3005, color: '#e04e39', logo: '🐹' },
 ] as const
 
-const EXAMPLES = [
-  { id: 'todo-list', name: 'Todo List', desc: 'Event-driven todos with validation pipes' },
-  { id: 'api-call', name: 'API Call', desc: 'Async search with cancel & retry' },
-  { id: 'simple-animation', name: 'Simple Animation', desc: 'Tweened counter with springs' },
-  { id: 'complex-animation', name: 'Complex Animation', desc: 'Staggered card entrance with joins' },
-  { id: 'drag-api-animation', name: 'Drag + API + Animation', desc: 'Kanban board with springs & async save' },
-  { id: 'realtime-dashboard', name: 'Realtime Dashboard', desc: 'Mock WebSocket with threshold joins' },
-  { id: 'form-wizard', name: 'Form Wizard', desc: 'Multi-step validation with guards' },
+const EXAMPLE_GROUPS = [
+  { label: 'Basics', examples: [
+    { id: 'todo-list', name: 'Todo List', desc: 'Event-driven todos with validation pipes' },
+    { id: 'api-call', name: 'API Call', desc: 'Async search with cancel & retry' },
+    { id: 'simple-animation', name: 'Simple Animation', desc: 'Tweened counter with springs' },
+    { id: 'complex-animation', name: 'Complex Animation', desc: 'Staggered card entrance with joins' },
+    { id: 'drag-api-animation', name: 'Drag + API + Animation', desc: 'Kanban board with springs & async save' },
+    { id: 'realtime-dashboard', name: 'Realtime Dashboard', desc: 'Mock WebSocket with threshold joins' },
+    { id: 'form-wizard', name: 'Form Wizard', desc: 'Multi-step validation with guards' },
+  ]},
+  { label: '3D Animations', examples: [
+    { id: '3d-card-flip', name: '3D Card Flip', desc: 'Photo gallery with 3D flip transitions' },
+    { id: '3d-cube-menu', name: '3D Cube Menu', desc: 'Drag-rotatable 3D cube navigation' },
+    { id: '3d-particle-explosion', name: '3D Particles', desc: 'Canvas particle explosions with physics' },
+    { id: '3d-carousel', name: '3D Carousel', desc: 'Circular 3D item carousel' },
+    { id: '3d-layered-parallax', name: '3D Parallax', desc: 'Multi-layer depth parallax scene' },
+    { id: '3d-morphing-grid', name: '3D Morphing Grid', desc: 'Grid morphing between 3D shapes' },
+  ]},
+  { label: 'Complex UI', examples: [
+    { id: 'spreadsheet', name: 'Spreadsheet', desc: 'Reactive spreadsheet with formulas' },
+    { id: 'chat-app', name: 'Chat App', desc: 'Real-time chat with bot responders' },
+    { id: 'music-player', name: 'Music Player', desc: 'Audio player with visualizer' },
+    { id: 'virtual-scroll', name: 'Virtual Scroll', desc: '10,000 items with virtual rendering' },
+    { id: 'collaborative-editor', name: 'Collab Editor', desc: 'Multi-user text editing simulation' },
+    { id: 'image-filters', name: 'Image Filters', desc: 'CSS filter pipeline with undo/redo' },
+    { id: 'gantt-chart', name: 'Gantt Chart', desc: 'Timeline with draggable tasks' },
+    { id: 'notification-system', name: 'Notifications', desc: 'Toast stack with priority & animation' },
+    { id: 'file-tree', name: 'File Tree', desc: 'Hierarchical file explorer' },
+    { id: 'stock-dashboard', name: 'Stock Dashboard', desc: 'Real-time stock ticker with charts' },
+    { id: 'sortable-grid', name: 'Sortable Grid', desc: 'Drag-to-reorder with spring animations' },
+    { id: 'modal-system', name: 'Modal System', desc: 'Stacked modal dialogs with transitions' },
+    { id: 'canvas-paint', name: 'Canvas Paint', desc: 'Drawing app with tools & layers' },
+    { id: 'data-table', name: 'Data Table', desc: 'Sortable, filterable, paginated table' },
+  ]},
 ] as const
+
+const EXAMPLES = EXAMPLE_GROUPS.flatMap(g => g.examples)
 
 type FrameworkId = typeof FRAMEWORKS[number]['id']
 type ExampleId = typeof EXAMPLES[number]['id']
@@ -61,15 +89,20 @@ function render() {
             <span style="color: ${activeFw.color}">${activeFw.logo}</span>
             ${activeFw.name} Examples
           </div>
-          ${EXAMPLES.map(ex => `
-            <button
-              class="example-link ${ex.id === activeExample ? 'active' : ''}"
-              data-ex="${ex.id}"
-              style="${ex.id === activeExample ? `--link-accent: ${activeFw.color}` : ''}"
-            >
-              <span class="example-name">${ex.name}</span>
-              <span class="example-desc">${ex.desc}</span>
-            </button>
+          ${EXAMPLE_GROUPS.map(group => `
+            <div class="example-group">
+              <div class="group-label">${group.label}</div>
+              ${group.examples.map(ex => `
+                <button
+                  class="example-link ${ex.id === activeExample ? 'active' : ''}"
+                  data-ex="${ex.id}"
+                  style="${ex.id === activeExample ? `--link-accent: ${activeFw.color}` : ''}"
+                >
+                  <span class="example-name">${ex.name}</span>
+                  <span class="example-desc">${ex.desc}</span>
+                </button>
+              `).join('')}
+            </div>
           `).join('')}
         </nav>
         <div class="content">
@@ -287,6 +320,19 @@ style.textContent = `
     gap: 8px;
     border-bottom: 1px solid #2a2a4a;
     margin-bottom: 8px;
+  }
+
+  .example-group {
+    margin-bottom: 4px;
+  }
+
+  .group-label {
+    padding: 10px 20px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
   }
 
   .example-link {

@@ -226,21 +226,29 @@ export default function Layout() {
         </div>
 
         <nav style={styles.nav}>
-          <div style={styles.navLabel}>Examples</div>
-          {routeInfo.map((route) => (
-            <NavLink
-              key={route.path}
-              to={route.path}
-              style={({ isActive }) => styles.navLink(isActive)}
-            >
-              {({ isActive }) => (
-                <>
-                  <div style={styles.navLinkName(isActive)}>{route.label}</div>
-                  <div style={styles.navLinkDesc}>{route.description}</div>
-                </>
-              )}
-            </NavLink>
-          ))}
+          {(['basics', '3d', 'complex'] as const).map((section) => {
+            const sectionLabel = section === 'basics' ? 'Basics' : section === '3d' ? '3D Animations' : 'Complex UI'
+            const sectionRoutes = routeInfo.filter((r) => r.section === section)
+            return (
+              <div key={section}>
+                <div style={styles.navLabel}>{sectionLabel}</div>
+                {sectionRoutes.map((route) => (
+                  <NavLink
+                    key={route.path}
+                    to={route.path}
+                    style={({ isActive }) => styles.navLink(isActive)}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <div style={styles.navLinkName(isActive)}>{route.label}</div>
+                        <div style={styles.navLinkDesc}>{route.description}</div>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            )
+          })}
         </nav>
 
         <button

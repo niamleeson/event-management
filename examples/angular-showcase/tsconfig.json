@@ -23,6 +23,8 @@
       "@pulse/angular": ["../../packages/angular/src/index.ts"],
       "@pulse/devtools": ["../../packages/devtools/src/index.ts"],
       "@angular/core": ["./node_modules/@angular/core"],
+      "@angular/common": ["./node_modules/@angular/common"],
+      "@angular/forms": ["./node_modules/@angular/forms"],
       "tslib": ["./node_modules/tslib"]
     }
   },

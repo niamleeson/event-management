@@ -13,14 +13,54 @@ interface NavItem {
   description: string
 }
 
-const navItems: NavItem[] = [
-  { path: '/todo-list', label: 'Todo List', description: 'Events, pipes, signals' },
-  { path: '/api-call', label: 'API Call', description: 'Async with latest-wins' },
-  { path: '/simple-animation', label: 'Simple Animation', description: 'Tweens and springs' },
-  { path: '/complex-animation', label: 'Complex Animation', description: 'Staggered tweens, joins' },
-  { path: '/drag-api-animation', label: 'Drag + API', description: 'Kanban with spring physics' },
-  { path: '/realtime-dashboard', label: 'Realtime Dashboard', description: 'Streaming metrics, alerts' },
-  { path: '/form-wizard', label: 'Form Wizard', description: 'Multi-step validation, joins' },
+interface NavSection {
+  title: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
+  {
+    title: 'Basics',
+    items: [
+      { path: '/todo-list', label: 'Todo List', description: 'Events, pipes, signals' },
+      { path: '/api-call', label: 'API Call', description: 'Async with latest-wins' },
+      { path: '/simple-animation', label: 'Simple Animation', description: 'Tweens and springs' },
+      { path: '/complex-animation', label: 'Complex Animation', description: 'Staggered tweens, joins' },
+      { path: '/drag-api-animation', label: 'Drag + API', description: 'Kanban with spring physics' },
+      { path: '/realtime-dashboard', label: 'Realtime Dashboard', description: 'Streaming metrics, alerts' },
+      { path: '/form-wizard', label: 'Form Wizard', description: 'Multi-step validation, joins' },
+    ],
+  },
+  {
+    title: '3D Animations',
+    items: [
+      { path: '/3d-card-flip', label: '3D Card Flip', description: 'Interactive card flip' },
+      { path: '/3d-cube-menu', label: '3D Cube Menu', description: 'Rotating cube navigation' },
+      { path: '/3d-particle-explosion', label: '3D Particles', description: 'Particle explosion effects' },
+      { path: '/3d-carousel', label: '3D Carousel', description: 'Rotating 3D carousel' },
+      { path: '/3d-layered-parallax', label: '3D Parallax', description: 'Layered parallax depth' },
+      { path: '/3d-morphing-grid', label: '3D Morphing Grid', description: 'Grid morphing transitions' },
+    ],
+  },
+  {
+    title: 'Complex UI',
+    items: [
+      { path: '/spreadsheet', label: 'Spreadsheet', description: 'Cell editing with formulas' },
+      { path: '/chat-app', label: 'Chat App', description: 'Real-time messaging' },
+      { path: '/music-player', label: 'Music Player', description: 'Audio player with playlist' },
+      { path: '/virtual-scroll', label: 'Virtual Scroll', description: 'Virtualized list rendering' },
+      { path: '/collaborative-editor', label: 'Collaborative Editor', description: 'Multi-user text editing' },
+      { path: '/image-filters', label: 'Image Filters', description: 'Real-time image processing' },
+      { path: '/gantt-chart', label: 'Gantt Chart', description: 'Project timeline visualization' },
+      { path: '/notification-system', label: 'Notifications', description: 'Toast notification system' },
+      { path: '/file-tree', label: 'File Tree', description: 'Hierarchical file browser' },
+      { path: '/stock-dashboard', label: 'Stock Dashboard', description: 'Live stock price tracker' },
+      { path: '/sortable-grid', label: 'Sortable Grid', description: 'Drag-to-reorder grid' },
+      { path: '/modal-system', label: 'Modal System', description: 'Stacked modal management' },
+      { path: '/canvas-paint', label: 'Canvas Paint', description: 'Drawing canvas application' },
+      { path: '/data-table', label: 'Data Table', description: 'Sortable, filterable grid' },
+    ],
+  },
 ]
 
 const currentPath = computed(() => route.path)
@@ -83,16 +123,19 @@ onUnmounted(() => {
         <p class="sidebar-subtitle">Vue 3 Examples</p>
       </div>
       <nav class="nav">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-link"
-          :class="{ active: currentPath === item.path }"
-        >
-          <span class="nav-label">{{ item.label }}</span>
-          <span class="nav-desc">{{ item.description }}</span>
-        </RouterLink>
+        <div v-for="section in navSections" :key="section.title" class="nav-section">
+          <div class="nav-section-title">{{ section.title }}</div>
+          <RouterLink
+            v-for="item in section.items"
+            :key="item.path"
+            :to="item.path"
+            class="nav-link"
+            :class="{ active: currentPath === item.path }"
+          >
+            <span class="nav-label">{{ item.label }}</span>
+            <span class="nav-desc">{{ item.description }}</span>
+          </RouterLink>
+        </div>
       </nav>
       <button
         class="devtools-btn"
@@ -186,6 +229,19 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.nav-section {
+  margin-bottom: 8px;
+}
+
+.nav-section-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  padding: 10px 14px 4px;
 }
 
 .nav-link {
