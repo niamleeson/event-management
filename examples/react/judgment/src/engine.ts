@@ -34,6 +34,7 @@ export interface NPCState {
   clingStrength: number     // 0-1, how attached to cursor (clinging)
   shakeAccum: number        // accumulated mouse shake energy
   armAngle: number          // arm reaching angle toward cursor
+  _lastVelX: number         // previous mouse velocity for shake detection
   expression: 'neutral' | 'happy' | 'sad' | 'terrified' | 'pleading' | 'serene' | 'grabbing'
 }
 
@@ -133,6 +134,7 @@ export function initGame() {
       reachAmount: 0, bowAmount: 0,
       clingStrength: 0, shakeAccum: 0,
       armAngle: 0,
+      _lastVelX: 0,
       expression: 'neutral',
     })
   }
@@ -241,6 +243,7 @@ engine.on(SpawnNext, () => {
       reachAmount: 0, bowAmount: 0,
       clingStrength: 0, shakeAccum: 0,
       armAngle: 0,
+      _lastVelX: 0,
       expression: 'neutral',
     })
   }
@@ -418,12 +421,14 @@ engine.on(Frame, (dt) => {
       s.x += (s.targetX - s.x) * 0.2
       s.y += (s.targetY - s.y) * 0.2
 
-      // Shake detection — accumulate mouse speed
-      s.shakeAccum += mouseSpeed * dtSec * 0.3
-      s.shakeAccum *= 0.95 // decay
+      // Shake detection — accumulate direction changes (actual shaking, not just speed)
+      const dirChangeX = mouseVel.x * s._lastVelX < 0 ? Math.abs(mouseVel.x) : 0
+      s._lastVelX = mouseVel.x || s._lastVelX
+      s.shakeAccum += dirChangeX * 0.15 + mouseSpeed * 0.02
+      s.shakeAccum *= 0.92 // decay
 
       // Violent shaking breaks the grip
-      if (s.shakeAccum > 15) {
+      if (s.shakeAccum > 5) {
         engine.emit(NPCShakenOff, id)
       }
 
