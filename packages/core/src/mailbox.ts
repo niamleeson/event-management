@@ -4,10 +4,14 @@ import { recycleEvent } from './event.js'
 /**
  * Mailbox — holds pending events for a given EventType.
  * Events remain in the mailbox until all registered consumers have processed them.
+ * Stale events (older than TTL) are evicted to prevent unbounded growth from incomplete joins.
  */
 export class Mailbox<T = any> {
   type: EventType<T>
   queue: PulseEvent<T>[] = []
+
+  /** TTL in ms — events older than this are evicted. Default 30s. 0 = no expiry. */
+  static TTL = 30_000
 
   constructor(type: EventType<T>) {
     this.type = type
@@ -15,7 +19,24 @@ export class Mailbox<T = any> {
 
   /** Add an event to this mailbox */
   enqueue(event: PulseEvent<T>): void {
+    ;(event as any)._enqueueTime = Date.now()
     this.queue.push(event)
+  }
+
+  /** Evict stale events that have exceeded TTL */
+  evictStale(): void {
+    if (Mailbox.TTL <= 0) return
+    const cutoff = Date.now() - Mailbox.TTL
+    let i = 0
+    while (i < this.queue.length) {
+      if ((this.queue[i] as any)._enqueueTime < cutoff) {
+        const ev = this.queue[i]
+        this.queue.splice(i, 1)
+        recycleEvent(ev)
+      } else {
+        i++
+      }
+    }
   }
 
   /** Check if there is at least one event ready for the given rule */

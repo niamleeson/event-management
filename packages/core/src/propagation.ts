@@ -1,20 +1,30 @@
 import type { EventType, PulseEvent, Rule } from './types.js'
-import { createEvent } from './event.js'
 import { Mailbox } from './mailbox.js'
 import { DAG } from './dag.js'
 
 /**
  * Core propagation loop.
- * Drains mailboxes in topological (DAG) order, fires rules, deposits resulting events.
+ * Drains mailboxes in topological (DAG) order, fires rules.
  * Repeats until quiescent or max rounds exceeded.
+ *
+ * For 'each' mode rules: fires the handler for each pending event in each trigger's mailbox.
+ * For 'join' mode rules: fires only when all trigger mailboxes have at least one ready event.
+ *
+ * Handlers that emit events do so via the engine's emit path (which deposits into
+ * mailboxes and traces DAG edges). The propagation loop picks up newly deposited
+ * events on the next iteration.
  */
 export function propagate(
   dag: DAG,
   mailboxes: Map<EventType, Mailbox>,
-  emitFn: (type: EventType, payload: any) => void,
   maxRounds: number,
   onError?: (error: Error, rule: Rule, event: any) => void,
 ): void {
+  // Evict stale events from join mailboxes to prevent unbounded growth
+  for (const mb of mailboxes.values()) {
+    mb.evictStale()
+  }
+
   let rounds = 0
   let work = true
 
@@ -30,28 +40,21 @@ export function propagate(
       if (rule._disposed) continue
 
       if (rule.mode === 'each') {
-        const trigger = rule.triggers[0]
-        const mb = getMailbox(mailboxes, trigger)
-        while (mb.hasReadyEvent(rule)) {
-          const ev = mb.consume(rule)
-          if (rule.guard && !rule.guard(ev.payload)) continue
-          try {
-            const result = rule.action(ev.payload)
-            if (result !== undefined && result !== null && rule.outputs.length > 0) {
-              if (rule.outputs.length > 1 && Array.isArray(result)) {
-                for (let i = 0; i < rule.outputs.length; i++) {
-                  depositEvent(mailboxes, rule.outputs[i], result[i])
-                }
-              } else {
-                depositEvent(mailboxes, rule.outputs[0], result)
-              }
+        // Each-mode: fire for every trigger that has a ready event
+        for (const trigger of rule.triggers) {
+          const mb = getMailbox(mailboxes, trigger)
+          while (mb.hasReadyEvent(rule)) {
+            const ev = mb.consume(rule)
+            if (rule.guard && !rule.guard(ev.payload)) continue
+            try {
+              rule.action(ev.payload)
               work = true
-            }
-          } catch (err) {
-            if (onError) {
-              onError(err as Error, rule, ev.payload)
-            } else {
-              throw err
+            } catch (err) {
+              if (onError) {
+                onError(err as Error, rule, ev.payload)
+              } else {
+                throw err
+              }
             }
           }
         }
@@ -78,11 +81,8 @@ export function propagate(
             continue
           }
           try {
-            const result = rule.action(...payloads)
-            if (result !== undefined && result !== null && rule.outputs.length > 0) {
-              depositEvent(mailboxes, rule.outputs[0], result)
-              work = true
-            }
+            rule.action(...payloads)
+            work = true
           } catch (err) {
             if (onError) {
               onError(err as Error, rule, payloads)
@@ -103,11 +103,4 @@ function getMailbox<T>(mailboxes: Map<EventType, Mailbox>, type: EventType<T>): 
     mailboxes.set(type, mb)
   }
   return mb as Mailbox<T>
-}
-
-function depositEvent<T>(mailboxes: Map<EventType, Mailbox>, type: EventType<T>, payload: T): void {
-  const ev = createEvent(type, payload)
-  if (ev._pendingConsumers.size > 0) {
-    getMailbox(mailboxes, type).enqueue(ev)
-  }
 }

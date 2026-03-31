@@ -145,4 +145,26 @@ describe('Mailbox', () => {
     // Should be removed since it was the only consumer
     expect(mb.size).toBe(0)
   })
+
+  it('should evict stale events exceeding TTL', () => {
+    const mb = new Mailbox(eventType)
+    const ev = createEvent(eventType, 42)
+    mb.enqueue(ev)
+    // Backdate the enqueue time
+    ;(ev as any)._enqueueTime = Date.now() - 60_000
+    expect(mb.size).toBe(1)
+
+    mb.evictStale()
+    expect(mb.size).toBe(0)
+  })
+
+  it('should not evict events within TTL', () => {
+    const mb = new Mailbox(eventType)
+    const ev = createEvent(eventType, 42)
+    mb.enqueue(ev)
+    expect(mb.size).toBe(1)
+
+    mb.evictStale()
+    expect(mb.size).toBe(1) // still fresh
+  })
 })
