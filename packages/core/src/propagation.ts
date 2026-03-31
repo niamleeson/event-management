@@ -20,9 +20,9 @@ export function propagate(
   maxRounds: number,
   onError?: (error: Error, rule: Rule, event: any) => void,
 ): void {
-  // Evict stale events from join mailboxes to prevent unbounded growth
+  // Evict orphaned events whose consumers have all been disposed
   for (const mb of mailboxes.values()) {
-    mb.evictStale()
+    mb.evictOrphans()
   }
 
   let rounds = 0

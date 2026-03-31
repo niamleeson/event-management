@@ -10,27 +10,28 @@ export class Mailbox<T = any> {
   type: EventType<T>
   queue: PulseEvent<T>[] = []
 
-  /** TTL in ms — events older than this are evicted. Default 30s. 0 = no expiry. */
-  static TTL = 30_000
-
   constructor(type: EventType<T>) {
     this.type = type
   }
 
   /** Add an event to this mailbox */
   enqueue(event: PulseEvent<T>): void {
-    ;(event as any)._enqueueTime = Date.now()
     this.queue.push(event)
   }
 
-  /** Evict stale events that have exceeded TTL */
-  evictStale(): void {
-    if (Mailbox.TTL <= 0) return
-    const cutoff = Date.now() - Mailbox.TTL
+  /** Evict orphaned events whose pending consumers have all been disposed */
+  evictOrphans(): void {
     let i = 0
     while (i < this.queue.length) {
-      if ((this.queue[i] as any)._enqueueTime < cutoff) {
-        const ev = this.queue[i]
+      const ev = this.queue[i]
+      // Remove disposed consumers
+      for (const rule of ev._pendingConsumers) {
+        if (rule._disposed) {
+          ev._pendingConsumers.delete(rule)
+        }
+      }
+      // If no consumers remain, event is orphaned
+      if (ev._pendingConsumers.size === 0) {
         this.queue.splice(i, 1)
         recycleEvent(ev)
       } else {
