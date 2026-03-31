@@ -5,7 +5,8 @@
 
   // ===== Syntax Highlighting =====
   function highlightCode(el) {
-    let code = el.textContent;
+    // Read innerHTML to preserve &lt; &gt; entities, then work with escaped text
+    let code = el.innerHTML;
     const lang = el.closest('.code-block')?.dataset.lang || 'typescript';
 
     if (lang === 'bash') {
@@ -26,6 +27,13 @@
         .replace(/(&lt;[^&]*&gt;)/g, '<span class="syn-tag">$1</span>');
       el.innerHTML = code;
       return;
+    }
+
+    if (lang === 'vue') {
+      // Vue SFC: highlight template tags, then apply TS highlighting to script content
+      code = code
+        .replace(/(&lt;\/?(?:script|template|style)[^&]*&gt;)/g, '<span class="syn-tag">$1</span>')
+        .replace(/(lang="[^"]*")/g, '<span class="syn-str">$1</span>');
     }
 
     // TypeScript / TSX highlighting
