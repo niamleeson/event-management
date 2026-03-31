@@ -39,11 +39,14 @@ export interface EngineOptions {
   asyncDelivery?: 'immediate' | 'next-frame'
 }
 
-/** Signal: a reactive value derived from events */
+/** Signal: a reactive value derived from events. Call to read: `signal()` */
 export interface Signal<T = any> {
+  /** Call to read current value */
+  (): T
+  /** Current value (also accessible as property) */
   value: T
   subscribe(callback: (value: T, prev: T) => void): () => void
-  /** Public imperative setter */
+  /** Imperative setter */
   set(next: T): void
   /** internal */
   _subscribers: Set<(value: T, prev: T) => void>

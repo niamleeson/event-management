@@ -13,6 +13,19 @@ describe('Signal', () => {
     const counter = engine.signal(increment, 0, (prev, n) => prev + n)
 
     expect(counter.value).toBe(0)
+    expect(counter()).toBe(0) // callable syntax
+  })
+
+  it('should be callable to read value', () => {
+    const set = engine.event<number>('set')
+    const sig = engine.signal(set, 42, (_prev, v) => v)
+
+    expect(sig()).toBe(42)
+    expect(typeof sig).toBe('function')
+
+    engine.emit(set, 100)
+    expect(sig()).toBe(100)
+    expect(sig.value).toBe(100) // .value still works too
   })
 
   it('should update signal value when event fires', () => {
