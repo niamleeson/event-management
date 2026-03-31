@@ -187,35 +187,32 @@ engine.on(MouseUp, (pos) => {
   dragId = null
 })
 
-engine.on(DropNPC).emit(NPCLanded, ({ id, x, y }) => {
+engine.on(DropNPC, ({ id, x, y }) => {
   const state = npcs.get(id)
-  if (!state) return Skip
+  if (!state) return
 
-  // Determine which zone
   const normalizedX = x / screenW
 
   if (y < screenH * QUEUE_HEIGHT + 40) {
-    // Dropped back in queue area
     state.zone = 'queue'
     state.targetScale = 1
     state.expression = 'neutral'
-    return { id, zone: 'queue' as Zone }
+    engine.emit(NPCLanded, { id, zone: 'queue' as Zone })
+    return
   }
 
   if (normalizedX < DIVIDER_X) {
-    // Hell side
     state.zone = 'falling'
     state.velY = 2
     state.targetScale = 1
     state.expression = 'terrified'
-    return { id, zone: 'hell' as Zone }
+    engine.emit(NPCLanded, { id, zone: 'hell' as Zone })
   } else {
-    // Heaven side
     state.zone = 'falling'
-    state.velY = -2 // float up slightly first, then settle
+    state.velY = -2
     state.targetScale = 1
     state.expression = 'happy'
-    return { id, zone: 'heaven' as Zone }
+    engine.emit(NPCLanded, { id, zone: 'heaven' as Zone })
   }
 })
 
