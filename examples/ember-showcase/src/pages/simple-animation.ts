@@ -1,15 +1,16 @@
 import {
   engine,
-  count,
-  animatedCount,
-  colorIntensity,
-  bounceScale,
+  getCount,
+  getAnimatedCount,
+  getColorIntensity,
+  getBounceScale,
+  updateFrame,
   Increment,
   Decrement,
 } from '../engines/simple-animation'
 
 // ---------------------------------------------------------------------------
-// Color helpers (matching React version exactly)
+// Color helpers
 // ---------------------------------------------------------------------------
 
 function lerpColor(
@@ -45,43 +46,37 @@ function getTextColor(intensity: number): string {
 export function mount(container: HTMLElement): () => void {
   ;(window as any).__pulseEngine = engine
 
-  const unsubs: (() => void)[] = []
+  let rafId = 0
 
-  // Build the static DOM structure once
   const wrapper = document.createElement('div')
   wrapper.style.cssText = 'min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: background 0.1s;'
-  wrapper.style.background = getBackgroundColor(colorIntensity.value)
+  wrapper.style.background = getBackgroundColor(getColorIntensity())
 
-  // Title
   const title = document.createElement('h1')
   title.style.cssText = 'font-size: 28px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px;'
   title.textContent = 'Animated Counter'
   wrapper.appendChild(title)
 
-  // Subtitle
   const sub = document.createElement('p')
   sub.style.cssText = 'color: #6c757d; font-size: 14px; margin-bottom: 48px;'
   sub.textContent = 'Tweens smoothly animate the count and background color'
   wrapper.appendChild(sub)
 
-  // Bounce container
   const bounceContainer = document.createElement('div')
   bounceContainer.style.cssText = 'margin-bottom: 48px;'
 
-  // Animated count display
   const animCountEl = document.createElement('div')
   animCountEl.style.cssText = 'font-size: 120px; font-weight: 800; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; transition: color 0.3s; user-select: none;'
-  animCountEl.style.color = getTextColor(colorIntensity.value)
-  animCountEl.textContent = String(Math.round(animatedCount.value))
+  animCountEl.style.color = getTextColor(getColorIntensity())
+  animCountEl.textContent = String(Math.round(getAnimatedCount()))
   bounceContainer.appendChild(animCountEl)
 
-  // Debug line
   const debugLine = document.createElement('div')
   debugLine.style.cssText = 'text-align: center; font-size: 14px; color: #aaa; margin-top: 8px;'
   const actualSpan = document.createElement('span')
-  actualSpan.textContent = String(count.value)
+  actualSpan.textContent = String(getCount())
   const animatedSpan = document.createElement('span')
-  animatedSpan.textContent = animatedCount.value.toFixed(1)
+  animatedSpan.textContent = getAnimatedCount().toFixed(1)
   debugLine.appendChild(document.createTextNode('actual: '))
   debugLine.appendChild(actualSpan)
   debugLine.appendChild(document.createTextNode(' | animated: '))
@@ -90,7 +85,6 @@ export function mount(container: HTMLElement): () => void {
 
   wrapper.appendChild(bounceContainer)
 
-  // Buttons
   const btnRow = document.createElement('div')
   btnRow.style.cssText = 'display: flex; gap: 16px;'
 
@@ -114,7 +108,6 @@ export function mount(container: HTMLElement): () => void {
   btnRow.appendChild(incBtn)
   wrapper.appendChild(btnRow)
 
-  // Hint
   const hint = document.createElement('p')
   hint.style.cssText = 'margin-top: 48px; color: #bbb; font-size: 13px;'
   hint.textContent = 'Color shifts green for positive, red for negative (saturates at +/-10)'
@@ -122,34 +115,28 @@ export function mount(container: HTMLElement): () => void {
 
   container.appendChild(wrapper)
 
-  // Subscribe to count signal for actual count display
-  unsubs.push(count.subscribe((value) => {
-    actualSpan.textContent = String(value)
-  }))
+  // Animation loop
+  function frame(now: number) {
+    updateFrame(now)
 
-  // Use engine.on(engine.frame) to batch-update all animated values each frame
-  unsubs.push(engine.on(engine.frame, () => {
-    const animCount = animatedCount.value
-    const colorT = colorIntensity.value
-    const bounce = bounceScale.value
+    const animCount = getAnimatedCount()
+    const colorT = getColorIntensity()
+    const bounce = getBounceScale()
 
-    // Update animated count display
     animCountEl.textContent = String(Math.round(animCount))
     animatedSpan.textContent = animCount.toFixed(1)
-
-    // Update text color based on color intensity
+    actualSpan.textContent = String(getCount())
     animCountEl.style.color = getTextColor(colorT)
-
-    // Update background color
     wrapper.style.background = getBackgroundColor(colorT)
-
-    // Update bounce scale
     bounceContainer.style.transform = `scale(${bounce})`
-  }))
+
+    rafId = requestAnimationFrame(frame)
+  }
+  rafId = requestAnimationFrame(frame)
 
   return () => {
     ;(window as any).__pulseEngine = null
     engine.destroy()
-    unsubs.forEach((u) => u())
+    cancelAnimationFrame(rafId)
   }
 }

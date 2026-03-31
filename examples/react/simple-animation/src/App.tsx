@@ -1,9 +1,9 @@
-import { useSignal, useTween, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  count,
-  animatedCount,
-  colorIntensity,
-  bounceScale,
+  CountChanged,
+  AnimatedCountChanged,
+  ColorIntensityChanged,
+  BounceScaleChanged,
   Increment,
   Decrement,
 } from './engine'
@@ -24,13 +24,10 @@ function lerpColor(
 }
 
 function getBackgroundColor(intensity: number): string {
-  // intensity: -1 (full red) to 0 (neutral) to 1 (full green)
   if (intensity <= 0) {
-    // Neutral to red
     const t = Math.abs(intensity)
     return lerpColor(248, 249, 250, 255, 200, 200, t)
   } else {
-    // Neutral to green
     return lerpColor(248, 249, 250, 200, 255, 210, intensity)
   }
 }
@@ -47,10 +44,10 @@ function getTextColor(intensity: number): string {
 
 export default function App() {
   const emit = useEmit()
-  const currentCount = useSignal(count)
-  const animCount = useTween(animatedCount)
-  const colorT = useTween(colorIntensity)
-  const bounce = useTween(bounceScale)
+  const currentCount = usePulse(CountChanged, 0)
+  const animCount = usePulse(AnimatedCountChanged, 0)
+  const colorT = usePulse(ColorIntensityChanged, 0)
+  const bounce = usePulse(BounceScaleChanged, 1)
 
   const bgColor = getBackgroundColor(colorT)
   const textColor = getTextColor(colorT)
@@ -86,7 +83,7 @@ export default function App() {
           marginBottom: 48,
         }}
       >
-        Tweens smoothly animate the count and background color
+        Spring physics smoothly animate the count and background color
       </p>
 
       {/* Counter display */}

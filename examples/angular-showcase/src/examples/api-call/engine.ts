@@ -100,100 +100,75 @@ async function fetchUserDetails(
 // ---------------------------------------------------------------------------
 
 export const SearchInput = engine.event<string>('SearchInput')
-export const SearchPending = engine.event<void>('SearchPending')
-export const SearchDone = engine.event<User[]>('SearchDone')
-export const SearchError = engine.event<string>('SearchError')
+export const SearchQueryChanged = engine.event<string>('SearchQueryChanged')
+export const SearchingChanged = engine.event<boolean>('SearchingChanged')
+export const SearchResultsChanged = engine.event<User[]>('SearchResultsChanged')
+export const ErrorChanged = engine.event<string | null>('ErrorChanged')
+
 export const UserSelected = engine.event<string>('UserSelected')
-export const UserDetailsPending = engine.event<void>('UserDetailsPending')
-export const UserDetailsDone = engine.event<UserDetails>('UserDetailsDone')
-export const UserDetailsError = engine.event<string>('UserDetailsError')
+export const SelectedUserChanged = engine.event<string | null>('SelectedUserChanged')
+export const LoadingDetailsChanged = engine.event<boolean>('LoadingDetailsChanged')
+export const UserDetailsChanged = engine.event<UserDetails | null>('UserDetailsChanged')
 
 // ---------------------------------------------------------------------------
-// Async: SearchInput -> debounced search -> SearchDone
-// Uses 'latest' strategy so new searches cancel pending ones
+// Async search with debounce and cancellation
 // ---------------------------------------------------------------------------
 
-engine.async(SearchInput, {
-  pending: SearchPending,
-  done: SearchDone,
-  error: SearchError,
-  strategy: 'latest',
-  do: async (query: string, { signal }) => {
-    // Debounce: wait 300ms before firing the request
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(resolve, 300)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
-    if (query.trim().length === 0) return []
-    return searchUsers(query, signal)
-  },
+let searchAbort: AbortController | null = null
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+engine.on(SearchInput, (query: string) => {
+  engine.emit(SearchQueryChanged, query)
+  engine.emit(ErrorChanged, null)
+
+  // Cancel previous
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (searchAbort) searchAbort.abort()
+
+  if (query.trim().length === 0) {
+    engine.emit(SearchingChanged, false)
+    engine.emit(SearchResultsChanged, [])
+    return
+  }
+
+  engine.emit(SearchingChanged, true)
+
+  debounceTimer = setTimeout(async () => {
+    searchAbort = new AbortController()
+    try {
+      const results = await searchUsers(query, searchAbort.signal)
+      engine.emit(SearchResultsChanged, results)
+      engine.emit(SearchingChanged, false)
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        engine.emit(ErrorChanged, err instanceof Error ? err.message : String(err))
+        engine.emit(SearchingChanged, false)
+      }
+    }
+  }, 300)
 })
 
 // ---------------------------------------------------------------------------
-// Async: UserSelected -> fetch user details
+// Async user details fetch
 // ---------------------------------------------------------------------------
 
-engine.async(UserSelected, {
-  pending: UserDetailsPending,
-  done: UserDetailsDone,
-  error: UserDetailsError,
-  strategy: 'latest',
-  do: async (userId: string, { signal }) => {
-    return fetchUserDetails(userId, signal)
-  },
+let detailsAbort: AbortController | null = null
+
+engine.on(UserSelected, async (userId: string) => {
+  engine.emit(SelectedUserChanged, userId)
+  engine.emit(LoadingDetailsChanged, true)
+
+  if (detailsAbort) detailsAbort.abort()
+  detailsAbort = new AbortController()
+
+  try {
+    const details = await fetchUserDetails(userId, detailsAbort.signal)
+    engine.emit(UserDetailsChanged, details)
+    engine.emit(LoadingDetailsChanged, false)
+  } catch (err: any) {
+    if (err?.name !== 'AbortError') {
+      engine.emit(ErrorChanged, err instanceof Error ? err.message : String(err))
+      engine.emit(LoadingDetailsChanged, false)
+    }
+  }
 })
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const searchQuery = engine.signal<string>(
-  SearchInput,
-  '',
-  (_prev, query) => query,
-)
-
-export const searchResults = engine.signal<User[]>(
-  SearchDone,
-  [],
-  (_prev, results) => results,
-)
-
-export const isSearching = engine.signal<boolean>(
-  SearchPending,
-  false,
-  () => true,
-)
-engine.signalUpdate(isSearching, SearchDone, () => false)
-engine.signalUpdate(isSearching, SearchError, () => false)
-
-export const selectedUserId = engine.signal<string | null>(
-  UserSelected,
-  null,
-  (_prev, id) => id,
-)
-
-export const userDetails = engine.signal<UserDetails | null>(
-  UserDetailsDone,
-  null,
-  (_prev, details) => details,
-)
-
-export const isLoadingDetails = engine.signal<boolean>(
-  UserDetailsPending,
-  false,
-  () => true,
-)
-engine.signalUpdate(isLoadingDetails, UserDetailsDone, () => false)
-engine.signalUpdate(isLoadingDetails, UserDetailsError, () => false)
-
-export const error = engine.signal<string | null>(
-  SearchError,
-  null,
-  (_prev, err) => (err instanceof Error ? err.message : String(err)),
-)
-engine.signalUpdate(error, SearchDone, () => null)
-engine.signalUpdate(error, SearchInput, () => null)

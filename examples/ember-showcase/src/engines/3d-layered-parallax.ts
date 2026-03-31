@@ -1,4 +1,4 @@
-import { createEngine, type EventType, type TweenValue, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -12,7 +12,7 @@ export const engine = createEngine()
 
 export interface Layer {
   id: number
-  depth: number // translateZ value
+  depth: number
   color: string
   label: string
   elements: { x: number; y: number; size: number; shape: 'circle' | 'square' | 'triangle' }[]
@@ -75,80 +75,84 @@ export const LAYERS: Layer[] = [
 export const MouseMove = engine.event<{ x: number; y: number }>('MouseMove')
 export const ToggleDayNight = engine.event<void>('ToggleDayNight')
 export const EnterScene = engine.event<void>('EnterScene')
-export const LayerEnter: EventType<number>[] = []
-export const LayerEntered: EventType<number>[] = []
-
-for (let i = 0; i < LAYER_COUNT; i++) {
-  LayerEnter.push(engine.event<number>(`LayerEnter_${i}`))
-  LayerEntered.push(engine.event<number>(`LayerEntered_${i}`))
-}
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const isNight = engine.signal<boolean>(
-  ToggleDayNight, false, (prev) => !prev,
-)
+let _isNight = false
+let _cameraX = 0
+let _cameraY = 0
+let _springCameraX = 0
+let _springCameraY = 0
+let _springVelX = 0
+let _springVelY = 0
 
-// Camera position from mouse (normalized -1 to 1)
-export const cameraX = engine.signal<number>(
-  MouseMove, 0, (_prev, pos) => (pos.x - 0.5) * 2,
-)
-export const cameraY = engine.signal<number>(
-  MouseMove, 0, (_prev, pos) => (pos.y - 0.5) * 2,
-)
+// Layer entrance animation
+const _layerOpacity = new Float64Array(LAYER_COUNT)
+const _layerTranslateY = new Float64Array(LAYER_COUNT).fill(60)
+const _layerEntranceStart = new Float64Array(LAYER_COUNT)
+const _layerEntranceActive = new Uint8Array(LAYER_COUNT)
+
+export function getIsNight(): boolean { return _isNight }
+export function getSpringCameraX(): number { return _springCameraX }
+export function getSpringCameraY(): number { return _springCameraY }
+export function getLayerOpacity(i: number): number { return _layerOpacity[i] }
+export function getLayerTranslateY(i: number): number { return _layerTranslateY[i] }
 
 // ---------------------------------------------------------------------------
-// Springs — smooth camera tracking
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const springCameraX: SpringValue = engine.spring(cameraX, {
-  stiffness: 80,
-  damping: 15,
-  restThreshold: 0.001,
+engine.on(MouseMove, (pos: { x: number; y: number }) => {
+  _cameraX = (pos.x - 0.5) * 2
+  _cameraY = (pos.y - 0.5) * 2
 })
 
-export const springCameraY: SpringValue = engine.spring(cameraY, {
-  stiffness: 80,
-  damping: 15,
-  restThreshold: 0.001,
+engine.on(ToggleDayNight, () => {
+  _isNight = !_isNight
 })
 
-// ---------------------------------------------------------------------------
-// Tweens — staggered layer entrance
-// ---------------------------------------------------------------------------
-
-export const layerOpacity: TweenValue[] = []
-export const layerTranslateY: TweenValue[] = []
-
-for (let i = 0; i < LAYER_COUNT; i++) {
-  layerOpacity.push(engine.tween({
-    start: LayerEnter[i],
-    done: LayerEntered[i],
-    from: 0,
-    to: 1,
-    duration: 600,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-
-  layerTranslateY.push(engine.tween({
-    start: LayerEnter[i],
-    from: 60,
-    to: 0,
-    duration: 600,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-}
-
-// Stagger entrance
 engine.on(EnterScene, () => {
   for (let i = 0; i < LAYER_COUNT; i++) {
     setTimeout(() => {
-      engine.emit(LayerEnter[i], i)
+      _layerEntranceStart[i] = performance.now()
+      _layerEntranceActive[i] = 1
     }, i * 200)
   }
 })
 
-// Start frame loop
-engine.startFrameLoop()
+// ---------------------------------------------------------------------------
+// Frame update
+// ---------------------------------------------------------------------------
+
+function easeOutCubic(t: number): number { return 1 - Math.pow(1 - t, 3) }
+
+export function updateFrame(dt: number, now: number): void {
+  // Spring camera
+  const stiffness = 80
+  const damping = 15
+  const dtSec = Math.min(dt / 1000, 0.05)
+
+  const forceX = ((_cameraX - _springCameraX) * stiffness - _springVelX * damping) * dtSec
+  const forceY = ((_cameraY - _springCameraY) * stiffness - _springVelY * damping) * dtSec
+  _springVelX += forceX
+  _springVelY += forceY
+  _springCameraX += _springVelX * dtSec
+  _springCameraY += _springVelY * dtSec
+
+  // Layer entrance
+  for (let i = 0; i < LAYER_COUNT; i++) {
+    if (_layerEntranceActive[i]) {
+      const elapsed = now - _layerEntranceStart[i]
+      const t = Math.min(1, elapsed / 600)
+      _layerOpacity[i] = easeOutCubic(t)
+      _layerTranslateY[i] = 60 * (1 - easeOutCubic(t))
+      if (t >= 1) {
+        _layerEntranceActive[i] = 0
+        _layerOpacity[i] = 1
+        _layerTranslateY[i] = 0
+      }
+    }
+  }
+}

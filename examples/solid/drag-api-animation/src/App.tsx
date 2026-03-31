@@ -1,11 +1,10 @@
-import { For, Show, createMemo, createEffect, onCleanup } from 'solid-js'
-import { useSignal, useSpring, useEmit } from '@pulse/solid'
+import { onMount } from 'solid-js'
+import { usePulse, useEmit } from '@pulse/solid'
 import {
-  cards,
-  dragState,
-  cardStatuses,
-  dragSpringX,
-  dragSpringY,
+  CardsChanged,
+  DragStateChanged,
+  DragPositionChanged,
+  CardStatusesChanged,
   DragStart,
   DragMove,
   DragEnd,
@@ -33,168 +32,231 @@ const PRIORITY_COLORS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Style helpers
+// Styles
 // ---------------------------------------------------------------------------
 
-function cardStyle(status: CardStatus, isDragging: boolean) {
-  let borderColor = '#334155'
-  let bg = '#0f172a'
-  if (status === 'saving') {
-    borderColor = '#f59e0b'
-  } else if (status === 'saved') {
-    borderColor = '#10b981'
-    bg = '#10b98108'
-  } else if (status === 'error') {
-    borderColor = '#ef4444'
-    bg = '#ef444408'
-  }
-  return {
-    background: bg,
-    border: `2px solid ${borderColor}`,
-    'border-radius': '12px',
-    padding: '16px',
-    'margin-bottom': '10px',
-    cursor: isDragging ? 'grabbing' : 'grab',
-    opacity: isDragging ? '0.4' : '1',
-    transition: 'border-color 0.3s, background 0.3s, opacity 0.15s',
-    'user-select': 'none',
-  }
+const styles = {
+  container: {
+    'min-height': '100vh',
+    background: '#0f172a',
+    padding: '32px 24px',
+    'font-family':
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  header: {
+    'text-align': 'center' as const,
+    'margin-bottom': 32,
+  },
+  title: {
+    'font-size': 36,
+    'font-weight': 800,
+    color: '#f1f5f9',
+    margin: 0,
+  },
+  subtitle: {
+    color: '#94a3b8',
+    'font-size': 14,
+    'margin-top': 6,
+  },
+  board: {
+    display: 'grid',
+    'grid-template-columns': 'repeat(3, 1fr)',
+    gap: 20,
+    'max-width': 1100,
+    margin: '0 auto',
+  },
+  column: (color: string) =>
+    ({
+      background: '#1e293b',
+      'border-radius': 16,
+      padding: 16,
+      'min-height': 400,
+      'border-top': `3px solid ${color}`,
+    }),
+  columnHeader: {
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'space-between',
+    'margin-bottom': 16,
+    padding: '0 4px',
+  },
+  columnTitle: {
+    'font-size': 16,
+    'font-weight': 700,
+    color: '#e2e8f0',
+  },
+  columnCount: (color: string) =>
+    ({
+      'font-size': 13,
+      'font-weight': 600,
+      color: color,
+      background: `${color}22`,
+      padding: '2px 10px',
+      'border-radius': 12,
+    }),
+  card: (status: CardStatus, isDragging: boolean) => {
+    let borderColor = '#334155'
+    let bg = '#0f172a'
+    if (status === 'saving') {
+      borderColor = '#f59e0b'
+    } else if (status === 'saved') {
+      borderColor = '#10b981'
+      bg = '#10b98108'
+    } else if (status === 'error') {
+      borderColor = '#ef4444'
+      bg = '#ef444408'
+    }
+    return {
+      background: bg,
+      border: `2px solid ${borderColor}`,
+      'border-radius': 12,
+      padding: 16,
+      'margin-bottom': 10,
+      cursor: isDragging ? 'grabbing' : 'grab',
+      opacity: isDragging ? 0.4 : 1,
+      transition: 'border-color 0.3s, background 0.3s, opacity 0.15s',
+      'user-select': 'none' as const,
+    }
+  },
+  cardTitle: {
+    'font-size': 15,
+    'font-weight': 600,
+    color: '#e2e8f0',
+    margin: 0,
+    'margin-bottom': 4,
+  },
+  cardDesc: {
+    'font-size': 13,
+    color: '#94a3b8',
+    margin: 0,
+    'margin-bottom': 10,
+  },
+  cardFooter: {
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'space-between',
+  },
+  priorityBadge: (priority: string) =>
+    ({
+      'font-size': 11,
+      'font-weight': 600,
+      'text-transform': 'uppercase' as const,
+      color: PRIORITY_COLORS[priority] ?? '#94a3b8',
+      background: `${PRIORITY_COLORS[priority] ?? '#94a3b8'}22`,
+      padding: '2px 8px',
+      'border-radius': 8,
+    }),
+  statusBadge: (status: CardStatus) => {
+    const map: Record<CardStatus, { color: string; label: string }> = {
+      idle: { color: '#64748b', label: '' },
+      saving: { color: '#f59e0b', label: 'Saving...' },
+      saved: { color: '#10b981', label: 'Saved' },
+      error: { color: '#ef4444', label: 'Error - retrying' },
+      settled: { color: '#64748b', label: '' },
+    }
+    const info = map[status]
+    if (!info.label) return { display: 'none' }
+    return {
+      'font-size': 11,
+      'font-weight': 600,
+      color: info.color,
+    }
+  },
+  undoBtn: {
+    'font-size': 12,
+    color: '#94a3b8',
+    background: 'none',
+    border: '1px solid #334155',
+    'border-radius': 6,
+    padding: '2px 8px',
+    cursor: 'pointer',
+    'margin-left': 8,
+  },
+  ghostCard: {
+    position: 'fixed' as const,
+    'pointer-events': 'none' as const,
+    'z-index': 1000,
+    width: 300,
+    background: '#1e293b',
+    border: '2px solid #4361ee',
+    'border-radius': 12,
+    padding: 16,
+    'box-shadow': '0 20px 40px rgba(0,0,0,0.5)',
+  },
+  dropZone: {
+    'min-height': 60,
+    border: '2px dashed transparent',
+    'border-radius': 8,
+    transition: 'border-color 0.2s, background 0.2s',
+    background: 'transparent',
+  },
 }
 
-function statusBadgeStyle(status: CardStatus) {
-  const map: Record<CardStatus, { color: string; label: string }> = {
-    idle: { color: '#64748b', label: '' },
-    saving: { color: '#f59e0b', label: 'Saving...' },
-    saved: { color: '#10b981', label: 'Saved' },
-    error: { color: '#ef4444', label: 'Error - retrying' },
-    settled: { color: '#64748b', label: '' },
-  }
-  const info = map[status]
-  if (!info.label) return { display: 'none' }
-  return {
-    'font-size': '11px',
-    'font-weight': '600',
-    color: info.color,
-  }
-}
+// ---------------------------------------------------------------------------
+// CardComponent
+// ---------------------------------------------------------------------------
 
-function statusLabel(status: CardStatus): string {
-  const labels: Record<CardStatus, string> = {
+function KanbanCardComponent({ card }: { card: KanbanCard }) {
+  const emit = useEmit()
+  const drag = usePulse(DragStateChanged, null as ReturnType<typeof DragStateChanged['__type']> | null)
+  const statuses = usePulse(CardStatusesChanged, {} as Record<string, CardStatus>)
+  let cardRef = null
+
+  const status: CardStatus = statuses()[card.id] ?? 'idle'
+  const isDragging = drag()?.cardId === card.id
+
+  const statusLabels: Record<CardStatus, string> = {
     idle: '',
     saving: 'Saving...',
     saved: 'Saved',
     error: 'Error - retrying',
     settled: '',
   }
-  return labels[status]
-}
 
-// ---------------------------------------------------------------------------
-// KanbanCardComponent
-// ---------------------------------------------------------------------------
-
-function KanbanCardComponent(props: { card: KanbanCard }) {
-  const emit = useEmit()
-  const drag = useSignal(dragState)
-  const statuses = useSignal(cardStatuses)
-
-  const status = createMemo(() => (statuses()[props.card.id] ?? 'idle') as CardStatus)
-  const isDragging = createMemo(() => drag()?.cardId === props.card.id)
-
-  let cardRef: HTMLDivElement | undefined
-
-  const handleMouseDown = (e: MouseEvent) => {
-    e.preventDefault()
-    const rect = cardRef?.getBoundingClientRect()
-    if (!rect) return
-    emit(DragStart, {
-      cardId: props.card.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-    })
-  }
-
+  const handleMouseDown = 
+    (e: MouseEvent) => {
+      e.preventDefault()
+      const rect = cardRef?.getBoundingClientRect()
+      if (!rect) return
+      emit(DragStart, {
+        cardId: card.id,
+        startX: e.clientX,
+        startY: e.clientY,
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top,
+      })
+    }
   return (
     <div
       ref={cardRef}
       style={{
-        ...cardStyle(status(), isDragging()),
+        ...styles.card(status, isDragging),
         animation:
-          status() === 'error'
+          status === 'error'
             ? 'shake 0.5s ease-in-out'
-            : status() === 'saved'
+            : status === 'saved'
               ? 'flashGreen 0.6s ease-out'
               : undefined,
       }}
       onMouseDown={handleMouseDown}
     >
-      <p
-        style={{
-          'font-size': '15px',
-          'font-weight': '600',
-          color: '#e2e8f0',
-          margin: '0',
-          'margin-bottom': '4px',
-        }}
-      >
-        {props.card.title}
-      </p>
-      <p
-        style={{
-          'font-size': '13px',
-          color: '#94a3b8',
-          margin: '0',
-          'margin-bottom': '10px',
-        }}
-      >
-        {props.card.description}
-      </p>
-      <div
-        style={{
-          display: 'flex',
-          'align-items': 'center',
-          'justify-content': 'space-between',
-        }}
-      >
-        <span
-          style={{
-            'font-size': '11px',
-            'font-weight': '600',
-            'text-transform': 'uppercase',
-            color: PRIORITY_COLORS[props.card.priority] ?? '#94a3b8',
-            background: `${PRIORITY_COLORS[props.card.priority] ?? '#94a3b8'}22`,
-            padding: '2px 8px',
-            'border-radius': '8px',
-          }}
-        >
-          {props.card.priority}
-        </span>
+      <p style={styles.cardTitle}>{card.title}</p>
+      <p style={styles.cardDesc}>{card.description}</p>
+      <div style={styles.cardFooter}>
+        <span style={styles.priorityBadge(card.priority)}>{card.priority}</span>
         <span>
-          <span style={statusBadgeStyle(status())}>
-            {statusLabel(status())}
-          </span>
-          <Show when={status() === 'saved' || status() === 'error'}>
+          <span style={styles.statusBadge(status)}>{statusLabels[status]}</span>
+          {(status === 'saved' || status === 'error') && (
             <button
-              style={{
-                'font-size': '12px',
-                color: '#94a3b8',
-                background: 'none',
-                border: '1px solid #334155',
-                'border-radius': '6px',
-                padding: '2px 8px',
-                cursor: 'pointer',
-                'margin-left': '8px',
-              }}
+              style={styles.undoBtn}
               onClick={(e) => {
                 e.stopPropagation()
-                emit(UndoRequested, props.card.id)
+                emit(UndoRequested, card.id)
               }}
             >
               Undo
             </button>
-          </Show>
+          )}
         </span>
       </div>
     </div>
@@ -202,63 +264,30 @@ function KanbanCardComponent(props: { card: KanbanCard }) {
 }
 
 // ---------------------------------------------------------------------------
-// Ghost card (follows mouse during drag via spring)
+// Ghost card
 // ---------------------------------------------------------------------------
 
 function GhostCard() {
-  const drag = useSignal(dragState)
-  const allCards = useSignal(cards)
-  const springX = useSpring(dragSpringX)
-  const springY = useSpring(dragSpringY)
+  const drag = usePulse(DragStateChanged, null as any)
+  const allCards = usePulse(CardsChanged, [] as KanbanCard[])
+  const springPos = usePulse(DragPositionChanged, { x: 0, y: 0 })
+
+  if (!drag()) return null
+
+  const card = allCards().find((c) => c.id === drag().cardId)
+  if (!card) return null
 
   return (
-    <Show when={drag()}>
-      {(d) => {
-        const card = createMemo(() => allCards().find((c) => c.id === d().cardId))
-        return (
-          <Show when={card()}>
-            {(c) => (
-              <div
-                style={{
-                  position: 'fixed',
-                  'pointer-events': 'none',
-                  'z-index': '1000',
-                  width: '300px',
-                  background: '#1e293b',
-                  border: '2px solid #4361ee',
-                  'border-radius': '12px',
-                  padding: '16px',
-                  'box-shadow': '0 20px 40px rgba(0,0,0,0.5)',
-                  left: `${springX() - d().offsetX}px`,
-                  top: `${springY() - d().offsetY}px`,
-                }}
-              >
-                <p
-                  style={{
-                    'font-size': '15px',
-                    'font-weight': '600',
-                    color: '#e2e8f0',
-                    margin: '0',
-                    'margin-bottom': '4px',
-                  }}
-                >
-                  {c().title}
-                </p>
-                <p
-                  style={{
-                    'font-size': '13px',
-                    color: '#94a3b8',
-                    margin: '0',
-                  }}
-                >
-                  {c().description}
-                </p>
-              </div>
-            )}
-          </Show>
-        )
+    <div
+      style={{
+        ...styles.ghostCard,
+        left: springPos.x - drag().offsetX,
+        top: springPos.y - drag().offsetY,
       }}
-    </Show>
+    >
+      <p style={styles.cardTitle}>{card.title}</p>
+      <p style={styles.cardDesc}>{card.description}</p>
+    </div>
   )
 }
 
@@ -266,67 +295,34 @@ function GhostCard() {
 // Column
 // ---------------------------------------------------------------------------
 
-function Column(props: { id: ColumnId; title: string; color: string }) {
-  const allCards = useSignal(cards)
-  const drag = useSignal(dragState)
+function Column({
+  id,
+  title,
+  color,
+}: {
+  id: ColumnId
+  title: string
+  color: string
+}) {
+  const allCards = usePulse(CardsChanged, [] as KanbanCard[])
+  const drag = usePulse(DragStateChanged, null as any)
   const emit = useEmit()
 
-  const columnCards = createMemo(() => allCards().filter((c) => c.column === props.id))
-  const isDragging = createMemo(() => drag() !== null)
+  const columnCards = allCards().filter((c) => c.column === id)
+  const isDragging = drag() !== null
 
   return (
-    <div
-      style={{
-        background: '#1e293b',
-        'border-radius': '16px',
-        padding: '16px',
-        'min-height': '400px',
-        'border-top': `3px solid ${props.color}`,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          'align-items': 'center',
-          'justify-content': 'space-between',
-          'margin-bottom': '16px',
-          padding: '0 4px',
-        }}
-      >
-        <span
-          style={{
-            'font-size': '16px',
-            'font-weight': '700',
-            color: '#e2e8f0',
-          }}
-        >
-          {props.title}
-        </span>
-        <span
-          style={{
-            'font-size': '13px',
-            'font-weight': '600',
-            color: props.color,
-            background: `${props.color}22`,
-            padding: '2px 10px',
-            'border-radius': '12px',
-          }}
-        >
-          {columnCards().length}
-        </span>
+    <div style={styles.column(color)}>
+      <div style={styles.columnHeader}>
+        <span style={styles.columnTitle}>{title}</span>
+        <span style={styles.columnCount(color)}>{columnCards.length}</span>
       </div>
-      <For each={columnCards()}>
-        {(card) => <KanbanCardComponent card={card} />}
-      </For>
-      <Show when={isDragging()}>
+      {columnCards.map((card) => (
+        <KanbanCardComponent card={card} />
+      ))}
+      {isDragging && (
         <div
-          style={{
-            'min-height': '60px',
-            border: '2px dashed transparent',
-            'border-radius': '8px',
-            transition: 'border-color 0.2s, background 0.2s',
-            background: 'transparent',
-          }}
+          style={styles.dropZone}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = '#4361ee'
             e.currentTarget.style.background = '#4361ee11'
@@ -336,14 +332,13 @@ function Column(props: { id: ColumnId; title: string; color: string }) {
             e.currentTarget.style.background = 'transparent'
           }}
           onMouseUp={() => {
-            const d = drag()
-            if (d) {
-              const card = allCards().find((c) => c.id === d.cardId)
-              if (card && card.column !== props.id) {
+            if (drag()) {
+              const card = allCards().find((c) => c.id === drag().cardId)
+              if (card && card.column !== id) {
                 emit(CardMoved, {
-                  cardId: d.cardId,
+                  cardId: drag.cardId,
                   fromColumn: card.column,
-                  toColumn: props.id,
+                  toColumn: id,
                 })
               }
               emit(DragEnd, undefined)
@@ -352,16 +347,16 @@ function Column(props: { id: ColumnId; title: string; color: string }) {
         >
           <div
             style={{
-              padding: '20px',
+              padding: 20,
               'text-align': 'center',
               color: '#475569',
-              'font-size': '13px',
+              'font-size': 13,
             }}
           >
             Drop here
           </div>
         </div>
-      </Show>
+      )}
     </div>
   )
 }
@@ -372,42 +367,32 @@ function Column(props: { id: ColumnId; title: string; color: string }) {
 
 export default function App() {
   const emit = useEmit()
-  const drag = useSignal(dragState)
+  const drag = usePulse(DragStateChanged, null as any)
 
-  // Global mouse move/up handlers for drag
-  createEffect(() => {
-    const currentDrag = drag()
-
+  // Global mouse move/up handlers for drag()
+  onMount(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (currentDrag) {
+      if (drag()) {
         emit(DragMove, { x: e.clientX, y: e.clientY })
       }
     }
 
     const handleMouseUp = () => {
-      if (currentDrag) {
+      if (drag()) {
         emit(DragEnd, undefined)
       }
     }
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
-    onCleanup(() => {
+    return () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
-    })
+    }
   })
 
   return (
-    <div
-      style={{
-        'min-height': '100vh',
-        background: '#0f172a',
-        padding: '32px 24px',
-        'font-family':
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      }}
-    >
+    <div style={styles.container}>
       {/* Animations */}
       <style>{`
         @keyframes shake {
@@ -421,93 +406,21 @@ export default function App() {
         }
       `}</style>
 
-      <div style={{ 'text-align': 'center', 'margin-bottom': '32px' }}>
-        <h1
-          style={{
-            'font-size': '36px',
-            'font-weight': '800',
-            color: '#f1f5f9',
-            margin: '0',
-          }}
-        >
-          Pulse Kanban
-        </h1>
-        <p
-          style={{
-            color: '#94a3b8',
-            'font-size': '14px',
-            'margin-top': '6px',
-          }}
-        >
+      <div style={styles.header}>
+        <h1 style={styles.title}>Pulse Kanban</h1>
+        <p style={styles.subtitle}>
           Drag cards between columns. Spring physics follow your mouse.
           Saves auto-retry on failure.
         </p>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          'grid-template-columns': 'repeat(3, 1fr)',
-          gap: '20px',
-          'max-width': '1100px',
-          margin: '0 auto',
-        }}
-      >
-        <For each={COLUMNS}>
-          {(col) => <Column id={col.id} title={col.title} color={col.color} />}
-        </For>
+      <div style={styles.board}>
+        {COLUMNS.map((col) => (
+          <Column id={col.id} title={col.title} color={col.color} />
+        ))}
       </div>
 
       <GhostCard />
-
-      <div
-        style={{
-          'text-align': 'center',
-          'margin-top': '32px',
-          padding: '16px',
-          background: '#1e293b',
-          'border-radius': '12px',
-          'max-width': '500px',
-          margin: '32px auto 0',
-        }}
-      >
-        <p
-          style={{
-            color: '#94a3b8',
-            'font-size': '13px',
-          }}
-        >
-          This example integrates with{' '}
-          <code
-            style={{
-              color: '#4361ee',
-              'font-family': 'monospace',
-              'font-size': '12px',
-            }}
-          >
-            @pulse/devtools
-          </code>
-          . Import and connect to visualize event flow, signals, and the DAG in
-          real-time.
-        </p>
-        <p
-          style={{
-            color: '#94a3b8',
-            'font-size': '13px',
-            'margin-top': '8px',
-          }}
-        >
-          <code
-            style={{
-              color: '#4361ee',
-              'font-family': 'monospace',
-              'font-size': '12px',
-            }}
-          >
-            {`import { connectDevtools } from '@pulse/devtools'`}
-          </code>
-        </p>
-      </div>
     </div>
   )
 }

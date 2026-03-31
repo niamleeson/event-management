@@ -42,100 +42,88 @@ export const METRICS = [
   { name: 'Requests/s', unit: 'req/s', threshold: 1000, baseValue: 650 },
 ]
 
-const ROLLING_WINDOW = 30 // keep last 30 data points per metric
+const ROLLING_WINDOW = 30
 
 // ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
 export const MetricReceived = engine.event<Metric>('MetricReceived')
-export const ThresholdBreached = engine.event<Metric>('ThresholdBreached')
 export const AlertCreated = engine.event<Alert>('AlertCreated')
 export const AlertDismissed = engine.event<string>('AlertDismissed')
-export const ChartDataUpdated = engine.event<{ name: string; point: ChartDataPoint }>('ChartDataUpdated')
 export const FeedToggled = engine.event<boolean>('FeedToggled')
+export const MetricsUpdated = engine.event<void>('MetricsUpdated')
+export const ChartUpdated = engine.event<void>('ChartUpdated')
+export const AlertsUpdated = engine.event<void>('AlertsUpdated')
 
 // ---------------------------------------------------------------------------
-// Pipes & Rules
+// State
 // ---------------------------------------------------------------------------
 
-// MetricReceived -> ChartDataUpdated (always fires for every metric)
-engine.pipe(MetricReceived, ChartDataUpdated, (metric: Metric) => ({
-  name: metric.name,
-  point: { timestamp: metric.timestamp, value: metric.value },
-}))
-
-// MetricReceived -> ThresholdBreached (conditional: only when value > threshold)
-engine.pipeIf(MetricReceived, ThresholdBreached, (metric: Metric) => {
-  const config = METRICS.find((m) => m.name === metric.name)
-  return config && metric.value > config.threshold ? metric : null
-})
-
-// Join: 3 consecutive threshold breaches for the same metric -> AlertCreated
-// We track breach counts per metric and create alert when count hits 3
+let _currentMetrics: Record<string, Metric> = {}
+let _alerts: Alert[] = []
+let _chartData: Record<string, ChartDataPoint[]> = Object.fromEntries(METRICS.map((m) => [m.name, []]))
+let _feedRunning = true
 let breachCounts: Record<string, number> = {}
 
-engine.on(ThresholdBreached, (metric: Metric) => {
-  const key = metric.name
-  breachCounts[key] = (breachCounts[key] ?? 0) + 1
-  if (breachCounts[key] >= 3) {
-    breachCounts[key] = 0
-    const config = METRICS.find((m) => m.name === metric.name)
-    engine.emit(AlertCreated, {
-      id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      metric: metric.name,
-      value: metric.value,
-      threshold: config?.threshold ?? 0,
-      timestamp: Date.now(),
-      message: `${metric.name} exceeded threshold ${config?.threshold}${config?.unit} (current: ${metric.value.toFixed(1)}${config?.unit})`,
-    })
-  }
-})
+export function getCurrentMetrics(): Record<string, Metric> { return _currentMetrics }
+export function getAlerts(): Alert[] { return _alerts }
+export function getChartData(): Record<string, ChartDataPoint[]> { return _chartData }
+export function getFeedRunning(): boolean { return _feedRunning }
 
-// Reset breach count when metric goes back below threshold
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
 engine.on(MetricReceived, (metric: Metric) => {
+  _currentMetrics = { ..._currentMetrics, [metric.name]: metric }
+
+  // Update chart data
+  const existing = _chartData[metric.name] ?? []
+  _chartData = {
+    ..._chartData,
+    [metric.name]: [...existing, { timestamp: metric.timestamp, value: metric.value }].slice(-ROLLING_WINDOW),
+  }
+
+  // Threshold breach tracking
   const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value <= config.threshold) breachCounts[metric.name] = 0
+  if (config) {
+    if (metric.value > config.threshold) {
+      const key = metric.name
+      breachCounts[key] = (breachCounts[key] ?? 0) + 1
+      if (breachCounts[key] >= 3) {
+        breachCounts[key] = 0
+        engine.emit(AlertCreated, {
+          id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          metric: metric.name,
+          value: metric.value,
+          threshold: config.threshold,
+          timestamp: Date.now(),
+          message: `${metric.name} exceeded threshold ${config.threshold}${config.unit} (current: ${metric.value.toFixed(1)}${config.unit})`,
+        })
+      }
+    } else {
+      breachCounts[metric.name] = 0
+    }
+  }
+
+  engine.emit(MetricsUpdated, undefined)
+  engine.emit(ChartUpdated, undefined)
 })
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
+engine.on(AlertCreated, (alert: Alert) => {
+  _alerts = [alert, ..._alerts].slice(0, 20)
+  engine.emit(AlertsUpdated, undefined)
+})
 
-// Current metric values
-export const currentMetrics = engine.signal<Record<string, Metric>>(
-  MetricReceived,
-  {},
-  (prev, metric) => ({ ...prev, [metric.name]: metric }),
-)
+engine.on(AlertDismissed, (id: string) => {
+  _alerts = _alerts.filter((a) => a.id !== id)
+  engine.emit(AlertsUpdated, undefined)
+})
 
-// Alert list
-export const alerts = engine.signal<Alert[]>(
-  AlertCreated,
-  [],
-  (prev, alert) => [alert, ...prev].slice(0, 20),
-)
-engine.signalUpdate(alerts, AlertDismissed, (prev, id) =>
-  prev.filter((a) => a.id !== id),
-)
-
-// Chart data (rolling window per metric)
-export const chartData = engine.signal<Record<string, ChartDataPoint[]>>(
-  ChartDataUpdated,
-  Object.fromEntries(METRICS.map((m) => [m.name, []])),
-  (prev, update) => {
-    const existing = prev[update.name] ?? []
-    const next = [...existing, update.point].slice(-ROLLING_WINDOW)
-    return { ...prev, [update.name]: next }
-  },
-)
-
-// Feed running state
-export const feedRunning = engine.signal<boolean>(
-  FeedToggled,
-  true,
-  (_prev, running) => running,
-)
+engine.on(FeedToggled, (running: boolean) => {
+  _feedRunning = running
+})
 
 // ---------------------------------------------------------------------------
 // Mock WebSocket data feed
@@ -146,9 +134,8 @@ let feedInterval: ReturnType<typeof setInterval> | null = null
 export function startFeed() {
   if (feedInterval) return
   feedInterval = setInterval(() => {
-    if (!feedRunning.value) return
+    if (!_feedRunning) return
     for (const config of METRICS) {
-      // Generate realistic-looking random data with occasional spikes
       const spike = Math.random() < 0.15 ? config.threshold * 0.4 : 0
       const noise = (Math.random() - 0.5) * config.baseValue * 0.3
       const value = Math.max(0, config.baseValue + noise + spike)
@@ -169,6 +156,3 @@ export function stopFeed() {
     feedInterval = null
   }
 }
-
-// Start the frame loop (for any tweens/springs we add later)
-engine.startFrameLoop()

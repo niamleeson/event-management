@@ -1,59 +1,15 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
-
 export type ColumnId = 'todo' | 'in-progress' | 'done'
-
-export interface KanbanCard {
-  id: string
-  title: string
-  description: string
-  column: ColumnId
-  priority: 'low' | 'medium' | 'high'
-}
-
-export interface DragInfo {
-  cardId: string
-  startX: number
-  startY: number
-  offsetX: number
-  offsetY: number
-}
-
-export interface DragMoveInfo {
-  x: number
-  y: number
-}
-
-export interface DropInfo {
-  cardId: string
-  targetColumn: ColumnId
-}
-
-export interface MoveInfo {
-  cardId: string
-  fromColumn: ColumnId
-  toColumn: ColumnId
-}
-
-export interface SaveResult {
-  cardId: string
-  success: boolean
-}
-
+export interface KanbanCard { id: string; title: string; description: string; column: ColumnId; priority: 'low' | 'medium' | 'high' }
+export interface DragInfo { cardId: string; startX: number; startY: number; offsetX: number; offsetY: number }
+export interface DragMoveInfo { x: number; y: number }
+export interface MoveInfo { cardId: string; fromColumn: ColumnId; toColumn: ColumnId }
+export interface SaveResult { cardId: string; success: boolean }
 export type CardStatus = 'idle' | 'saving' | 'saved' | 'error' | 'settled'
-
-// ---------------------------------------------------------------------------
-// Initial data
-// ---------------------------------------------------------------------------
 
 const INITIAL_CARDS: KanbanCard[] = [
   { id: 'card-1', title: 'Design system audit', description: 'Review and update component library', column: 'todo', priority: 'high' },
@@ -64,197 +20,76 @@ const INITIAL_CARDS: KanbanCard[] = [
   { id: 'card-6', title: 'CI/CD pipeline', description: 'Configure GitHub Actions', column: 'done', priority: 'low' },
 ]
 
-// ---------------------------------------------------------------------------
-// Event declarations
-// ---------------------------------------------------------------------------
-
+// Events
 export const DragStart = engine.event<DragInfo>('DragStart')
 export const DragMove = engine.event<DragMoveInfo>('DragMove')
 export const DragEnd = engine.event<void>('DragEnd')
-export const DropTarget = engine.event<DropInfo>('DropTarget')
 export const CardMoved = engine.event<MoveInfo>('CardMoved')
-export const SavePending = engine.event<string>('SavePending')
-export const SaveDone = engine.event<SaveResult>('SaveDone')
-export const SaveError = engine.event<SaveResult>('SaveError')
-export const SaveRetry = engine.event<string>('SaveRetry')
-export const AnimationComplete = engine.event<string>('AnimationComplete')
-export const CardSettled = engine.event<string>('CardSettled')
 export const UndoRequested = engine.event<string>('UndoRequested')
-export const UndoComplete = engine.event<MoveInfo>('UndoComplete')
 
-// Status animation events
-export const FlashSuccess = engine.event<string>('FlashSuccess')
-export const FlashSuccessDone = engine.event<string>('FlashSuccessDone')
-export const ShakeError = engine.event<string>('ShakeError')
-export const ShakeErrorDone = engine.event<string>('ShakeErrorDone')
+// State events
+export const CardsChanged = engine.event<KanbanCard[]>('CardsChanged')
+export const DragStateChanged = engine.event<DragInfo | null>('DragStateChanged')
+export const DragPositionChanged = engine.event<{ x: number; y: number }>('DragPositionChanged')
+export const CardStatusesChanged = engine.event<Record<string, CardStatus>>('CardStatusesChanged')
 
-// ---------------------------------------------------------------------------
-// Pipes
-// ---------------------------------------------------------------------------
+// State
+let cards = [...INITIAL_CARDS]
+let dragInfo: DragInfo | null = null
+let cardStatuses: Record<string, CardStatus> = {}
+const undoHistory = new Map<string, MoveInfo>()
 
-// DragEnd checks the last known position to determine drop target column
-// We handle this in the UI layer since it needs DOM measurements
-
-// CardMoved triggers async save
-engine.pipe(CardMoved, SavePending, (move: MoveInfo) => move.cardId)
-
-// SaveDone -> success flash animation
-engine.pipe(SaveDone, FlashSuccess, (result: SaveResult) => result.cardId)
-
-// SaveError -> error shake animation + auto-retry after 2s
-engine.on(SaveError, (result: SaveResult) => {
-  engine.emit(ShakeError, result.cardId)
-  // Auto-retry after 2 seconds
-  setTimeout(() => {
-    engine.emit(SaveRetry, result.cardId)
-  }, 2000)
+engine.on(DragStart, (info) => {
+  dragInfo = info
+  engine.emit(DragStateChanged, info)
+  engine.emit(DragPositionChanged, { x: info.startX, y: info.startY })
 })
 
-// ---------------------------------------------------------------------------
-// Async: save card move to API (mock with random failures)
-// ---------------------------------------------------------------------------
-
-engine.async(CardMoved, {
-  pending: null,
-  done: SaveDone,
-  error: SaveError,
-  strategy: 'latest',
-  do: async (move: MoveInfo, { signal }) => {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 800 + Math.random() * 400)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
-    // 30% chance of failure for demo purposes
-    if (Math.random() < 0.3) {
-      throw { cardId: move.cardId, success: false } as SaveResult
-    }
-    return { cardId: move.cardId, success: true }
-  },
+engine.on(DragMove, (pos) => {
+  engine.emit(DragPositionChanged, pos)
 })
 
-// Retry save: re-emit the move for the card that failed
-engine.on(SaveRetry, (cardId: string) => {
-  const card = cards.value.find((c) => c.id === cardId)
-  if (card) {
-    engine.emit(CardMoved, {
-      cardId,
-      fromColumn: card.column,
-      toColumn: card.column,
-    })
+engine.on(DragEnd, () => {
+  dragInfo = null
+  engine.emit(DragStateChanged, null)
+})
+
+engine.on(CardMoved, async (move) => {
+  cards = cards.map((c) => (c.id === move.cardId ? { ...c, column: move.toColumn } : c))
+  engine.emit(CardsChanged, cards)
+  undoHistory.set(move.cardId, move)
+
+  // Save with mock API
+  cardStatuses = { ...cardStatuses, [move.cardId]: 'saving' }
+  engine.emit(CardStatusesChanged, cardStatuses)
+
+  await new Promise((r) => setTimeout(r, 800 + Math.random() * 400))
+
+  if (Math.random() < 0.3) {
+    cardStatuses = { ...cardStatuses, [move.cardId]: 'error' }
+    engine.emit(CardStatusesChanged, cardStatuses)
+    // Auto-retry after 2s
+    setTimeout(() => {
+      const card = cards.find((c) => c.id === move.cardId)
+      if (card) engine.emit(CardMoved, { cardId: move.cardId, fromColumn: card.column, toColumn: card.column })
+    }, 2000)
+  } else {
+    cardStatuses = { ...cardStatuses, [move.cardId]: 'saved' }
+    engine.emit(CardStatusesChanged, cardStatuses)
+    setTimeout(() => {
+      cardStatuses = { ...cardStatuses, [move.cardId]: 'settled' }
+      engine.emit(CardStatusesChanged, cardStatuses)
+    }, 600)
   }
 })
 
-// ---------------------------------------------------------------------------
-// Join: [SaveDone, AnimationComplete] -> CardSettled
-// Card is fully settled only after both save completes AND animation finishes
-// ---------------------------------------------------------------------------
-
-engine.join([SaveDone, FlashSuccessDone], CardSettled, {
-  do: (saveResult: SaveResult) => saveResult.cardId,
-})
-
-// ---------------------------------------------------------------------------
-// Undo: reverse a move
-// ---------------------------------------------------------------------------
-
-// Track previous positions for undo
-const undoHistory = new Map<string, MoveInfo>()
-
-engine.on(CardMoved, (move: MoveInfo) => {
-  undoHistory.set(move.cardId, move)
-})
-
-engine.on(UndoRequested, (cardId: string) => {
+engine.on(UndoRequested, (cardId) => {
   const lastMove = undoHistory.get(cardId)
   if (lastMove) {
-    const reverseMove: MoveInfo = {
-      cardId,
-      fromColumn: lastMove.toColumn,
-      toColumn: lastMove.fromColumn,
-    }
     undoHistory.delete(cardId)
-    engine.emit(UndoComplete, reverseMove)
-    // The signal update for UndoComplete will move the card back
-    // Then trigger a new save
+    const reverseMove: MoveInfo = { cardId, fromColumn: lastMove.toColumn, toColumn: lastMove.fromColumn }
+    cards = cards.map((c) => (c.id === cardId ? { ...c, column: reverseMove.toColumn } : c))
+    engine.emit(CardsChanged, cards)
     engine.emit(CardMoved, reverseMove)
   }
 })
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const cards = engine.signal<KanbanCard[]>(
-  CardMoved,
-  INITIAL_CARDS,
-  (prev, move) =>
-    prev.map((c) => (c.id === move.cardId ? { ...c, column: move.toColumn } : c)),
-)
-
-// Also handle undo reversals
-engine.signalUpdate(cards, UndoComplete, (prev, move) =>
-  prev.map((c) => (c.id === move.cardId ? { ...c, column: move.toColumn } : c)),
-)
-
-// Drag state
-export const dragState = engine.signal<DragInfo | null>(
-  DragStart,
-  null,
-  (_prev, info) => info,
-)
-engine.signalUpdate(dragState, DragEnd, () => null)
-
-// Drag position
-export const dragPosition = engine.signal<{ x: number; y: number }>(
-  DragMove,
-  { x: 0, y: 0 },
-  (_prev, pos) => pos,
-)
-engine.signalUpdate(dragPosition, DragStart, (_prev, info) => ({
-  x: info.startX,
-  y: info.startY,
-}))
-
-// Card statuses
-export const cardStatuses = engine.signal<Record<string, CardStatus>>(
-  SavePending,
-  {},
-  (prev, cardId) => ({ ...prev, [cardId]: 'saving' as CardStatus }),
-)
-engine.signalUpdate(cardStatuses, SaveDone, (prev, result) => ({
-  ...prev,
-  [result.cardId]: 'saved' as CardStatus,
-}))
-engine.signalUpdate(cardStatuses, SaveError, (prev, result) => ({
-  ...prev,
-  [result.cardId]: 'error' as CardStatus,
-}))
-engine.signalUpdate(cardStatuses, CardSettled, (prev, cardId) => ({
-  ...prev,
-  [cardId]: 'settled' as CardStatus,
-}))
-
-// Spring-driven drag position for smooth feel
-export const dragSpringX = engine.spring(
-  (() => {
-    const sig = engine.signal<number>(DragMove, 0, (_prev, pos) => pos.x)
-    engine.signalUpdate(sig, DragStart, (_prev, info) => info.startX)
-    return sig
-  })(),
-  { stiffness: 400, damping: 25, restThreshold: 0.5 },
-)
-
-export const dragSpringY = engine.spring(
-  (() => {
-    const sig = engine.signal<number>(DragMove, 0, (_prev, pos) => pos.y)
-    engine.signalUpdate(sig, DragStart, (_prev, info) => info.startY)
-    return sig
-  })(),
-  { stiffness: 400, damping: 25, restThreshold: 0.5 },
-)
-
-// Start frame loop for spring animations
-engine.startFrameLoop()

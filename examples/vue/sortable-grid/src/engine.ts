@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, SpringValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -41,73 +37,77 @@ export const DragEnd = engine.event('DragEnd')
 export const ShuffleItems = engine.event('ShuffleItems')
 export const AddItem = engine.event('AddItem')
 export const RemoveItem = engine.event<number>('RemoveItem')
-export const ItemsChanged = engine.event<GridItem[]>('ItemsChanged')
-export const PositionsUpdated = engine.event('PositionsUpdated')
 
 /* ------------------------------------------------------------------ */
-/*  Signals                                                           */
+/*  State-changed events                                              */
+/* ------------------------------------------------------------------ */
+
+export const ItemsChanged = engine.event<GridItem[]>('ItemsChanged')
+export const DraggingIdChanged = engine.event<number>('DraggingIdChanged')
+export const GhostPosChanged = engine.event<{ x: number; y: number }>('GhostPosChanged')
+export const PositionsChanged = engine.event<{ x: number[]; y: number[] }>('PositionsChanged')
+
+/* ------------------------------------------------------------------ */
+/*  State                                                             */
 /* ------------------------------------------------------------------ */
 
 const initialItems = Array.from({ length: 8 }, () => makeItem())
 
-export const items: Signal<GridItem[]> = engine.signal(
-  ItemsChanged,
-  initialItems,
-  (_prev, next) => next,
-)
+let items = initialItems
+let draggingId = -1
+let ghostPos = { x: 0, y: 0 }
 
-export const draggingId: Signal<number> = engine.signal(DragStart, -1, (_prev, { id }) => id)
-engine.signalUpdate(draggingId, DragEnd, () => -1)
-
-export const ghostPos: Signal<{ x: number; y: number }> = engine.signal(
-  DragMove,
-  { x: 0, y: 0 },
-  (_prev, pos) => pos,
-)
-engine.signalUpdate(ghostPos, DragStart, (_prev, { x, y }) => ({ x, y }))
-
-/* ------------------------------------------------------------------ */
-/*  Position springs (pool of 20)                                     */
-/* ------------------------------------------------------------------ */
-
-export const posXTargets: Signal<number>[] = []
-export const posYTargets: Signal<number>[] = []
-export const posXSprings: SpringValue[] = []
-export const posYSprings: SpringValue[] = []
-
-for (let i = 0; i < 20; i++) {
-  const col = i % COLS
-  const row = Math.floor(i / COLS)
-  const xt = engine.signal(PositionsUpdated, col * (CELL_SIZE + GAP) as number, () => {
-    const idx = i < items.value.length ? i : 0
-    return (idx % COLS) * (CELL_SIZE + GAP)
-  })
-  const yt = engine.signal(PositionsUpdated, row * (CELL_SIZE + GAP) as number, () => {
-    const idx = i < items.value.length ? i : 0
-    return Math.floor(idx / COLS) * (CELL_SIZE + GAP)
-  })
-  posXTargets.push(xt)
-  posYTargets.push(yt)
-  posXSprings.push(engine.spring(xt, { stiffness: 200, damping: 22 }))
-  posYSprings.push(engine.spring(yt, { stiffness: 200, damping: 22 }))
+function computePositions(): { x: number[]; y: number[] } {
+  const xs: number[] = []
+  const ys: number[] = []
+  for (let i = 0; i < 20; i++) {
+    const idx = i < items.length ? i : 0
+    xs.push((idx % COLS) * (CELL_SIZE + GAP))
+    ys.push(Math.floor(idx / COLS) * (CELL_SIZE + GAP))
+  }
+  return { x: xs, y: ys }
 }
+
+let positions = computePositions()
+
+// Dragging id state
+engine.on(DragStart, ({ id }) => {
+  draggingId = id
+  engine.emit(DraggingIdChanged, draggingId)
+})
+engine.on(DragEnd, () => {
+  draggingId = -1
+  engine.emit(DraggingIdChanged, draggingId)
+})
+
+// Ghost position state
+engine.on(DragMove, (pos) => {
+  ghostPos = pos
+  engine.emit(GhostPosChanged, ghostPos)
+})
+engine.on(DragStart, ({ x, y }) => {
+  ghostPos = { x, y }
+  engine.emit(GhostPosChanged, ghostPos)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Drag reorder logic                                                */
 /* ------------------------------------------------------------------ */
 
 engine.on(DragMove, ({ x, y }) => {
-  if (draggingId.value < 0) return
+  if (draggingId < 0) return
   const col = Math.min(COLS - 1, Math.max(0, Math.round(x / (CELL_SIZE + GAP))))
   const row = Math.max(0, Math.round(y / (CELL_SIZE + GAP)))
-  const targetIdx = Math.min(items.value.length - 1, row * COLS + col)
-  const currentIdx = items.value.findIndex(it => it.id === draggingId.value)
+  const targetIdx = Math.min(items.length - 1, row * COLS + col)
+  const currentIdx = items.findIndex(it => it.id === draggingId)
   if (currentIdx >= 0 && currentIdx !== targetIdx) {
-    const next = [...items.value]
+    const next = [...items]
     const [moved] = next.splice(currentIdx, 1)
     next.splice(targetIdx, 0, moved)
-    engine.emit(ItemsChanged, next)
-    engine.emit(PositionsUpdated, undefined)
+    items = next
+    engine.emit(ItemsChanged, items)
+    positions = computePositions()
+    engine.emit(PositionsChanged, positions)
   }
 })
 
@@ -115,13 +115,16 @@ engine.on(DragMove, ({ x, y }) => {
 /*  Shuffle                                                           */
 /* ------------------------------------------------------------------ */
 
-engine.pipe(ShuffleItems, [ItemsChanged, PositionsUpdated], () => {
-  const shuffled = [...items.value]
+engine.on(ShuffleItems, () => {
+  const shuffled = [...items]
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
   }
-  return [shuffled, undefined]
+  items = shuffled
+  engine.emit(ItemsChanged, items)
+  positions = computePositions()
+  engine.emit(PositionsChanged, positions)
 })
 
 /* ------------------------------------------------------------------ */
@@ -129,13 +132,27 @@ engine.pipe(ShuffleItems, [ItemsChanged, PositionsUpdated], () => {
 /* ------------------------------------------------------------------ */
 
 engine.on(AddItem, () => {
-  if (items.value.length >= 20) return
-  engine.emit(ItemsChanged, [...items.value, makeItem()])
-  engine.emit(PositionsUpdated, undefined)
+  if (items.length >= 20) return
+  items = [...items, makeItem()]
+  engine.emit(ItemsChanged, items)
+  positions = computePositions()
+  engine.emit(PositionsChanged, positions)
 })
 
-engine.pipe(RemoveItem, [ItemsChanged, PositionsUpdated], (id) => {
-  return [items.value.filter(it => it.id !== id), undefined]
+engine.on(RemoveItem, (id) => {
+  items = items.filter(it => it.id !== id)
+  engine.emit(ItemsChanged, items)
+  positions = computePositions()
+  engine.emit(PositionsChanged, positions)
 })
+
+/* ------------------------------------------------------------------ */
+/*  Initial values                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getItems() { return items }
+export function getDraggingId() { return draggingId }
+export function getGhostPos() { return ghostPos }
+export function getPositions() { return positions }
 
 export { COLS, CELL_SIZE, GAP }

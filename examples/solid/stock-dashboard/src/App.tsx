@@ -1,316 +1,488 @@
-import { For, Show, onMount, onCleanup } from 'solid-js'
-import { useSignal, useEmit } from '@pulse/solid'
-import type { Signal } from '@pulse/core'
-import { engine } from './engine'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  SYMBOLS,
+  PriceUpdate,
+  AlertDismissed,
+  WatchlistAdd,
+  WatchlistRemove,
+  TimeframeChanged,
+  TickerPaused,
+  TickerResumed,
+  StockSelected,
+} from './engine'
+import type { StockState, Timeframe } from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Sparkline SVG
+// ---------------------------------------------------------------------------
 
-interface StockData {
-  symbol: string
-  name: string
-  price: number
-  change: number
-  changePercent: number
-  history: number[]
-  color: string
-}
-
-interface Alert {
-  id: number
-  symbol: string
-  message: string
-  type: 'up' | 'down'
-  timestamp: number
-}
-
-/* ------------------------------------------------------------------ */
-/*  Initial stocks                                                    */
-/* ------------------------------------------------------------------ */
-
-const INITIAL_STOCKS: StockData[] = [
-  { symbol: 'AAPL', name: 'Apple Inc.', price: 178.50, change: 0, changePercent: 0, history: [], color: '#0984e3' },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 141.20, change: 0, changePercent: 0, history: [], color: '#00b894' },
-  { symbol: 'MSFT', name: 'Microsoft Corp.', price: 378.90, change: 0, changePercent: 0, history: [], color: '#6c5ce7' },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 178.25, change: 0, changePercent: 0, history: [], color: '#e17055' },
-  { symbol: 'TSLA', name: 'Tesla Inc.', price: 238.45, change: 0, changePercent: 0, history: [], color: '#d63031' },
-  { symbol: 'NVDA', name: 'NVIDIA Corp.', price: 875.30, change: 0, changePercent: 0, history: [], color: '#00cec9' },
-  { symbol: 'META', name: 'Meta Platforms', price: 505.75, change: 0, changePercent: 0, history: [], color: '#a29bfe' },
-  { symbol: 'NFLX', name: 'Netflix Inc.', price: 628.90, change: 0, changePercent: 0, history: [], color: '#fdcb6e' },
-]
-
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
-
-const PriceUpdate = engine.event<{ symbol: string; price: number }>('PriceUpdate')
-const SelectStock = engine.event<string>('SelectStock')
-const AlertTriggered = engine.event<Alert>('AlertTriggered')
-const DismissAlert = engine.event<number>('DismissAlert')
-
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-const stocks = engine.signal<StockData[]>(
-  PriceUpdate, INITIAL_STOCKS.map(s => ({ ...s, history: [s.price] })),
-  (prev, { symbol, price }) => prev.map(s => {
-    if (s.symbol !== symbol) return s
-    const change = price - s.history[0]
-    const changePercent = (change / s.history[0]) * 100
-    const history = [...s.history.slice(-99), price]
-    return { ...s, price, change, changePercent, history }
-  }),
-)
-
-const selectedStock = engine.signal<string>(SelectStock, 'AAPL', (_prev, sym) => sym)
-
-let alertId = 0
-const alerts = engine.signal<Alert[]>(
-  AlertTriggered, [],
-  (prev, alert) => [alert, ...prev].slice(0, 10),
-)
-engine.signalUpdate(alerts, DismissAlert, (prev, id) => prev.filter(a => a.id !== id))
-
-/* ------------------------------------------------------------------ */
-/*  Price update simulation (500ms interval)                          */
-/* ------------------------------------------------------------------ */
-
-const PriceTick = engine.event('PriceTick')
-let tickTimer: number
-
-function startPriceFeed() {
-  tickTimer = setInterval(() => {
-    engine.emit(PriceTick, undefined)
-  }, 500) as unknown as number
-}
-
-engine.on(PriceTick, () => {
-  for (const stock of stocks.value) {
-    const volatility = 0.002 + Math.random() * 0.008
-    const direction = Math.random() > 0.48 ? 1 : -1
-    const newPrice = Math.round((stock.price * (1 + direction * volatility)) * 100) / 100
-    engine.emit(PriceUpdate, { symbol: stock.symbol, price: newPrice })
-  }
-})
-
-// Alert logic: trigger when change > 5%
-engine.on(PriceUpdate, ({ symbol, price }) => {
-  const stock = stocks.value.find(s => s.symbol === symbol)
-  if (!stock || stock.history.length < 2) return
-  const pct = Math.abs((price - stock.history[0]) / stock.history[0]) * 100
-  if (pct > 5) {
-    engine.emit(AlertTriggered, {
-      id: alertId++, symbol,
-      message: `${symbol} ${price > stock.history[0] ? 'surged' : 'dropped'} ${pct.toFixed(1)}%`,
-      type: price > stock.history[0] ? 'up' : 'down',
-      timestamp: Date.now(),
+function Sparkline({ data, width, height, color }: { data: number[]; width: number; height: number; color: string }) {
+  if (data.length < 2) return null
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const range = max - min || 1
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width
+      const y = height - ((v - min) / range) * height
+      return `${x},${y}`
     })
-  }
-})
+    .join(' ')
 
-/* ------------------------------------------------------------------ */
-/*  Sparkline (canvas)                                                */
-/* ------------------------------------------------------------------ */
-
-function Sparkline(props: { data: number[]; color: string; width: number; height: number }) {
-  let canvasRef!: HTMLCanvasElement
-
-  onMount(() => {
-    const draw = () => {
-      const ctx = canvasRef.getContext('2d')!
-      const w = props.width
-      const h = props.height
-      canvasRef.width = w
-      canvasRef.height = h
-      ctx.clearRect(0, 0, w, h)
-
-      if (props.data.length < 2) return
-
-      const min = Math.min(...props.data)
-      const max = Math.max(...props.data)
-      const range = max - min || 1
-
-      ctx.beginPath()
-      ctx.strokeStyle = props.color
-      ctx.lineWidth = 1.5
-
-      for (let i = 0; i < props.data.length; i++) {
-        const x = (i / (props.data.length - 1)) * w
-        const y = h - ((props.data[i] - min) / range) * (h - 4) - 2
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      }
-      ctx.stroke()
-    }
-
-    const dispose = engine.on(engine.frame, draw)
-    onCleanup(dispose)
-  })
-
-  return <canvas ref={canvasRef} style={{ width: `${props.width}px`, height: `${props.height}px` }} />
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
 }
 
-/* ------------------------------------------------------------------ */
-/*  Main chart (canvas)                                               */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// AreaChart (larger chart for selected stock)
+// ---------------------------------------------------------------------------
 
-function MainChart() {
-  const sel = useSignal(selectedStock)
-  const allStocks = useSignal(stocks)
-  let canvasRef!: HTMLCanvasElement
+function AreaChart({ data, width, height, color }: { data: number[]; width: number; height: number; color: string }) {
+  if (data.length < 2) return null
+  const min = Math.min(...data) * 0.998
+  const max = Math.max(...data) * 1.002
+  const range = max - min || 1
 
-  onMount(() => {
-    const dispose = engine.on(engine.frame, () => {
-      const stock = allStocks().find(s => s.symbol === sel())
-      if (!stock || !canvasRef) return
-      const ctx = canvasRef.getContext('2d')!
-      const w = canvasRef.width = canvasRef.offsetWidth * 2
-      const h = canvasRef.height = canvasRef.offsetHeight * 2
-      ctx.scale(2, 2)
-      const dw = canvasRef.offsetWidth
-      const dh = canvasRef.offsetHeight
-
-      ctx.clearRect(0, 0, dw, dh)
-
-      // Grid
-      ctx.strokeStyle = '#21262d'
-      ctx.lineWidth = 0.5
-      for (let i = 0; i < 5; i++) {
-        const y = (i / 4) * dh
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(dw, y); ctx.stroke()
-      }
-
-      if (stock.history.length < 2) return
-
-      const min = Math.min(...stock.history) * 0.998
-      const max = Math.max(...stock.history) * 1.002
-      const range = max - min || 1
-
-      // Fill area
-      ctx.beginPath()
-      for (let i = 0; i < stock.history.length; i++) {
-        const x = (i / (stock.history.length - 1)) * dw
-        const y = dh - ((stock.history[i] - min) / range) * (dh - 20) - 10
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-      }
-      ctx.lineTo(dw, dh)
-      ctx.lineTo(0, dh)
-      ctx.closePath()
-      const gradient = ctx.createLinearGradient(0, 0, 0, dh)
-      gradient.addColorStop(0, stock.color + '33')
-      gradient.addColorStop(1, stock.color + '05')
-      ctx.fillStyle = gradient
-      ctx.fill()
-
-      // Line
-      ctx.beginPath()
-      ctx.strokeStyle = stock.color
-      ctx.lineWidth = 2
-      for (let i = 0; i < stock.history.length; i++) {
-        const x = (i / (stock.history.length - 1)) * dw
-        const y = dh - ((stock.history[i] - min) / range) * (dh - 20) - 10
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-      }
-      ctx.stroke()
-
-      // Price label
-      ctx.fillStyle = stock.color
-      ctx.font = 'bold 14px sans-serif'
-      ctx.fillText(`$${stock.price.toFixed(2)}`, 8, 20)
+  const linePoints = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width
+      const y = height - ((v - min) / range) * (height - 20) - 10
+      return `${x},${y}`
     })
-    onCleanup(dispose)
-  })
+    .join(' ')
 
-  return <canvas ref={canvasRef} style={{ width: '100%', height: '200px' }} />
+  const areaPoints = `0,${height} ${linePoints} ${width},${height}`
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+          <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints} fill="url(#areaGrad)" />
+      <polyline
+        points={linePoints}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      {/* Labels */}
+      <text x={4} y={14} fontSize={11} fill="#64748b" fontFamily="monospace">
+        ${max.toFixed(2)}
+      </text>
+      <text x={4} y={height - 4} fontSize={11} fill="#64748b" fontFamily="monospace">
+        ${min.toFixed(2)}
+      </text>
+    </svg>
+  )
 }
 
-/* ------------------------------------------------------------------ */
-/*  App                                                               */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// StockRow
+// ---------------------------------------------------------------------------
+
+function StockRow({
+  symbol,
+  stock,
+  isWatched,
+  isSelected,
+}: {
+  symbol: string
+  stock: StockState
+  isWatched: boolean
+  isSelected: boolean
+}) {
+  const emit = useEmit()
+  const priceColor = stock.change >= 0 ? '#22c55e' : '#ef4444'
+  const flashBg =
+    stock.flashDirection === 'up'
+      ? 'rgba(34, 197, 94, 0.12)'
+      : stock.flashDirection === 'down'
+        ? 'rgba(239, 68, 68, 0.12)'
+        : 'transparent'
+
+  return (
+    <div
+      onClick={() => emit(StockSelected, symbol)}
+      style={{
+        display: 'grid',
+        'grid-template-columns': '80px 100px 80px 120px 40px',
+        'align-items': 'center',
+        padding: '10px 16px',
+        background: isSelected
+          ? 'rgba(59, 130, 246, 0.1)'
+          : flashBg,
+        'border-left': isSelected ? '2px solid #3b82f6' : '2px solid transparent',
+        cursor: 'pointer',
+        transition: 'background 0.3s',
+        'border-radius': 4,
+      }}
+    >
+      <span style={{ 'font-weight': 700, color: '#e2e8f0', 'font-family': 'monospace', 'font-size': 14 }}>
+        {symbol}
+      </span>
+      <span
+        style={{
+          'font-family': 'monospace',
+          'font-size': 14,
+          color: priceColor,
+          'font-weight': 600,
+          transition: 'color 0.3s',
+        }}
+      >
+        ${stock.price.toFixed(2)}
+      </span>
+      <span
+        style={{
+          'font-family': 'monospace',
+          'font-size': 12,
+          color: priceColor,
+        }}
+      >
+        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
+      </span>
+      <Sparkline data={stock.history} width={100} height={28} color={priceColor} />
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          emit(isWatched ? WatchlistRemove : WatchlistAdd, symbol)
+        }}
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          'font-size': 16,
+          color: isWatched ? '#fbbf24' : '#475569',
+          padding: 0,
+        }}
+      >
+        {isWatched ? '\u2605' : '\u2606'}
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 
 export default function App() {
   const emit = useEmit()
-  const allStocks = useSignal(stocks)
-  const sel = useSignal(selectedStock)
-  const allAlerts = useSignal(alerts)
+  const priceData = usePulse(prices)
+  const alertList = usePulse(alerts)
+  const watched = usePulse(watchlist)
+  const tf = usePulse(timeframe)
+  const live = usePulse(isLive)
+  const selected = usePulse(selectedStock)
 
-  onMount(() => startPriceFeed())
-  onCleanup(() => clearInterval(tickTimer))
+  const selectedStockData = priceData.get(selected)
+  const selectedColor =
+    selectedStockData && selectedStockData.change >= 0 ? '#22c55e' : '#ef4444'
+
+  const timeframes: Timeframe[] = ['1m', '5m', '1h', '1d']
 
   return (
-    <div style={{ 'min-height': '100vh', padding: '24px', 'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      <h1 style={{ 'font-size': '24px', 'font-weight': '700', 'margin-bottom': '24px' }}>Stock Dashboard</h1>
-
-      {/* Main chart */}
-      <div style={{ background: '#161b22', 'border-radius': '12px', 'margin-bottom': '24px', overflow: 'hidden', border: '1px solid #21262d' }}>
-        <div style={{ padding: '16px 20px', 'border-bottom': '1px solid #21262d', display: 'flex', 'align-items': 'center', gap: '12px' }}>
-          <span style={{ 'font-weight': '700', 'font-size': '18px', color: allStocks().find(s => s.symbol === sel())?.color }}>{sel()}</span>
-          <span style={{ color: '#8b949e', 'font-size': '14px' }}>{allStocks().find(s => s.symbol === sel())?.name}</span>
+    <div
+      style={{
+        'min-height': '100vh',
+        background: '#0a0e17',
+        'font-family':
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        color: '#e2e8f0',
+        display: 'grid',
+        'grid-template-columns': '1fr 280px',
+        'grid-template-rows': 'auto 1fr',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          'grid-column': '1 / -1',
+          padding: '16px 24px',
+          'border-bottom': '1px solid #1e293b',
+          display: 'flex',
+          'align-items': 'center',
+          'justify-content': 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', 'align-items': 'center', gap: 16 }}>
+          <h1 style={{ 'font-size': 20, 'font-weight': 700, margin: 0 }}>
+            Stock Dashboard
+          </h1>
+          <div
+            style={{
+              display: 'flex',
+              'align-items': 'center',
+              gap: 6,
+              'font-size': 12,
+              color: live ? '#22c55e' : '#ef4444',
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                'border-radius': '50%',
+                background: live ? '#22c55e' : '#ef4444',
+                animation: live ? 'pulse-dot 2s infinite' : 'none',
+              }}
+            />
+            {live ? 'LIVE' : 'PAUSED'}
+          </div>
         </div>
-        <MainChart />
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* Timeframe selector */}
+          {timeframes.map((t) => (
+            <button
+              onClick={() => emit(TimeframeChanged, t)}
+              style={{
+                padding: '6px 12px',
+                'border-radius': 6,
+                border: tf === t ? '1px solid #3b82f6' : '1px solid #334155',
+                background: tf === t ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                color: tf === t ? '#3b82f6' : '#64748b',
+                'font-size': 12,
+                'font-weight': 600,
+                cursor: 'pointer',
+              }}
+            >
+              {t}
+            </button>
+          ))}
+          <button
+            onClick={() => emit(live ? TickerPaused : TickerResumed, undefined)}
+            style={{
+              padding: '6px 16px',
+              'border-radius': 6,
+              border: '1px solid #334155',
+              background: live ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+              color: live ? '#ef4444' : '#22c55e',
+              'font-size': 12,
+              'font-weight': 600,
+              cursor: 'pointer',
+              'margin-left': 8,
+            }}
+          >
+            {live ? 'Pause' : 'Resume'}
+          </button>
+        </div>
       </div>
 
-      {/* Stock grid */}
-      <div style={{ display: 'grid', 'grid-template-columns': 'repeat(4, 1fr)', gap: '12px', 'margin-bottom': '24px' }}>
-        <For each={allStocks()}>
-          {(stock) => {
-            const isUp = () => stock.change >= 0
+      {/* Main content */}
+      <div style={{ padding: 24, overflow: 'auto' }}>
+        {/* Selected stock chart */}
+        {selectedStockData && (
+          <div
+            style={{
+              background: '#111827',
+              'border-radius': 12,
+              padding: 20,
+              'margin-bottom': 24,
+              border: '1px solid #1e293b',
+            }}
+          >
+            <div style={{ display: 'flex', 'justify-content': 'space-between', 'margin-bottom': 16 }}>
+              <div>
+                <span style={{ 'font-size': 24, 'font-weight': 700, 'font-family': 'monospace' }}>
+                  {selected}
+                </span>
+                <span
+                  style={{
+                    'font-size': 24,
+                    'font-weight': 700,
+                    'font-family': 'monospace',
+                    color: selectedColor,
+                    'margin-left': 16,
+                  }}
+                >
+                  ${selectedStockData.price.toFixed(2)}
+                </span>
+                <span
+                  style={{
+                    'font-size': 14,
+                    'font-family': 'monospace',
+                    color: selectedColor,
+                    'margin-left': 8,
+                  }}
+                >
+                  {selectedStockData.change >= 0 ? '+' : ''}
+                  {selectedStockData.change.toFixed(2)}%
+                </span>
+              </div>
+            </div>
+            <AreaChart
+              data={selectedStockData.history}
+              width={600}
+              height={200}
+              color={selectedColor!}
+            />
+          </div>
+        )}
+
+        {/* Stock list */}
+        <div
+          style={{
+            background: '#111827',
+            'border-radius': 12,
+            border: '1px solid #1e293b',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              'grid-template-columns': '80px 100px 80px 120px 40px',
+              padding: '10px 16px',
+              'font-size': 11,
+              color: '#475569',
+              'font-weight': 600,
+              'text-transform': 'uppercase',
+              'letter-spacing': 1,
+              'border-bottom': '1px solid #1e293b',
+            }}
+          >
+            <span>Symbol</span>
+            <span>Price</span>
+            <span>Change</span>
+            <span>Trend</span>
+            <span>Watch</span>
+          </div>
+          {SYMBOLS.map((sym) => {
+            const stock = priceData.get(sym)
+            if (!stock) return null
+            return (
+              <StockRow
+                symbol={sym}
+                stock={stock}
+                isWatched={watched.includes(sym)}
+                isSelected={sym === selected}
+              />
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Sidebar: Watchlist + Alerts */}
+      <div
+        style={{
+          'border-left': '1px solid #1e293b',
+          padding: 20,
+          overflow: 'auto',
+          display: 'flex',
+          'flex-direction': 'column',
+          gap: 24,
+        }}
+      >
+        {/* Watchlist */}
+        <div>
+          <h2 style={{ 'font-size': 14, 'font-weight': 700, color: '#94a3b8', 'margin-bottom': 12, 'text-transform': 'uppercase', 'letter-spacing': 1 }}>
+            Watchlist
+          </h2>
+          {watched.length === 0 && (
+            <p style={{ 'font-size': 13, color: '#475569' }}>No stocks watched</p>
+          )}
+          {watched.map((sym) => {
+            const stock = priceData.get(sym)
+            if (!stock) return null
+            const color = stock.change >= 0 ? '#22c55e' : '#ef4444'
             return (
               <div
-                onClick={() => emit(SelectStock, stock.symbol)}
+                onClick={() => emit(StockSelected, sym)}
                 style={{
-                  background: sel() === stock.symbol ? '#161b22' : '#0d1117',
-                  border: sel() === stock.symbol ? `1px solid ${stock.color}44` : '1px solid #21262d',
-                  'border-radius': '10px', padding: '16px', cursor: 'pointer',
-                  transition: 'border-color 0.2s',
+                  display: 'flex',
+                  'justify-content': 'space-between',
+                  'align-items': 'center',
+                  padding: '8px 12px',
+                  'border-radius': 8,
+                  cursor: 'pointer',
+                  background: sym === selected ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                  'margin-bottom': 4,
                 }}
               >
-                <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center', 'margin-bottom': '8px' }}>
-                  <span style={{ 'font-weight': '700', color: stock.color }}>{stock.symbol}</span>
-                  <span style={{ 'font-size': '12px', color: isUp() ? '#3fb950' : '#f85149', 'font-weight': '600' }}>
-                    {isUp() ? '+' : ''}{stock.changePercent.toFixed(2)}%
-                  </span>
-                </div>
-                <div style={{ 'font-size': '20px', 'font-weight': '600', 'margin-bottom': '8px' }}>
+                <span style={{ 'font-family': 'monospace', 'font-weight': 600, 'font-size': 13 }}>{sym}</span>
+                <span style={{ 'font-family': 'monospace', 'font-size': 13, color }}>
                   ${stock.price.toFixed(2)}
-                </div>
-                <Sparkline data={stock.history} color={stock.color} width={160} height={32} />
+                </span>
               </div>
             )
-          }}
-        </For>
+          })}
+        </div>
+
+        {/* Alerts */}
+        <div>
+          <h2 style={{ 'font-size': 14, 'font-weight': 700, color: '#94a3b8', 'margin-bottom': 12, 'text-transform': 'uppercase', 'letter-spacing': 1 }}>
+            Alerts {alertList.length > 0 && (
+              <span
+                style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  'border-radius': 10,
+                  padding: '2px 8px',
+                  'font-size': 11,
+                  'margin-left': 6,
+                  'font-weight': 600,
+                }}
+              >
+                {alertList.length}
+              </span>
+            )}
+          </h2>
+          {alertList.length === 0 && (
+            <p style={{ 'font-size': 13, color: '#475569' }}>No alerts</p>
+          )}
+          {alertList.slice(0, 10).map((alert) => (
+            <div
+              style={{
+                padding: '8px 12px',
+                background: 'rgba(239, 68, 68, 0.08)',
+                'border-radius': 8,
+                'margin-bottom': 6,
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                'font-size': 12,
+                color: '#f87171',
+                display: 'flex',
+                'justify-content': 'space-between',
+                'align-items': 'center',
+              }}
+            >
+              <span>{alert.message}</span>
+              <button
+                onClick={() => emit(AlertDismissed, alert.id)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  'font-size': 14,
+                  padding: '0 4px',
+                }}
+              >
+                \u2715
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Alerts */}
-      <Show when={allAlerts().length > 0}>
-        <div style={{ background: '#161b22', 'border-radius': '12px', border: '1px solid #21262d', padding: '16px' }}>
-          <h3 style={{ 'font-size': '14px', 'font-weight': '600', color: '#8b949e', 'margin-bottom': '12px', 'text-transform': 'uppercase', 'letter-spacing': '0.5px' }}>
-            Alerts (&gt;5% change)
-          </h3>
-          <For each={allAlerts()}>
-            {(alert) => (
-              <div style={{
-                display: 'flex', 'align-items': 'center', gap: '12px', padding: '8px',
-                'border-bottom': '1px solid #21262d', 'font-size': '13px',
-              }}>
-                <span style={{ color: alert.type === 'up' ? '#3fb950' : '#f85149' }}>
-                  {alert.type === 'up' ? '\u25B2' : '\u25BC'}
-                </span>
-                <span style={{ flex: '1', color: '#c9d1d9' }}>{alert.message}</span>
-                <span style={{ color: '#484f58', 'font-size': '11px' }}>
-                  {new Date(alert.timestamp).toLocaleTimeString()}
-                </span>
-                <button
-                  onClick={() => emit(DismissAlert, alert.id)}
-                  style={{ background: 'none', border: 'none', color: '#484f58', cursor: 'pointer', 'font-size': '14px' }}
-                >\u2715</button>
-              </div>
-            )}
-          </For>
-        </div>
-      </Show>
+      {/* Inject animation keyframes */}
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
     </div>
   )
 }

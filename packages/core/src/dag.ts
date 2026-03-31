@@ -6,8 +6,11 @@ import type { EventType, Rule, DAGEdge, DAGGraph } from './types.js'
  * Edges go from producer rules to consumer rules:
  *   ruleA (outputs EventType X) → ruleB (triggers on EventType X)
  *
+ * Supports dynamic edge discovery: when a handler emits an event at runtime,
+ * the engine records the output on the rule and calls addEdgesForOutput()
+ * to wire up downstream consumers.
+ *
  * Maintains topological order using Kahn's algorithm.
- * Detects cycles via DFS.
  */
 export class DAG {
   private _rules: Set<Rule> = new Set()
@@ -58,6 +61,31 @@ export class DAG {
     }
 
     this._dirty = true
+  }
+
+  /**
+   * Add edges for a newly discovered output on an existing rule.
+   * Called when runtime DAG tracing discovers that a handler emits a new event type.
+   */
+  addEdgesForOutput(rule: Rule, outputType: EventType): void {
+    // Index the rule as a producer of this output type
+    let producers = this._producerIndex.get(outputType)
+    if (!producers) {
+      producers = new Set()
+      this._producerIndex.set(outputType, producers)
+    }
+    producers.add(rule)
+
+    // Wire edges to downstream consumers of this output type
+    for (const consumer of outputType._consumers) {
+      if (consumer !== rule && this._rules.has(consumer) && !consumer._disposed) {
+        const downstream = this._adj.get(rule)
+        if (!downstream || !downstream.has(consumer)) {
+          this._addEdge(rule, consumer)
+          this._dirty = true
+        }
+      }
+    }
   }
 
   removeRule(rule: Rule): void {

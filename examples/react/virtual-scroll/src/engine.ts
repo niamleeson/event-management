@@ -1,4 +1,4 @@
-import { createEngine, type Signal } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -65,109 +65,79 @@ export const PageLoaded = engine.event<PagePayload>('PageLoaded')
 export const ItemClicked = engine.event<string>('ItemClicked')
 export const FilterChanged = engine.event<string>('FilterChanged')
 export const SortChanged = engine.event<SortDir>('SortChanged')
-export const DebounceFilterApply = engine.event<string>('DebounceFilterApply')
+
+// State-changed events for React subscriptions
+export const ItemsChanged = engine.event<Map<number, Item>>('ItemsChanged')
+export const ScrollPositionChanged = engine.event<number>('ScrollPositionChanged')
+export const VisibleRangeChanged = engine.event<VisibleRange>('VisibleRangeChanged')
+export const FilterStateChanged = engine.event<string>('FilterStateChanged')
+export const SortStateChanged = engine.event<SortDir>('SortStateChanged')
+export const LoadingPagesChanged = engine.event<Set<number>>('LoadingPagesChanged')
+export const SelectedItemChanged = engine.event<string | null>('SelectedItemChanged')
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+let items: Map<number, Item> = new Map()
+let scrollPosition = 0
+let visibleRange: VisibleRange = { start: 0, end: Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) }
+let filter = ''
+let sort: SortDir = 'asc'
+let loadingPages: Set<number> = new Set()
+let selectedItem: string | null = null
+
+const requestedPages = new Set<number>()
 
 // ---------------------------------------------------------------------------
 // Async: PageRequested -> PageLoaded (simulated API)
 // ---------------------------------------------------------------------------
 
-const requestedPages = new Set<number>()
+engine.on(PageRequested, async (page) => {
+  loadingPages = new Set(loadingPages)
+  loadingPages.add(page)
+  engine.emit(LoadingPagesChanged, loadingPages)
 
-engine.async(PageRequested, {
-  done: PageLoaded,
-  strategy: 'all',
-  do: async (page) => {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 100))
-    const start = page * PAGE_SIZE
-    const items: Item[] = []
-    for (let i = start; i < start + PAGE_SIZE && i < TOTAL_ITEMS; i++) {
-      items.push(generateItem(i))
-    }
-    return { page, items }
-  },
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 100))
+  const start = page * PAGE_SIZE
+  const pageItems: Item[] = []
+  for (let i = start; i < start + PAGE_SIZE && i < TOTAL_ITEMS; i++) {
+    pageItems.push(generateItem(i))
+  }
+  engine.emit(PageLoaded, { page, items: pageItems })
 })
 
 // ---------------------------------------------------------------------------
-// Signals
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const items: Signal<Map<number, Item>> = engine.signal<Map<number, Item>>(
-  PageLoaded,
-  new Map(),
-  (prev, payload) => {
-    const next = new Map(prev)
-    for (const item of payload.items) {
-      const idx = parseInt(item.id.split('-')[1])
-      next.set(idx, item)
-    }
-    return next
-  },
-)
+engine.on(PageLoaded, (payload) => {
+  const next = new Map(items)
+  for (const item of payload.items) {
+    const idx = parseInt(item.id.split('-')[1])
+    next.set(idx, item)
+  }
+  items = next
+  engine.emit(ItemsChanged, items)
 
-export const scrollPosition: Signal<number> = engine.signal<number>(
-  ScrollChanged,
-  0,
-  (_prev, pos) => pos,
-)
-
-export const visibleRange: Signal<VisibleRange> = engine.signal<VisibleRange>(
-  ScrollChanged,
-  { start: 0, end: Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) },
-  (_prev, scrollTop) => {
-    const start = Math.floor(scrollTop / ITEM_HEIGHT)
-    const end = Math.min(TOTAL_ITEMS - 1, start + Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) + 1)
-    return { start, end }
-  },
-)
-
-export const filter: Signal<string> = engine.signal<string>(
-  DebounceFilterApply,
-  '',
-  (_prev, val) => val,
-)
-
-export const sort: Signal<SortDir> = engine.signal<SortDir>(
-  SortChanged,
-  'asc',
-  (_prev, dir) => dir,
-)
-
-export const loadingPages: Signal<Set<number>> = engine.signal<Set<number>>(
-  PageRequested,
-  new Set(),
-  (prev, page) => {
-    const next = new Set(prev)
-    next.add(page)
-    return next
-  },
-)
-
-engine.signalUpdate(loadingPages, PageLoaded, (prev, payload) => {
-  const next = new Set(prev)
-  next.delete(payload.page)
-  return next
+  loadingPages = new Set(loadingPages)
+  loadingPages.delete(payload.page)
+  engine.emit(LoadingPagesChanged, loadingPages)
 })
-
-export const selectedItem: Signal<string | null> = engine.signal<string | null>(
-  ItemClicked,
-  null,
-  (_prev, id) => id,
-)
-
-// ---------------------------------------------------------------------------
-// Pipe: ScrollChanged -> prefetch pages
-// ---------------------------------------------------------------------------
 
 engine.on(ScrollChanged, (scrollTop) => {
-  const startIdx = Math.floor(scrollTop / ITEM_HEIGHT)
-  const endIdx = startIdx + Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) + 1
+  scrollPosition = scrollTop
+  engine.emit(ScrollPositionChanged, scrollPosition)
 
-  // Calculate which pages we need
-  const startPage = Math.floor(startIdx / PAGE_SIZE)
-  const endPage = Math.floor(endIdx / PAGE_SIZE)
+  const start = Math.floor(scrollTop / ITEM_HEIGHT)
+  const end = Math.min(TOTAL_ITEMS - 1, start + Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) + 1)
+  visibleRange = { start, end }
+  engine.emit(VisibleRangeChanged, visibleRange)
 
-  // Also prefetch next page
+  // Prefetch pages
+  const startPage = Math.floor(start / PAGE_SIZE)
+  const endPage = Math.floor(end / PAGE_SIZE)
   const prefetchPage = endPage + 1
 
   for (let p = startPage; p <= prefetchPage; p++) {
@@ -179,11 +149,26 @@ engine.on(ScrollChanged, (scrollTop) => {
   }
 })
 
-// ---------------------------------------------------------------------------
-// Debounced filter
-// ---------------------------------------------------------------------------
+engine.on(ItemClicked, (id) => {
+  selectedItem = id
+  engine.emit(SelectedItemChanged, selectedItem)
+})
 
-engine.debounce(FilterChanged, 300, DebounceFilterApply)
+engine.on(SortChanged, (dir) => {
+  sort = dir
+  engine.emit(SortStateChanged, sort)
+})
+
+// Debounced filter
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+engine.on(FilterChanged, (value) => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    filter = value
+    engine.emit(FilterStateChanged, filter)
+  }, 300)
+})
 
 // ---------------------------------------------------------------------------
 // Load initial page

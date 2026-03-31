@@ -166,29 +166,32 @@ export function createEventFireComponent(engine: PulseEngine): EventFireComponen
   }
 
   function update(): void {
-    // Rebuild event type options from the engine
-    const rules = safeGetRules()
+    // Rebuild event type options from the DAG nodes and rules
     const allTypes = new Map<string, any>()
 
-    for (const rule of rules) {
-      for (const t of rule.triggers) {
-        allTypes.set(t.name, t)
-      }
-      for (const o of rule.outputs) {
-        allTypes.set(o.name, o)
-      }
-    }
-
-    // Also check signals for event types
+    // Read from DAG nodes (primary source for the new engine)
     try {
-      const signals = engine.getSignals()
-      for (const sig of signals) {
-        if (sig._eventType) {
-          allTypes.set(sig._eventType.name, sig._eventType)
-        }
+      const dag = engine.getDAG()
+      for (const node of dag.nodes) {
+        allTypes.set(node.name, node)
       }
     } catch {
       // ignore
+    }
+
+    // Also gather from rules triggers/outputs as fallback
+    const rules = safeGetRules()
+    for (const rule of rules) {
+      for (const t of rule.triggers) {
+        if (!allTypes.has(t.name)) {
+          allTypes.set(t.name, t)
+        }
+      }
+      for (const o of rule.outputs) {
+        if (!allTypes.has(o.name)) {
+          allTypes.set(o.name, o)
+        }
+      }
     }
 
     const prevSelected = selector.value

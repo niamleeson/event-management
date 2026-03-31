@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { ref as vueRef, onMounted, onUnmounted } from 'vue'
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
-import { engine, SpawnExplosion, ClearAll, particleCount, particles } from './engine'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
+import {
+  engine,
+  SpawnExplosion,
+  ClearAll,
+  particleCount,
+  particles,
+  ParticleCountChanged,
+} from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const count = useSignal(particleCount)
+const count = usePulse(ParticleCountChanged, particleCount)
 const canvasRef = vueRef<HTMLCanvasElement | null>(null)
 
 let disposeFrame: (() => void) | null = null

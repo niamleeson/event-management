@@ -1,4 +1,4 @@
-import { createEngine, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -44,57 +44,34 @@ export const DragOver = engine.event<number>('DragOver')
 export const DragEnd = engine.event<void>('DragEnd')
 export const Shuffle = engine.event<void>('Shuffle')
 export const Reset = engine.event<void>('Reset')
+export const GridChanged = engine.event<void>('GridChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const items = engine.signal<GridItem[]>(
-  DragOver, [...INITIAL_ITEMS],
-  (prev, targetOrder) => {
-    const dragging = draggedItem.value
-    if (dragging === null) return prev
-    const dragItem = prev.find((it) => it.id === dragging)
-    if (!dragItem) return prev
+let _items: GridItem[] = [...INITIAL_ITEMS]
+let _draggedItem: number | null = null
 
-    const fromOrder = dragItem.order
-    if (fromOrder === targetOrder) return prev
+// Spring positions per item
+const _springX = new Float64Array(ITEM_COUNT)
+const _springY = new Float64Array(ITEM_COUNT)
+const _targetX = new Float64Array(ITEM_COUNT)
+const _targetY = new Float64Array(ITEM_COUNT)
 
-    return prev.map((it) => {
-      if (it.id === dragging) return { ...it, order: targetOrder }
-      if (fromOrder < targetOrder) {
-        if (it.order > fromOrder && it.order <= targetOrder) return { ...it, order: it.order - 1 }
-      } else {
-        if (it.order >= targetOrder && it.order < fromOrder) return { ...it, order: it.order + 1 }
-      }
-      return it
-    })
-  },
-)
+// Initialize positions
+for (let i = 0; i < ITEM_COUNT; i++) {
+  const pos = getPosition(i)
+  _springX[i] = pos.x
+  _springY[i] = pos.y
+  _targetX[i] = pos.x
+  _targetY[i] = pos.y
+}
 
-engine.signalUpdate(items, Shuffle, (prev) => {
-  const orders = prev.map((_, i) => i)
-  // Fisher-Yates shuffle
-  for (let i = orders.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[orders[i], orders[j]] = [orders[j], orders[i]]
-  }
-  return prev.map((it, i) => ({ ...it, order: orders[i] }))
-})
-
-engine.signalUpdate(items, Reset, (prev) =>
-  prev.map((it) => ({ ...it, order: it.id })),
-)
-
-export const draggedItem = engine.signal<number | null>(
-  DragStart, null, (_prev, id) => id,
-)
-engine.signalUpdate(draggedItem, DragEnd, () => null)
-
-// ---------------------------------------------------------------------------
-// Springs — smooth position transitions
-// Target positions computed from order
-// ---------------------------------------------------------------------------
+export function getItems(): GridItem[] { return _items }
+export function getDraggedItem(): number | null { return _draggedItem }
+export function getSpringX(i: number): number { return _springX[i] }
+export function getSpringY(i: number): number { return _springY[i] }
 
 export function getPosition(order: number): { x: number; y: number } {
   const col = order % GRID_COLS
@@ -105,36 +82,76 @@ export function getPosition(order: number): { x: number; y: number } {
   }
 }
 
-// Create spring pairs for each item
-export const itemSpringsX: SpringValue[] = []
-export const itemSpringsY: SpringValue[] = []
-
-for (let i = 0; i < ITEM_COUNT; i++) {
-  const pos = getPosition(i)
-  const targetX = engine.signal<number>(DragOver, pos.x, () => {
-    const item = items.value.find((it) => it.id === i)
-    return item ? getPosition(item.order).x : pos.x
-  })
-  const targetY = engine.signal<number>(DragOver, pos.y, () => {
-    const item = items.value.find((it) => it.id === i)
-    return item ? getPosition(item.order).y : pos.y
-  })
-
-  // Also update on shuffle/reset
-  engine.signalUpdate(targetX, Shuffle, () => {
-    const item = items.value.find((it) => it.id === i)
-    return item ? getPosition(item.order).x : pos.x
-  })
-  engine.signalUpdate(targetY, Shuffle, () => {
-    const item = items.value.find((it) => it.id === i)
-    return item ? getPosition(item.order).y : pos.y
-  })
-  engine.signalUpdate(targetX, Reset, () => getPosition(i).x)
-  engine.signalUpdate(targetY, Reset, () => getPosition(i).y)
-
-  itemSpringsX.push(engine.spring(targetX, { stiffness: 200, damping: 22, restThreshold: 0.5 }))
-  itemSpringsY.push(engine.spring(targetY, { stiffness: 200, damping: 22, restThreshold: 0.5 }))
+function updateTargets() {
+  for (let i = 0; i < ITEM_COUNT; i++) {
+    const item = _items.find((it) => it.id === i)
+    if (item) {
+      const pos = getPosition(item.order)
+      _targetX[i] = pos.x
+      _targetY[i] = pos.y
+    }
+  }
 }
 
-// Start frame loop for springs
-engine.startFrameLoop()
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(DragStart, (id: number) => {
+  _draggedItem = id
+  engine.emit(GridChanged, undefined)
+})
+
+engine.on(DragOver, (targetOrder: number) => {
+  if (_draggedItem === null) return
+  const dragItem = _items.find((it) => it.id === _draggedItem)
+  if (!dragItem) return
+
+  const fromOrder = dragItem.order
+  if (fromOrder === targetOrder) return
+
+  _items = _items.map((it) => {
+    if (it.id === _draggedItem) return { ...it, order: targetOrder }
+    if (fromOrder < targetOrder) {
+      if (it.order > fromOrder && it.order <= targetOrder) return { ...it, order: it.order - 1 }
+    } else {
+      if (it.order >= targetOrder && it.order < fromOrder) return { ...it, order: it.order + 1 }
+    }
+    return it
+  })
+  updateTargets()
+  engine.emit(GridChanged, undefined)
+})
+
+engine.on(DragEnd, () => {
+  _draggedItem = null
+  engine.emit(GridChanged, undefined)
+})
+
+engine.on(Shuffle, () => {
+  const orders = _items.map((_, i) => i)
+  for (let i = orders.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[orders[i], orders[j]] = [orders[j], orders[i]]
+  }
+  _items = _items.map((it, i) => ({ ...it, order: orders[i] }))
+  updateTargets()
+  engine.emit(GridChanged, undefined)
+})
+
+engine.on(Reset, () => {
+  _items = _items.map((it) => ({ ...it, order: it.id }))
+  updateTargets()
+  engine.emit(GridChanged, undefined)
+})
+
+// ---------------------------------------------------------------------------
+// Frame update
+// ---------------------------------------------------------------------------
+
+export function updateFrame(): void {
+  for (let i = 0; i < ITEM_COUNT; i++) {
+    _springX[i] += (_targetX[i] - _springX[i]) * 0.15
+    _springY[i] += (_targetY[i] - _springY[i]) * 0.15
+  }
+}

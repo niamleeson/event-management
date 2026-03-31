@@ -1,29 +1,58 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { providePulse, useEmit, useSignal, useTween } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, COLUMNS, PAGE_SIZE, STATUS_COLORS,
-  FetchData, SortChanged, FilterChanged, PageChanged, RowExpanded,
-  RowSelected, SelectAll, BulkDelete, SearchChanged, ColumnResized,
-  allData, loading, sortColumn, sortDir, filterStatus, searchQuery,
-  currentPage, expandedRow, selectedRows, columnWidths, expandTween,
+  engine,
+  COLUMNS,
+  PAGE_SIZE,
+  STATUS_COLORS,
+  FetchData,
+  SortChanged,
+  FilterChanged,
+  PageChanged,
+  RowExpanded,
+  RowSelected,
+  SelectAll,
+  BulkDelete,
+  SearchChanged,
+  ColumnResized,
+  allData,
+  loading,
+  sortColumn,
+  sortDir,
+  filterStatus,
+  searchQuery,
+  currentPage,
+  expandedRow,
+  selectedRows,
+  columnWidths,
+  expandTween,
+  AllDataChanged,
+  LoadingChanged,
+  SortColumnChanged,
+  SortDirChanged,
+  FilterStatusChanged,
+  SearchQueryChanged,
+  CurrentPageChanged,
+  ExpandedRowChanged,
+  ExpandTweenVal,
 } from './engine'
 import type { DataRow, Column } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const data = useSignal(allData)
-const isLoading = useSignal(loading)
-const sortCol = useSignal(sortColumn)
-const sortDirection = useSignal(sortDir)
-const filter = useSignal(filterStatus)
-const search = useSignal(searchQuery)
-const page = useSignal(currentPage)
-const expanded = useSignal(expandedRow)
-const selected = useSignal(selectedRows)
-const colWidths = useSignal(columnWidths)
-const expandVal = useTween(expandTween)
+const data = usePulse(AllDataChanged, allData)
+const isLoading = usePulse(LoadingChanged, loading)
+const sortCol = usePulse(SortColumnChanged, sortColumn)
+const sortDirection = usePulse(SortDirChanged, sortDir)
+const filter = usePulse(FilterStatusChanged, filterStatus)
+const search = usePulse(SearchQueryChanged, searchQuery)
+const page = usePulse(CurrentPageChanged, currentPage)
+const expanded = usePulse(ExpandedRowChanged, expandedRow)
+const selected = usePulse(SelectedRowsChanged, selectedRows)
+const colWidths = usePulse(ColumnWidthsChanged, columnWidths)
+const expandVal = usePulse(ExpandTweenVal, expandTween.value)
 
 const filteredData = computed(() => {
   let rows = data.value

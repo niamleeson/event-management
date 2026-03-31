@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
-import { engine, tasks, zoom, TaskMoved, TaskResized, ZoomChanged, TOTAL_DAYS, dayWidth } from './engine'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
+import {
+  engine,
+  tasks,
+  zoom,
+  TaskMoved,
+  TaskResized,
+  ZoomChanged,
+  TOTAL_DAYS,
+  dayWidth,
+  TasksChanged,
+} from './engine'
 import type { Task, ZoomLevel } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const taskList = useSignal(tasks)
-const zoomLevel = useSignal(zoom)
+const taskList = usePulse(TasksChanged, tasks)
+const zoomLevel = usePulse(ZoomChanged, zoom)
 
 const ZOOM_OPTIONS: ZoomLevel[] = ['day', 'week', 'month']
 const ROW_HEIGHT = 40

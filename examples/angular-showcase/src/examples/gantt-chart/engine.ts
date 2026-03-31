@@ -1,28 +1,8 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface Task {
-  id: string
-  name: string
-  start: number  // day offset
-  duration: number
-  color: string
-  dependencies: string[]
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
+export interface Task { id: string; name: string; start: number; duration: number; color: string; dependencies: string[] }
 export const DAYS = 30
 export const DAY_WIDTH = 32
 
@@ -39,65 +19,41 @@ export const INITIAL_TASKS: Task[] = [
   { id: 't10', name: 'Launch', start: 22, duration: 1, color: '#8338ec', dependencies: ['t9'] },
 ]
 
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
-
 export const MoveTask = engine.event<{ id: string; start: number }>('MoveTask')
 export const ResizeTask = engine.event<{ id: string; duration: number }>('ResizeTask')
-export const TaskUpdated = engine.event<Task>('TaskUpdated')
-export const AutoShift = engine.event<string>('AutoShift')
 export const ZoomChange = engine.event<number>('ZoomChange')
 export const SelectTask = engine.event<string | null>('SelectTask')
+export const TasksChanged = engine.event<Task[]>('TasksChanged')
+export const ZoomChanged = engine.event<number>('ZoomChanged')
+export const SelectedTaskChanged = engine.event<string | null>('SelectedTaskChanged')
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
+let tasks = [...INITIAL_TASKS]
 
-export const tasks = engine.signal<Task[]>(
-  TaskUpdated,
-  INITIAL_TASKS,
-  (prev, updated) => prev.map((t) => (t.id === updated.id ? updated : t)),
-)
-
-export const zoomLevel = engine.signal<number>(ZoomChange, 1, (_prev, z) => z)
-export const selectedTaskId = engine.signal<string | null>(SelectTask, null, (_prev, id) => id)
-
-// ---------------------------------------------------------------------------
-// Pipes: move/resize -> update task -> auto-shift dependents
-// ---------------------------------------------------------------------------
+function autoShift(taskId: string) {
+  const parent = tasks.find((t) => t.id === taskId)
+  if (!parent) return
+  const parentEnd = parent.start + parent.duration
+  for (const dep of tasks.filter((t) => t.dependencies.includes(taskId))) {
+    if (dep.start < parentEnd) {
+      tasks = tasks.map((t) => t.id === dep.id ? { ...t, start: parentEnd } : t)
+      autoShift(dep.id)
+    }
+  }
+}
 
 engine.on(MoveTask, ({ id, start }) => {
-  const task = tasks.value.find((t) => t.id === id)
-  if (!task) return
+  const task = tasks.find((t) => t.id === id); if (!task) return
   const clamped = Math.max(0, Math.min(DAYS - task.duration, start))
-  engine.emit(TaskUpdated, { ...task, start: clamped })
-  engine.emit(AutoShift, id)
+  tasks = tasks.map((t) => t.id === id ? { ...t, start: clamped } : t)
+  autoShift(id); engine.emit(TasksChanged, tasks)
 })
 
 engine.on(ResizeTask, ({ id, duration }) => {
-  const task = tasks.value.find((t) => t.id === id)
-  if (!task) return
+  const task = tasks.find((t) => t.id === id); if (!task) return
   const clamped = Math.max(1, Math.min(DAYS - task.start, duration))
-  engine.emit(TaskUpdated, { ...task, duration: clamped })
-  engine.emit(AutoShift, id)
+  tasks = tasks.map((t) => t.id === id ? { ...t, duration: clamped } : t)
+  autoShift(id); engine.emit(TasksChanged, tasks)
 })
 
-// Auto-shift dependent tasks when a task moves/resizes
-engine.on(AutoShift, (taskId) => {
-  const parentTask = tasks.value.find((t) => t.id === taskId)
-  if (!parentTask) return
-
-  const parentEnd = parentTask.start + parentTask.duration
-  const dependents = tasks.value.filter((t) => t.dependencies.includes(taskId))
-
-  for (const dep of dependents) {
-    if (dep.start < parentEnd) {
-      engine.emit(TaskUpdated, { ...dep, start: parentEnd })
-      engine.emit(AutoShift, dep.id)
-    }
-  }
-})
-
-// Start frame loop
-engine.startFrameLoop()
+engine.on(ZoomChange, (z) => engine.emit(ZoomChanged, z))
+engine.on(SelectTask, (id) => engine.emit(SelectedTaskChanged, id))

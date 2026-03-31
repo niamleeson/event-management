@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -43,12 +39,10 @@ export const ClearAll = engine.event('ClearAll')
 
 export const particles: Particle[] = []
 
-export const particleCount: Signal<number> = engine.signal(
-  ParticlesUpdated,
-  0,
-  () => particles.length,
-)
-engine.signalUpdate(particleCount, ClearAll, () => 0)
+export let particleCount = 0
+export const ParticleCountChanged = engine.event('ParticleCountChanged')
+engine.on(ParticlesUpdated, (v: any) => { particleCount = (() => particles.length)(particleCount, v); engine.emit(ParticleCountChanged, particleCount) })
+engine.on(ClearAll, (v: any) => { particleCount = (() => 0)(particleCount, v); engine.emit(ParticleCountChanged, particleCount) })
 
 /* ------------------------------------------------------------------ */
 /*  Spawn logic                                                       */

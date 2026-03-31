@@ -1,34 +1,7 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface Stock {
-  symbol: string
-  name: string
-  price: number
-  change: number
-  changePercent: number
-  color: string
-  history: number[]
-  alert?: string
-}
-
-export interface StockUpdate {
-  symbol: string
-  price: number
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+export interface Stock { symbol: string; name: string; price: number; change: number; changePercent: number; color: string; history: number[]; alert?: string }
 
 export const INITIAL_STOCKS: Stock[] = [
   { symbol: 'PLSE', name: 'Pulse Engine', price: 142.50, change: 0, changePercent: 0, color: '#4361ee', history: [] },
@@ -41,94 +14,37 @@ export const INITIAL_STOCKS: Stock[] = [
   { symbol: 'FRAM', name: 'Framework Ltd', price: 198.70, change: 0, changePercent: 0, color: '#ffd166', history: [] },
 ]
 
-const SPARKLINE_LENGTH = 30
-const ALERT_THRESHOLD = 3 // alert if change > 3%
-
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
-
-export const PriceUpdate = engine.event<StockUpdate>('PriceUpdate')
-export const AlertTriggered = engine.event<{ symbol: string; message: string }>('AlertTriggered')
+export const PriceUpdate = engine.event<{ symbol: string; price: number }>('PriceUpdate')
 export const DismissAlert = engine.event<string>('DismissAlert')
 export const ToggleFeed = engine.event<void>('ToggleFeed')
+export const StocksChanged = engine.event<Stock[]>('StocksChanged')
+export const FeedRunningChanged = engine.event<boolean>('FeedRunningChanged')
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
+let stocks = [...INITIAL_STOCKS]
+let feedRunning = true
 
-export const stocks = engine.signal<Stock[]>(
-  PriceUpdate,
-  INITIAL_STOCKS,
-  (prev, update) => prev.map((s) => {
+engine.on(PriceUpdate, (update) => {
+  stocks = stocks.map((s) => {
     if (s.symbol !== update.symbol) return s
     const change = update.price - s.price
     const changePercent = (change / s.price) * 100
-    const history = [...s.history, update.price].slice(-SPARKLINE_LENGTH)
+    const history = [...s.history, update.price].slice(-30)
     return { ...s, price: update.price, change, changePercent, history }
-  }),
-)
-
-engine.signalUpdate(stocks, DismissAlert, (prev, symbol) =>
-  prev.map((s) => (s.symbol === symbol ? { ...s, alert: undefined } : s)),
-)
-
-engine.signalUpdate(stocks, AlertTriggered, (prev, { symbol, message }) =>
-  prev.map((s) => (s.symbol === symbol ? { ...s, alert: message } : s)),
-)
-
-export const feedRunning = engine.signal<boolean>(ToggleFeed, true, (prev) => !prev)
-
-export const alerts = engine.signal<{ symbol: string; message: string; ts: number }[]>(
-  AlertTriggered,
-  [],
-  (prev, alert) => [{ ...alert, ts: Date.now() }, ...prev].slice(0, 10),
-)
-
-// ---------------------------------------------------------------------------
-// Alert logic: check for big moves
-// ---------------------------------------------------------------------------
-
-engine.pipeIf(PriceUpdate, AlertTriggered, (update) => {
-  const stock = stocks.value.find((s) => s.symbol === update.symbol)
-  if (!stock || stock.history.length < 2) return null
-  const prevPrice = stock.price
-  const changePct = Math.abs((update.price - prevPrice) / prevPrice) * 100
-  if (changePct > ALERT_THRESHOLD) {
-    const direction = update.price > prevPrice ? 'surged' : 'dropped'
-    return {
-      symbol: update.symbol,
-      message: `${stock.name} ${direction} ${changePct.toFixed(1)}%`,
-    }
-  }
-  return null
+  })
+  engine.emit(StocksChanged, stocks)
 })
-
-// ---------------------------------------------------------------------------
-// Mock data feed: update every 500ms
-// ---------------------------------------------------------------------------
+engine.on(DismissAlert, (sym) => { stocks = stocks.map((s) => s.symbol === sym ? { ...s, alert: undefined } : s); engine.emit(StocksChanged, stocks) })
+engine.on(ToggleFeed, () => { feedRunning = !feedRunning; engine.emit(FeedRunningChanged, feedRunning) })
 
 let feedInterval: ReturnType<typeof setInterval> | null = null
-
 export function startFeed() {
   if (feedInterval) return
   feedInterval = setInterval(() => {
-    if (!feedRunning.value) return
-    for (const stock of stocks.value) {
-      const volatility = stock.price * 0.008
-      const change = (Math.random() - 0.48) * volatility
-      const newPrice = Math.max(1, stock.price + change)
-      engine.emit(PriceUpdate, { symbol: stock.symbol, price: Math.round(newPrice * 100) / 100 })
+    if (!feedRunning) return
+    for (const stock of stocks) {
+      const v = stock.price * 0.008
+      engine.emit(PriceUpdate, { symbol: stock.symbol, price: Math.round(Math.max(1, stock.price + (Math.random() - 0.48) * v) * 100) / 100 })
     }
   }, 500)
 }
-
-export function stopFeed() {
-  if (feedInterval) {
-    clearInterval(feedInterval)
-    feedInterval = null
-  }
-}
-
-// Start frame loop
-engine.startFrameLoop()
+export function stopFeed() { if (feedInterval) { clearInterval(feedInterval); feedInterval = null } }

@@ -1,4 +1,4 @@
-import { createEngine, type EventType, type TweenValue, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -40,71 +40,75 @@ export const CARDS: CardInfo[] = [
 // Event declarations
 // ---------------------------------------------------------------------------
 
-export const FlipCard: EventType<number>[] = []
-export const FlipDone: EventType<number>[] = []
-export const HoverCard: EventType<number>[] = []
-export const UnhoverCard: EventType<number>[] = []
-
-for (let i = 0; i < CARD_COUNT; i++) {
-  FlipCard.push(engine.event<number>(`FlipCard_${i}`))
-  FlipDone.push(engine.event<number>(`FlipDone_${i}`))
-  HoverCard.push(engine.event<number>(`HoverCard_${i}`))
-  UnhoverCard.push(engine.event<number>(`UnhoverCard_${i}`))
-}
+export const FlipCard = Array.from({ length: CARD_COUNT }, (_, i) => engine.event<number>(`FlipCard_${i}`))
+export const HoverCard = Array.from({ length: CARD_COUNT }, (_, i) => engine.event<number>(`HoverCard_${i}`))
+export const UnhoverCard = Array.from({ length: CARD_COUNT }, (_, i) => engine.event<number>(`UnhoverCard_${i}`))
 
 // ---------------------------------------------------------------------------
-// Signals — track flip state per card
+// State
 // ---------------------------------------------------------------------------
 
-export const flippedState = engine.signal<boolean[]>(
-  FlipCard[0],
-  new Array(CARD_COUNT).fill(false),
-  (prev) => prev, // placeholder, updated below
-)
+const _flipped = new Uint8Array(CARD_COUNT) // 0 = not flipped, 1 = flipped
+const _rotation = new Float64Array(CARD_COUNT) // current rotation degrees
+const _rotationStart = new Float64Array(CARD_COUNT)
+const _rotationFrom = new Float64Array(CARD_COUNT)
+const _rotationTo = new Float64Array(CARD_COUNT)
+const _rotationActive = new Uint8Array(CARD_COUNT)
+
+const _hoverScale = new Float64Array(CARD_COUNT).fill(100)
+const _hoverScaleTarget = new Float64Array(CARD_COUNT).fill(100)
+
+export function getFlipped(i: number): boolean { return _flipped[i] === 1 }
+export function getRotation(i: number): number { return _rotation[i] }
+export function getHoverScale(i: number): number { return _hoverScale[i] / 100 }
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
 
 for (let i = 0; i < CARD_COUNT; i++) {
-  engine.signalUpdate(flippedState, FlipCard[i], (prev, _id) => {
-    const next = [...prev]
-    next[i] = !next[i]
-    return next
+  engine.on(FlipCard[i], () => {
+    _flipped[i] = _flipped[i] ? 0 : 1
+    _rotationFrom[i] = _rotation[i]
+    _rotationTo[i] = _flipped[i] ? 180 : 0
+    _rotationStart[i] = performance.now()
+    _rotationActive[i] = 1
+  })
+
+  engine.on(HoverCard[i], () => {
+    _hoverScaleTarget[i] = 105
+  })
+
+  engine.on(UnhoverCard[i], () => {
+    _hoverScaleTarget[i] = 100
   })
 }
 
 // ---------------------------------------------------------------------------
-// Tweens — rotation per card (0 or 180 degrees)
-// We use pairs: flipTo180 and flipTo0, toggled by signal
+// Easing
 // ---------------------------------------------------------------------------
 
-export const cardRotation: TweenValue[] = []
-
-for (let i = 0; i < CARD_COUNT; i++) {
-  const rotation = engine.tween({
-    start: FlipCard[i],
-    done: FlipDone[i],
-    from: () => flippedState.value[i] ? 0 : 180,
-    to: () => flippedState.value[i] ? 180 : 0,
-    duration: 600,
-    easing: (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, // easeInOutQuad
-  })
-  cardRotation.push(rotation)
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
 }
 
 // ---------------------------------------------------------------------------
-// Springs — hover scale per card
+// Frame update (called from page via rAF)
 // ---------------------------------------------------------------------------
 
-export const cardHoverScale: SpringValue[] = []
+export function updateFrame(now: number): void {
+  for (let i = 0; i < CARD_COUNT; i++) {
+    if (_rotationActive[i]) {
+      const elapsed = now - _rotationStart[i]
+      const t = Math.min(1, elapsed / 600)
+      _rotation[i] = _rotationFrom[i] + (_rotationTo[i] - _rotationFrom[i]) * easeInOutQuad(t)
+      if (t >= 1) {
+        _rotationActive[i] = 0
+        _rotation[i] = _rotationTo[i]
+      }
+    }
 
-for (let i = 0; i < CARD_COUNT; i++) {
-  const hoverSignal = engine.signal<number>(HoverCard[i], 100, () => 105)
-  engine.signalUpdate(hoverSignal, UnhoverCard[i], () => 100)
-  const spring = engine.spring(hoverSignal, {
-    stiffness: 300,
-    damping: 20,
-    restThreshold: 0.1,
-  })
-  cardHoverScale.push(spring)
+    // Spring-like hover scale
+    _hoverScale[i] += (_hoverScaleTarget[i] - _hoverScale[i]) * 0.15
+  }
 }
-
-// Start frame loop
-engine.startFrameLoop()

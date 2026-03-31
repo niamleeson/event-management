@@ -1,15 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
-import { engine, stocks, selectedStock, alerts, StockSelected, DismissAlert } from './engine'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
+import {
+  engine,
+  stocks,
+  selectedStock,
+  alerts,
+  StockSelected,
+  DismissAlert,
+  StocksChanged,
+  SelectedStockChanged,
+  AlertsChanged,
+} from './engine'
 import type { Stock } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const stockList = useSignal(stocks)
-const selected = useSignal(selectedStock)
-const alertList = useSignal(alerts)
+const stockList = usePulse(StocksChanged, stocks)
+const selected = usePulse(SelectedStockChanged, selectedStock)
+const alertList = usePulse(AlertsChanged, alerts)
 
 const selectedData = computed(() => stockList.value.find(s => s.symbol === selected.value))
 

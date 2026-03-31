@@ -1,4 +1,4 @@
-import { createEngine, type EventType, type TweenValue, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -34,136 +34,147 @@ export const CARDS: CardData[] = [
 // ---------------------------------------------------------------------------
 
 export const PageLoaded = engine.event<void>('PageLoaded')
-export const AllCardsEntered = engine.event<void>('AllCardsEntered')
-export const WelcomeFadeStart = engine.event<void>('WelcomeFadeStart')
-export const WelcomeFadeDone = engine.event<void>('WelcomeFadeDone')
+export const Frame = engine.event<number>('Frame')
 
 // Per-card events
-export const CardEnter: EventType<number>[] = []
-export const CardEntered: EventType<number>[] = []
-export const HoverCard: EventType<number>[] = []
-export const UnhoverCard: EventType<number>[] = []
+export const HoverCard = engine.event<number>('HoverCard')
+export const UnhoverCard = engine.event<number>('UnhoverCard')
 
-for (let i = 0; i < CARD_COUNT; i++) {
-  CardEnter.push(engine.event<number>(`CardEnter_${i}`))
-  CardEntered.push(engine.event<number>(`CardEntered_${i}`))
-  HoverCard.push(engine.event<number>(`HoverCard_${i}`))
-  UnhoverCard.push(engine.event<number>(`UnhoverCard_${i}`))
-}
+// State change events for React
+export const CardAnimStateChanged = engine.event<{
+  opacities: number[]
+  translateYs: number[]
+  hoverScales: number[]
+  hoverShadows: number[]
+}>('CardAnimStateChanged')
+
+export const AllCardsEnteredEvent = engine.event<boolean>('AllCardsEntered')
+export const WelcomeAnimChanged = engine.event<{ opacity: number; translateY: number }>('WelcomeAnimChanged')
 
 // ---------------------------------------------------------------------------
-// Pipe: PageLoaded -> staggered CardEnter events
-// Each card fires after a delay, creating a cascade effect
+// Animation state
+// ---------------------------------------------------------------------------
+
+const cardOpacity: number[] = Array(CARD_COUNT).fill(0)
+const cardTranslateY: number[] = Array(CARD_COUNT).fill(40)
+const cardHoverScale: number[] = Array(CARD_COUNT).fill(1)
+const cardHoverShadow: number[] = Array(CARD_COUNT).fill(0)
+const cardHoverTarget: number[] = Array(CARD_COUNT).fill(0)
+const cardHoverVel: number[] = Array(CARD_COUNT).fill(0)
+
+let cardEnteredCount = 0
+let cardEnterTriggered: boolean[] = Array(CARD_COUNT).fill(false)
+let allEntered = false
+
+// Welcome message animation
+let welcomeOpacity = 0
+let welcomeTranslateY = 20
+let welcomePhase: 'hidden' | 'fadingIn' | 'slidingUp' | 'done' = 'hidden'
+
+// ---------------------------------------------------------------------------
+// Page load -> staggered card entrance
 // ---------------------------------------------------------------------------
 
 engine.on(PageLoaded, () => {
   for (let i = 0; i < CARD_COUNT; i++) {
     setTimeout(() => {
-      engine.emit(CardEnter[i], i)
-    }, i * 150) // 150ms stagger between each card
+      cardEnterTriggered[i] = true
+    }, i * 150)
   }
 })
 
 // ---------------------------------------------------------------------------
-// Per-card tweens: opacity and translateY for entrance
+// Hover handlers
 // ---------------------------------------------------------------------------
 
-export const cardOpacity: TweenValue[] = []
-export const cardTranslateY: TweenValue[] = []
-export const cardHoverScale: TweenValue[] = []
-export const cardHoverShadow: SpringValue[] = []
-
-for (let i = 0; i < CARD_COUNT; i++) {
-  // Entrance opacity: 0 -> 1
-  const opacity = engine.tween({
-    start: CardEnter[i],
-    done: CardEntered[i],
-    from: 0,
-    to: 1,
-    duration: 500,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3), // easeOutCubic
-  })
-  cardOpacity.push(opacity)
-
-  // Entrance translateY: 40px -> 0px
-  const translateY = engine.tween({
-    start: CardEnter[i],
-    from: 40,
-    to: 0,
-    duration: 500,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  })
-  cardTranslateY.push(translateY)
-
-  // Hover scale: driven by hover/unhover events
-  const scale = engine.tween({
-    start: HoverCard[i],
-    cancel: UnhoverCard[i],
-    from: 1,
-    to: 1.05,
-    duration: 200,
-    easing: (t: number) => t * (2 - t), // easeOutQuad
-  })
-  cardHoverScale.push(scale)
-
-  // Hover shadow: spring-driven for smooth tracking
-  // Use a signal that tracks the hover state
-  const hoverSignal = engine.signal<number>(HoverCard[i], 0, () => 20)
-  engine.signalUpdate(hoverSignal, UnhoverCard[i], () => 0)
-  const shadow = engine.spring(hoverSignal, {
-    stiffness: 300,
-    damping: 20,
-    restThreshold: 0.1,
-  })
-  cardHoverShadow.push(shadow)
-}
-
-// ---------------------------------------------------------------------------
-// Join: all CardEntered -> AllCardsEntered
-// Fires when every card has completed its entrance animation
-// ---------------------------------------------------------------------------
-
-engine.join(
-  CardEntered,
-  AllCardsEntered,
-  {
-    do: () => undefined,
-  },
-)
-
-// After all cards enter, trigger welcome fade
-engine.pipe(AllCardsEntered, WelcomeFadeStart, () => undefined)
-
-// ---------------------------------------------------------------------------
-// Welcome message tween
-// ---------------------------------------------------------------------------
-
-export const welcomeOpacity = engine.tween({
-  start: WelcomeFadeStart,
-  done: WelcomeFadeDone,
-  from: 0,
-  to: 1,
-  duration: 800,
-  easing: (t: number) => t * t * (3 - 2 * t), // smoothstep
+engine.on(HoverCard, (index) => {
+  cardHoverTarget[index] = 20
 })
 
-export const welcomeTranslateY = engine.tween({
-  start: WelcomeFadeStart,
-  from: 20,
-  to: 0,
-  duration: 800,
-  easing: (t: number) => 1 - Math.pow(1 - t, 3),
+engine.on(UnhoverCard, (index) => {
+  cardHoverTarget[index] = 0
 })
 
 // ---------------------------------------------------------------------------
-// Signals to track state
+// Frame loop: animate everything
 // ---------------------------------------------------------------------------
 
-export const allEntered = engine.signal<boolean>(
-  AllCardsEntered,
-  false,
-  () => true,
-)
+engine.on(Frame, (_dt) => {
+  let dirty = false
 
-// Start the frame loop for animations
-engine.startFrameLoop()
+  for (let i = 0; i < CARD_COUNT; i++) {
+    // Entrance animation
+    if (cardEnterTriggered[i] && cardOpacity[i] < 0.999) {
+      cardOpacity[i] += (1 - cardOpacity[i]) * 0.08
+      cardTranslateY[i] += (0 - cardTranslateY[i]) * 0.08
+      if (cardOpacity[i] > 0.999) {
+        cardOpacity[i] = 1
+        cardTranslateY[i] = 0
+        cardEnteredCount++
+        if (cardEnteredCount === CARD_COUNT && !allEntered) {
+          allEntered = true
+          engine.emit(AllCardsEnteredEvent, true)
+          welcomePhase = 'fadingIn'
+        }
+      }
+      dirty = true
+    }
+
+    // Hover scale: spring toward target (1 or 1.05)
+    const scaleTarget = cardHoverTarget[i] > 0 ? 1.05 : 1
+    const scaleDiff = scaleTarget - cardHoverScale[i]
+    if (Math.abs(scaleDiff) > 0.001) {
+      cardHoverScale[i] += scaleDiff * 0.15
+      dirty = true
+    }
+
+    // Hover shadow: spring toward target
+    const shadowDiff = cardHoverTarget[i] - cardHoverShadow[i]
+    cardHoverVel[i] += shadowDiff * 0.05
+    cardHoverVel[i] *= 0.8
+    if (Math.abs(cardHoverVel[i]) > 0.01 || Math.abs(shadowDiff) > 0.1) {
+      cardHoverShadow[i] += cardHoverVel[i]
+      dirty = true
+    }
+  }
+
+  // Welcome animation
+  if (welcomePhase === 'fadingIn') {
+    welcomeOpacity += (1 - welcomeOpacity) * 0.06
+    if (welcomeOpacity > 0.99) {
+      welcomeOpacity = 1
+      welcomePhase = 'slidingUp'
+    }
+    engine.emit(WelcomeAnimChanged, { opacity: welcomeOpacity, translateY: welcomeTranslateY })
+    dirty = true
+  } else if (welcomePhase === 'slidingUp') {
+    welcomeTranslateY += (0 - welcomeTranslateY) * 0.08
+    if (Math.abs(welcomeTranslateY) < 0.5) {
+      welcomeTranslateY = 0
+      welcomePhase = 'done'
+    }
+    engine.emit(WelcomeAnimChanged, { opacity: welcomeOpacity, translateY: welcomeTranslateY })
+    dirty = true
+  }
+
+  if (dirty) {
+    engine.emit(CardAnimStateChanged, {
+      opacities: [...cardOpacity],
+      translateYs: [...cardTranslateY],
+      hoverScales: [...cardHoverScale],
+      hoverShadows: [...cardHoverShadow],
+    })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Start frame loop
+// ---------------------------------------------------------------------------
+
+let last = performance.now()
+requestAnimationFrame(function loop() {
+  const now = performance.now()
+  engine.emit(Frame, now - last)
+  last = now
+  requestAnimationFrame(loop)
+})

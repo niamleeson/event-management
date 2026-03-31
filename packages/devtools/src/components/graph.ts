@@ -1,7 +1,8 @@
 // ---- DAG Network Diagram Component ----
-// Renders all event types and rules as a directed graph using SVG.
+// Renders event types as nodes and handler-discovered edges using SVG.
+// The DAG is built from runtime tracing -- the engine discovers edges when handlers emit events.
 
-import { computeLayout, type LayoutNode, type LayoutEdge, type LayoutResult } from '../layout.js'
+import { computeDAGLayout, type LayoutNode, type LayoutEdge, type LayoutResult } from '../layout.js'
 import { el, svg, cleanName, truncate } from '../utils.js'
 import type { PulseEngine } from '../types.js'
 
@@ -29,24 +30,17 @@ export function createGraphComponent(engine: PulseEngine): GraphComponent {
   }
 
   function update(): void {
-    // Get rules from the engine
-    let rules: Array<{
-      id: string
-      name: string
-      mode: string
-      triggers: Array<{ name: string }>
-      outputs: Array<{ name: string }>
-    }>
-
+    // Read the DAG from the engine (built from runtime tracing)
+    let dag: { nodes: Array<{ id: string; name: string }>; edges: Array<[{ id: string }, { id: string }]> }
     try {
-      rules = engine.getRules()
+      dag = engine.getDAG()
     } catch {
-      rules = []
+      dag = { nodes: [], edges: [] }
     }
 
-    if (rules.length === 0) {
+    if (dag.nodes.length === 0) {
       container.innerHTML = ''
-      container.appendChild(el('div', { cls: 'pd-graph-empty', text: 'No rules registered yet.' }))
+      container.appendChild(el('div', { cls: 'pd-graph-empty', text: 'No event types discovered yet.' }))
       container.appendChild(tooltip)
       svgEl = null
       edgeElements.clear()
@@ -54,7 +48,7 @@ export function createGraphComponent(engine: PulseEngine): GraphComponent {
       return
     }
 
-    layout = computeLayout(rules)
+    layout = computeDAGLayout(dag)
     edgeElements.clear()
 
     // Create SVG
@@ -99,26 +93,24 @@ export function createGraphComponent(engine: PulseEngine): GraphComponent {
     }
     svgEl.appendChild(edgesGroup)
 
-    // Render nodes
+    // Render nodes (all event types)
     const nodesGroup = svg('g', { class: 'pd-nodes' })
     for (const node of layout.nodes) {
       const group = svg('g', {
-        class: node.kind === 'rule' ? 'pd-graph-node-rule' : 'pd-graph-node-event',
+        class: 'pd-graph-node-event',
         transform: `translate(${node.x}, ${node.y})`,
       })
 
       const rect = svg('rect', {
         width: String(node.width),
         height: String(node.height),
-        rx: node.kind === 'rule' ? '10' : '4',
-        ry: node.kind === 'rule' ? '10' : '4',
+        rx: '4',
+        ry: '4',
       })
 
       // Assign color based on event type name hash
-      if (node.kind === 'event') {
-        const hue = hashToHue(node.name)
-        rect.setAttribute('stroke', `hsl(${hue}, 65%, 55%)`)
-      }
+      const hue = hashToHue(node.name)
+      rect.setAttribute('stroke', `hsl(${hue}, 65%, 55%)`)
 
       const displayName = truncate(cleanName(node.name), 18)
       const label = svg('text', {
@@ -158,27 +150,19 @@ export function createGraphComponent(engine: PulseEngine): GraphComponent {
   }
 
   function showTooltip(node: LayoutNode, event: MouseEvent): void {
-    let info = ''
-    if (node.kind === 'event') {
-      info = `Event Type: ${cleanName(node.name)}\nID: ${node.name}`
-    } else {
-      const ruleId = node.id.replace('rule:', '')
-      info = `Rule: ${cleanName(node.name)}\nID: ${ruleId}`
-      // Try to find rule details
-      try {
-        const rules = engine.getRules()
-        const rule = rules.find((r) => r.id === ruleId)
-        if (rule) {
-          info += `\nMode: ${rule.mode}`
-          info += `\nTriggers: ${rule.triggers.map((t) => cleanName(t.name)).join(', ')}`
-          if (rule.outputs.length > 0) {
-            info += `\nOutputs: ${rule.outputs.map((o) => cleanName(o.name)).join(', ')}`
-          }
-        }
-      } catch {
-        // ignore
+    let info = `Event Type: ${cleanName(node.name)}\nID: ${node.id}`
+
+    // Find rules that are triggered by this event type
+    try {
+      const rules = engine.getRules()
+      const consumers = rules.filter((r) => r.triggers.some((t) => t.name === node.name))
+      if (consumers.length > 0) {
+        info += `\nConsumers: ${consumers.map((r) => cleanName(r.name)).join(', ')}`
       }
+    } catch {
+      // ignore
     }
+
     tooltip.textContent = info
     tooltip.style.display = 'block'
     positionTooltip(event)

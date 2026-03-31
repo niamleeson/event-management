@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useSignal, useTween, useEmit } from '@pulse/vue'
+import { useEmit, usePulse } from '@pulse/vue'
 import {
   count,
   animatedCount,
@@ -8,13 +8,14 @@ import {
   bounceScale,
   Increment,
   Decrement,
+  CountChanged,
 } from './engine'
 
 const emit = useEmit()
-const currentCount = useSignal(count)
-const animCount = useTween(animatedCount)
-const colorT = useTween(colorIntensity)
-const bounce = useTween(bounceScale)
+const currentCount = usePulse(CountChanged, count)
+const animCount = usePulse(AnimatedCountVal, animatedCount.value)
+const colorT = usePulse(ColorIntensityVal, colorIntensity.value)
+const bounce = usePulse(BounceScaleVal, bounceScale.value)
 
 function lerpColor(
   r1: number, g1: number, b1: number,

@@ -9,7 +9,7 @@
 export interface LayoutNode {
   id: string
   name: string
-  kind: 'event' | 'rule'
+  kind: 'event'
   /** Assigned layer (column) */
   layer: number
   /** Assigned position within the layer (row) */
@@ -36,85 +36,55 @@ export interface LayoutResult {
 interface GraphNode {
   id: string
   name: string
-  kind: 'event' | 'rule'
+  kind: 'event'
   outEdges: string[]
   inEdges: string[]
 }
 
 const NODE_WIDTH = 140
 const NODE_HEIGHT = 40
-const RULE_WIDTH = 160
-const RULE_HEIGHT = 44
 const LAYER_GAP = 180
 const NODE_GAP = 56
 const PADDING = 40
 
 /**
  * Compute a layered layout for the DAG.
+ * Nodes are event types; edges are event-to-event (discovered at runtime when handlers emit events).
  *
- * @param rules - Array of rules from the engine
+ * @param dag - The DAG from engine.getDAG()
  * @returns LayoutResult with positioned nodes and routed edges
  */
-export function computeLayout(
-  rules: Array<{
-    id: string
-    name: string
-    mode: string
-    triggers: Array<{ name: string }>
-    outputs: Array<{ name: string }>
-  }>,
+export function computeDAGLayout(
+  dag: {
+    nodes: Array<{ id: string; name: string }>
+    edges: Array<[{ id: string }, { id: string }]>
+  },
 ): LayoutResult {
-  if (rules.length === 0) {
+  if (dag.nodes.length === 0) {
     return { nodes: [], edges: [], width: PADDING * 2, height: PADDING * 2 }
   }
 
-  // Build the graph with event nodes and rule nodes
+  // Build the graph
   const nodeMap = new Map<string, GraphNode>()
   const rawEdges: Array<{ from: string; to: string }> = []
 
-  // Collect all event type names (deduplicated)
-  const eventNames = new Set<string>()
-  for (const rule of rules) {
-    for (const t of rule.triggers) eventNames.add(t.name)
-    for (const o of rule.outputs) eventNames.add(o.name)
-  }
-
-  // Create event nodes
-  for (const name of eventNames) {
-    nodeMap.set(`evt:${name}`, {
-      id: `evt:${name}`,
-      name,
+  // Create event type nodes
+  for (const node of dag.nodes) {
+    nodeMap.set(node.id, {
+      id: node.id,
+      name: node.name,
       kind: 'event',
       outEdges: [],
       inEdges: [],
     })
   }
 
-  // Create rule nodes and edges
-  for (const rule of rules) {
-    const ruleId = `rule:${rule.id}`
-    nodeMap.set(ruleId, {
-      id: ruleId,
-      name: rule.name,
-      kind: 'rule',
-      outEdges: [],
-      inEdges: [],
-    })
-
-    // Edges: trigger event -> rule
-    for (const t of rule.triggers) {
-      const fromId = `evt:${t.name}`
-      rawEdges.push({ from: fromId, to: ruleId })
-      nodeMap.get(fromId)!.outEdges.push(ruleId)
-      nodeMap.get(ruleId)!.inEdges.push(fromId)
-    }
-
-    // Edges: rule -> output event
-    for (const o of rule.outputs) {
-      const toId = `evt:${o.name}`
-      rawEdges.push({ from: ruleId, to: toId })
-      nodeMap.get(ruleId)!.outEdges.push(toId)
-      nodeMap.get(toId)!.inEdges.push(ruleId)
+  // Create edges (EventType -> EventType)
+  for (const [from, to] of dag.edges) {
+    if (nodeMap.has(from.id) && nodeMap.has(to.id)) {
+      rawEdges.push({ from: from.id, to: to.id })
+      nodeMap.get(from.id)!.outEdges.push(to.id)
+      nodeMap.get(to.id)!.inEdges.push(from.id)
     }
   }
 
@@ -129,22 +99,19 @@ export function computeLayout(
   let maxY = 0
 
   for (const [layerIdx, nodeIds] of layerOrder.entries()) {
-    const totalHeight =
-      nodeIds.length * (NODE_HEIGHT + NODE_GAP) - NODE_GAP
     const startY = PADDING
 
     for (const [posIdx, nodeId] of nodeIds.entries()) {
       const gn = nodeMap.get(nodeId)!
-      const isRule = gn.kind === 'rule'
-      const w = isRule ? RULE_WIDTH : NODE_WIDTH
-      const h = isRule ? RULE_HEIGHT : NODE_HEIGHT
+      const w = NODE_WIDTH
+      const h = NODE_HEIGHT
       const x = PADDING + layerIdx * LAYER_GAP
       const y = startY + posIdx * (NODE_HEIGHT + NODE_GAP)
 
       layoutNodes.push({
         id: nodeId,
         name: gn.name,
-        kind: gn.kind,
+        kind: 'event',
         layer: layerIdx,
         x,
         y,
@@ -192,6 +159,11 @@ export function computeLayout(
     height: Math.max(totalHeight, 200),
   }
 }
+
+/**
+ * @deprecated Use computeDAGLayout instead. Kept for backward compatibility.
+ */
+export const computeLayout = computeDAGLayout as any
 
 /**
  * Assign layers using longest path from sources.

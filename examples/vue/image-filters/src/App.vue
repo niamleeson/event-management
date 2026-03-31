@@ -1,18 +1,31 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, FilterValueChanged, FilterReordered, Undo, Redo, ResetAll, SplitChanged,
-  filters, splitPosition, canUndo, canRedo,
+  engine,
+  FilterValueChanged,
+  FilterReordered,
+  Undo,
+  Redo,
+  ResetAll,
+  SplitChanged,
+  filters,
+  splitPosition,
+  canUndo,
+  canRedo,
+  FiltersChanged,
+  SplitPositionChanged,
+  CanUndoChanged,
+  CanRedoChanged,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const filterList = useSignal(filters)
-const split = useSignal(splitPosition)
-const hasUndo = useSignal(canUndo)
-const hasRedo = useSignal(canRedo)
+const filterList = usePulse(FiltersChanged, filters)
+const split = usePulse(SplitPositionChanged, splitPosition)
+const hasUndo = usePulse(CanUndoChanged, canUndo)
+const hasRedo = usePulse(CanRedoChanged, canRedo)
 
 const filterCSS = computed(() => {
   return filterList.value.map(f => `${f.prop}(${f.value}${f.unit})`).join(' ')

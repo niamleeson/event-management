@@ -1,108 +1,51 @@
-import { createEngine, type EventType, type TweenValue, type SpringValue } from '@pulse/core'
-
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
+import { createEngine, type EventType } from '@pulse/core'
 
 export const engine = createEngine()
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 export const LAYER_COUNT = 5
-
-export interface Layer {
-  depth: number
-  color: string
-  label: string
-}
-
+export interface Layer { depth: number; color: string; label: string }
 export const LAYERS: Layer[] = [
-  { depth: 0, color: '#1a1a2e', label: 'Background' },
-  { depth: 50, color: '#16213e', label: 'Mountains' },
-  { depth: 100, color: '#0f3460', label: 'Hills' },
-  { depth: 150, color: '#533483', label: 'Trees' },
+  { depth: 0, color: '#1a1a2e', label: 'Background' }, { depth: 50, color: '#16213e', label: 'Mountains' },
+  { depth: 100, color: '#0f3460', label: 'Hills' }, { depth: 150, color: '#533483', label: 'Trees' },
   { depth: 200, color: '#e94560', label: 'Foreground' },
 ]
-
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
 
 export const MouseMove = engine.event<{ x: number; y: number }>('MouseMove')
 export const ToggleTheme = engine.event<void>('ToggleTheme')
 export const PageEnter = engine.event<void>('PageEnter')
-
-// Per-layer entrance
-export const LayerEnter: EventType<void>[] = []
-export const LayerEnterDone: EventType<void>[] = []
+export const CameraTiltXChanged = engine.event<number>('CameraTiltXChanged')
+export const CameraTiltYChanged = engine.event<number>('CameraTiltYChanged')
+export const IsDarkChanged = engine.event<boolean>('IsDarkChanged')
+export const LayerOpacityChanged: EventType<{ index: number; value: number }>[] = []
+export const LayerTranslateYChanged: EventType<{ index: number; value: number }>[] = []
 
 for (let i = 0; i < LAYER_COUNT; i++) {
-  LayerEnter.push(engine.event<void>(`LayerEnter_${i}`))
-  LayerEnterDone.push(engine.event<void>(`LayerEnterDone_${i}`))
+  LayerOpacityChanged.push(engine.event<{ index: number; value: number }>('LayerOpacity_' + i))
+  LayerTranslateYChanged.push(engine.event<{ index: number; value: number }>('LayerTranslateY_' + i))
 }
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
+let isDark = true, tiltX = 0, tiltY = 0, posX = 0, posY = 0, velX = 0, velY = 0
 
-// Mouse position normalized to -1..1
-export const mouseX = engine.signal<number>(MouseMove, 0, (_prev, pos) => pos.x)
-export const mouseY = engine.signal<number>(MouseMove, 0, (_prev, pos) => pos.y)
+engine.on(MouseMove, (pos) => { tiltX = pos.x; tiltY = pos.y })
+engine.on(ToggleTheme, () => { isDark = !isDark; engine.emit(IsDarkChanged, isDark) })
 
-// Day/night theme
-export const isDark = engine.signal<boolean>(ToggleTheme, true, (prev) => !prev)
+function springLoop() {
+  velX = (velX + (tiltX - posX) * 0.08) * 0.986; posX += velX; engine.emit(CameraTiltXChanged, posX)
+  velY = (velY + (tiltY - posY) * 0.08) * 0.986; posY += velY; engine.emit(CameraTiltYChanged, posY)
+  requestAnimationFrame(springLoop)
+}
+requestAnimationFrame(springLoop)
 
-// ---------------------------------------------------------------------------
-// Springs: camera tilt from mouse
-// ---------------------------------------------------------------------------
-
-export const cameraTiltX = engine.spring(mouseX, {
-  stiffness: 80,
-  damping: 14,
-  restThreshold: 0.001,
-})
-
-export const cameraTiltY = engine.spring(mouseY, {
-  stiffness: 80,
-  damping: 14,
-  restThreshold: 0.001,
-})
-
-// ---------------------------------------------------------------------------
-// Tweens: staggered layer entrance
-// ---------------------------------------------------------------------------
-
-export const layerOpacity: TweenValue[] = []
-export const layerTranslateY: TweenValue[] = []
+function animateTo(from: number, to: number, dur: number, ease: (t: number) => number, cb: (v: number) => void) {
+  const s = performance.now()
+  function tick() { const t = Math.min(1, (performance.now() - s) / dur); cb(from + (to - from) * ease(t)); if (t < 1) requestAnimationFrame(tick) }
+  requestAnimationFrame(tick)
+}
 
 engine.on(PageEnter, () => {
   for (let i = 0; i < LAYER_COUNT; i++) {
     setTimeout(() => {
-      engine.emit(LayerEnter[i], undefined)
+      animateTo(0, 1, 600, (t) => 1 - Math.pow(1 - t, 3), (v) => engine.emit(LayerOpacityChanged[i], { index: i, value: v }))
+      animateTo(60, 0, 600, (t) => 1 - Math.pow(1 - t, 3), (v) => engine.emit(LayerTranslateYChanged[i], { index: i, value: v }))
     }, i * 200)
   }
 })
-
-for (let i = 0; i < LAYER_COUNT; i++) {
-  layerOpacity.push(engine.tween({
-    start: LayerEnter[i],
-    done: LayerEnterDone[i],
-    from: 0,
-    to: 1,
-    duration: 600,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-
-  layerTranslateY.push(engine.tween({
-    start: LayerEnter[i],
-    from: 60,
-    to: 0,
-    duration: 600,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-}
-
-// Start frame loop
-engine.startFrameLoop()

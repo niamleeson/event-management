@@ -1,9 +1,9 @@
-import { useSignal, useTween, useEmit } from '@pulse/solid'
+import { usePulse, useEmit } from '@pulse/solid'
 import {
-  count,
-  animatedCount,
-  colorIntensity,
-  bounceScale,
+  CountChanged,
+  AnimatedCountChanged,
+  ColorIntensityChanged,
+  BounceScaleChanged,
   Increment,
   Decrement,
 } from './engine'
@@ -24,13 +24,10 @@ function lerpColor(
 }
 
 function getBackgroundColor(intensity: number): string {
-  // intensity: -1 (full red) to 0 (neutral) to 1 (full green)
   if (intensity <= 0) {
-    // Neutral to red
     const t = Math.abs(intensity)
     return lerpColor(248, 249, 250, 255, 200, 200, t)
   } else {
-    // Neutral to green
     return lerpColor(248, 249, 250, 200, 255, 210, intensity)
   }
 }
@@ -47,16 +44,19 @@ function getTextColor(intensity: number): string {
 
 export default function App() {
   const emit = useEmit()
-  const currentCount = useSignal(count)
-  const animCount = useTween(animatedCount)
-  const colorT = useTween(colorIntensity)
-  const bounce = useTween(bounceScale)
+  const currentCount = usePulse(CountChanged, 0)
+  const animCount = usePulse(AnimatedCountChanged, 0)
+  const colorT = usePulse(ColorIntensityChanged, 0)
+  const bounce = usePulse(BounceScaleChanged, 1)
+
+  const bgColor = getBackgroundColor(colorT())
+  const textColor = getTextColor(colorT())
 
   return (
     <div
       style={{
         'min-height': '100vh',
-        background: getBackgroundColor(colorT()),
+        background: bgColor,
         display: 'flex',
         'flex-direction': 'column',
         'align-items': 'center',
@@ -68,10 +68,10 @@ export default function App() {
     >
       <h1
         style={{
-          'font-size': '28px',
-          'font-weight': '700',
+          'font-size': 28,
+          'font-weight': 700,
           color: '#1a1a2e',
-          'margin-bottom': '8px',
+          'margin-bottom': 8,
         }}
       >
         Animated Counter
@@ -79,26 +79,26 @@ export default function App() {
       <p
         style={{
           color: '#6c757d',
-          'font-size': '14px',
-          'margin-bottom': '48px',
+          'font-size': 14,
+          'margin-bottom': 48,
         }}
       >
-        Tweens smoothly animate the count and background color
+        Spring physics smoothly animate the count and background color
       </p>
 
       {/* Counter display */}
       <div
         style={{
-          transform: `scale(${bounce()})`,
-          'margin-bottom': '48px',
+          transform: `scale(${bounce})`,
+          'margin-bottom': 48,
         }}
       >
         <div
           style={{
-            'font-size': '120px',
-            'font-weight': '800',
-            color: getTextColor(colorT()),
-            'line-height': '1',
+            'font-size': 120,
+            'font-weight': 800,
+            color: textColor,
+            'line-height': 1,
             'text-align': 'center',
             'font-variant-numeric': 'tabular-nums',
             transition: 'color 0.3s',
@@ -110,28 +110,28 @@ export default function App() {
         <div
           style={{
             'text-align': 'center',
-            'font-size': '14px',
+            'font-size': 14,
             color: '#aaa',
-            'margin-top': '8px',
+            'margin-top': 8,
           }}
         >
-          actual: {currentCount()} | animated: {animCount().toFixed(1)}
+          actual: {currentCount} | animated: {animCount().toFixed(1)}
         </div>
       </div>
 
       {/* Buttons */}
-      <div style={{ display: 'flex', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: 16 }}>
         <button
           onClick={() => emit(Decrement, undefined)}
           style={{
-            width: '80px',
-            height: '80px',
-            'border-radius': '20px',
+            width: 80,
+            height: 80,
+            'border-radius': 20,
             border: 'none',
             background: '#e63946',
             color: '#fff',
-            'font-size': '36px',
-            'font-weight': '700',
+            'font-size': 36,
+            'font-weight': 700,
             cursor: 'pointer',
             'box-shadow': '0 4px 12px rgba(230, 57, 70, 0.3)',
             transition: 'transform 0.1s, box-shadow 0.1s',
@@ -151,14 +151,14 @@ export default function App() {
         <button
           onClick={() => emit(Increment, undefined)}
           style={{
-            width: '80px',
-            height: '80px',
-            'border-radius': '20px',
+            width: 80,
+            height: 80,
+            'border-radius': 20,
             border: 'none',
             background: '#4361ee',
             color: '#fff',
-            'font-size': '36px',
-            'font-weight': '700',
+            'font-size': 36,
+            'font-weight': 700,
             cursor: 'pointer',
             'box-shadow': '0 4px 12px rgba(67, 97, 238, 0.3)',
             transition: 'transform 0.1s, box-shadow 0.1s',
@@ -180,9 +180,9 @@ export default function App() {
       {/* Hint */}
       <p
         style={{
-          'margin-top': '48px',
+          'margin-top': 48,
           color: '#bbb',
-          'font-size': '13px',
+          'font-size': 13,
         }}
       >
         Color shifts green for positive, red for negative (saturates at +/-10)

@@ -104,9 +104,7 @@ export class DevTools {
       this.engine.debug.onCycleStart = undefined
       this.engine.debug.onCycleEnd = undefined
       this.engine.debug.onEventDeposited = undefined
-      this.engine.debug.onEventConsumed = undefined
       this.engine.debug.onRuleFired = undefined
-      this.engine.debug.onTweenUpdate = undefined
     }
 
     // Stop update loop
@@ -365,8 +363,8 @@ export class DevTools {
         duration: cycle.duration,
       })
 
-      // Refresh graph and inspector after each cycle
-      if (this.activeTab === 'graph') this.graph.update()
+      // Refresh graph after each cycle (edges may be discovered dynamically)
+      this.graph.update()
       if (this.activeTab === 'inspector') this.inspector.update()
     }
 
@@ -380,37 +378,24 @@ export class DevTools {
       })
     }
 
-    debug.onEventConsumed = (event, rule) => {
-      this.timeline.markConsumed(event.seq, rule)
-      this.timeline.addEvent({
-        kind: 'consume',
-        timestamp: Date.now(),
-        eventType: event.type.name,
-        payload: event.payload,
-        seq: event.seq,
-        ruleId: rule.id,
-        ruleName: rule.name,
-      })
-
-      // Animate the graph edge
-      const fromId = `evt:${event.type.name}`
-      const toId = `rule:${rule.id}`
-      this.graph.highlightEdge(fromId, toId)
-    }
-
     debug.onRuleFired = (rule, _inputs, outputs) => {
-      // Highlight output edges
+      // Highlight event-to-event edges based on what was consumed and what was emitted
       for (const output of outputs) {
         if (output && output.type) {
-          const fromId = `rule:${rule.id}`
-          const toId = `evt:${output.type.name}`
-          this.graph.highlightEdge(fromId, toId)
+          // Try to find the triggering event type for this rule to highlight the edge
+          try {
+            const rules = this.engine.getRules()
+            const ruleInfo = rules.find((r) => r.id === rule.id)
+            if (ruleInfo) {
+              for (const trigger of ruleInfo.triggers) {
+                this.graph.highlightEdge(trigger.name, output.type.name)
+              }
+            }
+          } catch {
+            // ignore
+          }
         }
       }
-    }
-
-    debug.onTweenUpdate = (_tween) => {
-      // Inspector will pick up changes on next update cycle
     }
   }
 
@@ -485,7 +470,7 @@ export class DevTools {
   // ---- Update Loop ----
 
   private startUpdateLoop(): void {
-    // Periodically update the inspector (for tweens/springs that animate)
+    // Periodically update the inspector
     this.updateInterval = setInterval(() => {
       if (this.activeTab === 'inspector') {
         this.inspector.update()

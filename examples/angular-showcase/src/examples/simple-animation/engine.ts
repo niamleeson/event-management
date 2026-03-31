@@ -12,80 +12,110 @@ export const engine = createEngine()
 
 export const Increment = engine.event<void>('Increment')
 export const Decrement = engine.event<void>('Decrement')
+
+// State change events
 export const CountChanged = engine.event<number>('CountChanged')
-export const BounceStart = engine.event<'inc' | 'dec'>('BounceStart')
-export const BounceDone = engine.event<void>('BounceDone')
-export const CountAnimStart = engine.event<void>('CountAnimStart')
-export const CountAnimDone = engine.event<void>('CountAnimDone')
-export const ColorAnimStart = engine.event<void>('ColorAnimStart')
+export const AnimatedCountChanged = engine.event<number>('AnimatedCountChanged')
+export const ColorIntensityChanged = engine.event<number>('ColorIntensityChanged')
+export const BounceScaleChanged = engine.event<number>('BounceScaleChanged')
 
 // ---------------------------------------------------------------------------
-// Pipes: Increment/Decrement -> CountChanged
+// State
 // ---------------------------------------------------------------------------
 
-engine.pipe(Increment, [CountChanged, BounceStart], () => {
-  const next = count.value + 1
-  return [next, 'inc' as const]
+let count = 0
+let animatedCount = 0
+let colorIntensity = 0
+let bounceScale = 1
+
+// ---------------------------------------------------------------------------
+// Animation helpers
+// ---------------------------------------------------------------------------
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3)
+}
+
+function easeOutQuad(t: number): number {
+  return t * (2 - t)
+}
+
+function elasticOut(t: number): number {
+  const p = 0.4
+  return Math.pow(2, -10 * t) * Math.sin(((t - p / 4) * (2 * Math.PI)) / p) + 1
+}
+
+// Simple tween helper
+function animateTo(
+  from: number,
+  to: number,
+  duration: number,
+  easing: (t: number) => number,
+  onUpdate: (v: number) => void,
+  onDone?: () => void,
+) {
+  const start = performance.now()
+  function tick() {
+    const elapsed = performance.now() - start
+    const t = Math.min(1, elapsed / duration)
+    const v = from + (to - from) * easing(t)
+    onUpdate(v)
+    if (t < 1) {
+      requestAnimationFrame(tick)
+    } else {
+      onDone?.()
+    }
+  }
+  requestAnimationFrame(tick)
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+engine.on(Increment, () => {
+  count++
+  engine.emit(CountChanged, count)
+
+  // Animate count display
+  animateTo(animatedCount, count, 400, easeOutCubic, (v) => {
+    animatedCount = v
+    engine.emit(AnimatedCountChanged, v)
+  })
+
+  // Animate color intensity
+  const targetIntensity = Math.max(-1, Math.min(1, count / 10))
+  animateTo(colorIntensity, targetIntensity, 600, easeOutQuad, (v) => {
+    colorIntensity = v
+    engine.emit(ColorIntensityChanged, v)
+  })
+
+  // Bounce animation
+  bounceScale = 1.3
+  animateTo(1.3, 1, 300, elasticOut, (v) => {
+    bounceScale = v
+    engine.emit(BounceScaleChanged, v)
+  })
 })
 
-engine.pipe(Decrement, [CountChanged, BounceStart], () => {
-  const next = count.value - 1
-  return [next, 'dec' as const]
+engine.on(Decrement, () => {
+  count--
+  engine.emit(CountChanged, count)
+
+  animateTo(animatedCount, count, 400, easeOutCubic, (v) => {
+    animatedCount = v
+    engine.emit(AnimatedCountChanged, v)
+  })
+
+  const targetIntensity = Math.max(-1, Math.min(1, count / 10))
+  animateTo(colorIntensity, targetIntensity, 600, easeOutQuad, (v) => {
+    colorIntensity = v
+    engine.emit(ColorIntensityChanged, v)
+  })
+
+  bounceScale = 1.3
+  animateTo(1.3, 1, 300, elasticOut, (v) => {
+    bounceScale = v
+    engine.emit(BounceScaleChanged, v)
+  })
 })
-
-// Whenever count changes, fire animation start events
-engine.pipe(CountChanged, [CountAnimStart, ColorAnimStart], () => [
-  undefined,
-  undefined,
-])
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const count = engine.signal<number>(
-  CountChanged,
-  0,
-  (_prev, value) => value,
-)
-
-// ---------------------------------------------------------------------------
-// Tweens
-// ---------------------------------------------------------------------------
-
-// Animated count that smoothly interpolates toward current count value
-export const animatedCount = engine.tween({
-  start: CountAnimStart,
-  done: CountAnimDone,
-  from: () => animatedCount.value,
-  to: () => count.value,
-  duration: 400,
-  easing: (t: number) => 1 - Math.pow(1 - t, 3), // easeOutCubic
-})
-
-// Background color intensity: interpolates based on count sign
-// 0 = neutral, positive = more green, negative = more red
-export const colorIntensity = engine.tween({
-  start: ColorAnimStart,
-  from: () => colorIntensity.value,
-  to: () => Math.max(-1, Math.min(1, count.value / 10)),
-  duration: 600,
-  easing: (t: number) => t * (2 - t), // easeOutQuad
-})
-
-// Bounce animation for button press feedback
-export const bounceScale = engine.tween({
-  start: BounceStart,
-  done: BounceDone,
-  from: 1.3,
-  to: 1,
-  duration: 300,
-  easing: (t: number) => {
-    // Elastic ease-out for bouncy effect
-    const p = 0.4
-    return Math.pow(2, -10 * t) * Math.sin(((t - p / 4) * (2 * Math.PI)) / p) + 1
-  },
-})
-
-// Start the frame loop so tweens animate
-engine.startFrameLoop()

@@ -1,38 +1,11 @@
-import { createEngine, type Signal } from '@pulse/core'
-
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
+import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export type FilterName = 'brightness' | 'contrast' | 'saturate' | 'blur' | 'grayscale' | 'sepia' | 'hue-rotate' | 'invert'
-
-export interface Filter {
-  id: string
-  name: FilterName
-  value: number // 0-200 for most, 0-20 for blur, 0-360 for hue-rotate
-  enabled: boolean
-}
-
-export interface FilterParamPayload {
-  index: number
-  param: 'value' | 'enabled'
-  value: number | boolean
-}
-
-export interface ReorderPayload {
-  from: number
-  to: number
-}
-
-// ---------------------------------------------------------------------------
-// Filter configs
-// ---------------------------------------------------------------------------
+export interface Filter { id: string; name: FilterName; value: number; enabled: boolean }
+export interface FilterParamPayload { index: number; param: 'value' | 'enabled'; value: number | boolean }
+export interface ReorderPayload { from: number; to: number }
 
 export const filterConfigs: Record<FilterName, { label: string; unit: string; min: number; max: number; default: number; step: number }> = {
   'brightness': { label: 'Brightness', unit: '%', min: 0, max: 200, default: 100, step: 1 },
@@ -45,10 +18,6 @@ export const filterConfigs: Record<FilterName, { label: string; unit: string; mi
   'invert': { label: 'Invert', unit: '%', min: 0, max: 100, default: 0, step: 1 },
 }
 
-// ---------------------------------------------------------------------------
-// Event declarations
-// ---------------------------------------------------------------------------
-
 export const FilterAdded = engine.event<Filter>('FilterAdded')
 export const FilterRemoved = engine.event<number>('FilterRemoved')
 export const FilterReordered = engine.event<ReorderPayload>('FilterReordered')
@@ -56,143 +25,45 @@ export const FilterParamChanged = engine.event<FilterParamPayload>('FilterParamC
 export const UndoRequested = engine.event<void>('UndoRequested')
 export const RedoRequested = engine.event<void>('RedoRequested')
 export const ResetAll = engine.event<void>('ResetAll')
-export const ImageLoaded = engine.event<void>('ImageLoaded')
+
 export const FiltersChanged = engine.event<Filter[]>('FiltersChanged')
-export const SnapshotPushed = engine.event<Filter[]>('SnapshotPushed')
-export const TransitionStart = engine.event<void>('TransitionStart')
-export const TransitionDone = engine.event<void>('TransitionDone')
+export const UndoStackChanged = engine.event<Filter[][]>('UndoStackChanged')
+export const RedoStackChanged = engine.event<Filter[][]>('RedoStackChanged')
 
-// ---------------------------------------------------------------------------
-// Tween: smooth filter transitions
-// ---------------------------------------------------------------------------
+let filters: Filter[] = []
+let undoStack: Filter[][] = []
+let redoStack: Filter[][] = []
 
-export const filterTransition = engine.tween({
-  start: TransitionStart,
-  done: TransitionDone,
-  from: 0,
-  to: 1,
-  duration: 300,
-  easing: 'easeOut',
-})
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const filters: Signal<Filter[]> = engine.signal<Filter[]>(
-  FiltersChanged,
-  [],
-  (_prev, next) => next,
-)
-
-export const undoStack: Signal<Filter[][]> = engine.signal<Filter[][]>(
-  SnapshotPushed,
-  [],
-  (prev, snapshot) => [...prev, snapshot],
-)
-
-export const redoStack: Signal<Filter[][]> = engine.signal<Filter[][]>(
-  // Reset redo stack when new changes happen
-  SnapshotPushed,
-  [],
-  () => [], // Clear redo on new change
-)
-
-const RedoStackPush = engine.event<Filter[]>('RedoStackPush')
-engine.signalUpdate(redoStack, RedoStackPush, (prev, snapshot) => [...prev, snapshot])
-
-const UndoStackPop = engine.event<void>('UndoStackPop')
-engine.signalUpdate(undoStack, UndoStackPop, (prev) => prev.slice(0, -1))
-
-const RedoStackPop = engine.event<void>('RedoStackPop')
-engine.signalUpdate(redoStack, RedoStackPop, (prev) => prev.slice(0, -1))
-
-// ---------------------------------------------------------------------------
-// Compute CSS filter string
-// ---------------------------------------------------------------------------
-
-export function computeFilterString(filterList: Filter[]): string {
-  return filterList
-    .filter(f => f.enabled)
-    .map(f => {
-      const cfg = filterConfigs[f.name]
-      if (f.name === 'blur') return `blur(${f.value}${cfg.unit})`
-      if (f.name === 'hue-rotate') return `hue-rotate(${f.value}${cfg.unit})`
-      return `${f.name}(${f.value}${cfg.unit})`
-    })
-    .join(' ')
-}
-
-// ---------------------------------------------------------------------------
-// Pipes: filter changes -> recompute + push to undo
-// ---------------------------------------------------------------------------
+function emitAll() { engine.emit(FiltersChanged, [...filters]); engine.emit(UndoStackChanged, [...undoStack]); engine.emit(RedoStackChanged, [...redoStack]) }
 
 function pushChange(newFilters: Filter[]) {
-  const current = filters.value
-  engine.emit(SnapshotPushed, [...current])
-  engine.emit(FiltersChanged, newFilters)
-  engine.emit(TransitionStart, undefined)
+  undoStack = [...undoStack, [...filters]]; redoStack = []
+  filters = newFilters; emitAll()
 }
 
-engine.on(FilterAdded, (filter) => {
-  pushChange([...filters.value, filter])
+engine.on(FilterAdded, (f) => pushChange([...filters, f]))
+engine.on(FilterRemoved, (i) => { const n = [...filters]; n.splice(i, 1); pushChange(n) })
+engine.on(FilterReordered, (p) => { const n = [...filters]; const [m] = n.splice(p.from, 1); n.splice(p.to, 0, m); pushChange(n) })
+engine.on(FilterParamChanged, (p) => {
+  pushChange(filters.map((f, i) => i !== p.index ? f : p.param === 'enabled' ? { ...f, enabled: p.value as boolean } : { ...f, value: p.value as number }))
 })
-
-engine.on(FilterRemoved, (index) => {
-  const next = [...filters.value]
-  next.splice(index, 1)
-  pushChange(next)
-})
-
-engine.on(FilterReordered, (payload) => {
-  const next = [...filters.value]
-  const [moved] = next.splice(payload.from, 1)
-  next.splice(payload.to, 0, moved)
-  pushChange(next)
-})
-
-engine.on(FilterParamChanged, (payload) => {
-  const next = filters.value.map((f, i) => {
-    if (i !== payload.index) return f
-    if (payload.param === 'enabled') {
-      return { ...f, enabled: payload.value as boolean }
-    }
-    return { ...f, value: payload.value as number }
-  })
-  pushChange(next)
-})
-
-engine.on(ResetAll, () => {
-  pushChange([])
-})
-
+engine.on(ResetAll, () => pushChange([]))
 engine.on(UndoRequested, () => {
-  const stack = undoStack.value
-  if (stack.length === 0) return
-  const prev = stack[stack.length - 1]
-  engine.emit(RedoStackPush, [...filters.value])
-  engine.emit(UndoStackPop, undefined)
-  engine.emit(FiltersChanged, prev)
-  engine.emit(TransitionStart, undefined)
+  if (undoStack.length === 0) return
+  redoStack = [...redoStack, [...filters]]; filters = undoStack[undoStack.length - 1]; undoStack = undoStack.slice(0, -1); emitAll()
 })
-
 engine.on(RedoRequested, () => {
-  const stack = redoStack.value
-  if (stack.length === 0) return
-  const next = stack[stack.length - 1]
-  // Push current to undo without clearing redo
-  const currentUndo = [...undoStack.value, [...filters.value]]
-  engine.signalUpdate(undoStack, FiltersChanged, () => currentUndo)
-  engine.emit(RedoStackPop, undefined)
-  engine.emit(FiltersChanged, next)
-  engine.emit(TransitionStart, undefined)
+  if (redoStack.length === 0) return
+  undoStack = [...undoStack, [...filters]]; filters = redoStack[redoStack.length - 1]; redoStack = redoStack.slice(0, -1); emitAll()
 })
 
-// Start frame loop for tweens
-engine.startFrameLoop()
-
-// ---------------------------------------------------------------------------
-// Sample image URL (placeholder)
-// ---------------------------------------------------------------------------
+export function computeFilterString(filterList: Filter[]): string {
+  return filterList.filter(f => f.enabled).map(f => {
+    const cfg = filterConfigs[f.name]
+    if (f.name === 'blur') return `blur(${f.value}${cfg.unit})`
+    if (f.name === 'hue-rotate') return `hue-rotate(${f.value}${cfg.unit})`
+    return `${f.name}(${f.value}${cfg.unit})`
+  }).join(' ')
+}
 
 export const SAMPLE_IMAGE = 'https://picsum.photos/800/600?random=42'

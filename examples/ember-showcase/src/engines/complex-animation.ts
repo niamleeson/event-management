@@ -1,4 +1,4 @@
-import { createEngine, type EventType, type TweenValue, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -35,135 +35,123 @@ export const CARDS: CardData[] = [
 
 export const PageLoaded = engine.event<void>('PageLoaded')
 export const AllCardsEntered = engine.event<void>('AllCardsEntered')
-export const WelcomeFadeStart = engine.event<void>('WelcomeFadeStart')
-export const WelcomeFadeDone = engine.event<void>('WelcomeFadeDone')
 
 // Per-card events
-export const CardEnter: EventType<number>[] = []
-export const CardEntered: EventType<number>[] = []
-export const HoverCard: EventType<number>[] = []
-export const UnhoverCard: EventType<number>[] = []
-
-for (let i = 0; i < CARD_COUNT; i++) {
-  CardEnter.push(engine.event<number>(`CardEnter_${i}`))
-  CardEntered.push(engine.event<number>(`CardEntered_${i}`))
-  HoverCard.push(engine.event<number>(`HoverCard_${i}`))
-  UnhoverCard.push(engine.event<number>(`UnhoverCard_${i}`))
-}
+export const CardEnter = Array.from({ length: CARD_COUNT }, (_, i) => engine.event<number>(`CardEnter_${i}`))
+export const HoverCard = Array.from({ length: CARD_COUNT }, (_, i) => engine.event<number>(`HoverCard_${i}`))
+export const UnhoverCard = Array.from({ length: CARD_COUNT }, (_, i) => engine.event<number>(`UnhoverCard_${i}`))
 
 // ---------------------------------------------------------------------------
-// Pipe: PageLoaded -> staggered CardEnter events
-// Each card fires after a delay, creating a cascade effect
+// Animation state — per card
+// ---------------------------------------------------------------------------
+
+// Entrance opacity: 0 -> 1
+const _cardOpacity = new Float64Array(CARD_COUNT) // starts at 0
+const _cardTranslateY = new Float64Array(CARD_COUNT).fill(40)
+const _cardEntranceStart = new Float64Array(CARD_COUNT)
+const _cardEntranceActive = new Uint8Array(CARD_COUNT)
+
+// Hover scale: 1 -> 1.05
+const _cardHoverScale = new Float64Array(CARD_COUNT).fill(1)
+const _cardHoverTarget = new Float64Array(CARD_COUNT).fill(1)
+
+// Hover shadow (spring-like lerp)
+const _cardShadow = new Float64Array(CARD_COUNT)
+const _cardShadowTarget = new Float64Array(CARD_COUNT)
+
+// Welcome tween
+let _welcomeOpacity = 0
+let _welcomeTranslateY = 20
+let _welcomeActive = false
+let _welcomeStart = 0
+
+let _allEntered = false
+let _enteredCount = 0
+
+export function getCardOpacity(i: number): number { return _cardOpacity[i] }
+export function getCardTranslateY(i: number): number { return _cardTranslateY[i] }
+export function getCardHoverScale(i: number): number { return _cardHoverScale[i] }
+export function getCardShadow(i: number): number { return _cardShadow[i] }
+export function getWelcomeOpacity(): number { return _welcomeOpacity }
+export function getWelcomeTranslateY(): number { return _welcomeTranslateY }
+
+// ---------------------------------------------------------------------------
+// Easing
+// ---------------------------------------------------------------------------
+
+function easeOutCubic(t: number): number { return 1 - Math.pow(1 - t, 3) }
+function smoothstep(t: number): number { return t * t * (3 - 2 * t) }
+
+// ---------------------------------------------------------------------------
+// Event handlers
 // ---------------------------------------------------------------------------
 
 engine.on(PageLoaded, () => {
   for (let i = 0; i < CARD_COUNT; i++) {
     setTimeout(() => {
       engine.emit(CardEnter[i], i)
-    }, i * 150) // 150ms stagger between each card
+    }, i * 150)
   }
 })
 
-// ---------------------------------------------------------------------------
-// Per-card tweens: opacity and translateY for entrance
-// ---------------------------------------------------------------------------
-
-export const cardOpacity: TweenValue[] = []
-export const cardTranslateY: TweenValue[] = []
-export const cardHoverScale: TweenValue[] = []
-export const cardHoverShadow: SpringValue[] = []
-
 for (let i = 0; i < CARD_COUNT; i++) {
-  // Entrance opacity: 0 -> 1
-  const opacity = engine.tween({
-    start: CardEnter[i],
-    done: CardEntered[i],
-    from: 0,
-    to: 1,
-    duration: 500,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3), // easeOutCubic
+  engine.on(CardEnter[i], () => {
+    _cardEntranceStart[i] = performance.now()
+    _cardEntranceActive[i] = 1
   })
-  cardOpacity.push(opacity)
 
-  // Entrance translateY: 40px -> 0px
-  const translateY = engine.tween({
-    start: CardEnter[i],
-    from: 40,
-    to: 0,
-    duration: 500,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
+  engine.on(HoverCard[i], () => {
+    _cardHoverTarget[i] = 1.05
+    _cardShadowTarget[i] = 20
   })
-  cardTranslateY.push(translateY)
 
-  // Hover scale: driven by hover/unhover events
-  const scale = engine.tween({
-    start: HoverCard[i],
-    cancel: UnhoverCard[i],
-    from: 1,
-    to: 1.05,
-    duration: 200,
-    easing: (t: number) => t * (2 - t), // easeOutQuad
+  engine.on(UnhoverCard[i], () => {
+    _cardHoverTarget[i] = 1
+    _cardShadowTarget[i] = 0
   })
-  cardHoverScale.push(scale)
-
-  // Hover shadow: spring-driven for smooth tracking
-  // Use a signal that tracks the hover state
-  const hoverSignal = engine.signal<number>(HoverCard[i], 0, () => 20)
-  engine.signalUpdate(hoverSignal, UnhoverCard[i], () => 0)
-  const shadow = engine.spring(hoverSignal, {
-    stiffness: 300,
-    damping: 20,
-    restThreshold: 0.1,
-  })
-  cardHoverShadow.push(shadow)
 }
 
 // ---------------------------------------------------------------------------
-// Join: all CardEntered -> AllCardsEntered
-// Fires when every card has completed its entrance animation
+// Frame update (called from page via rAF)
 // ---------------------------------------------------------------------------
 
-engine.join(
-  CardEntered,
-  AllCardsEntered,
-  {
-    do: () => undefined,
-  },
-)
+export function updateFrame(now: number): void {
+  for (let i = 0; i < CARD_COUNT; i++) {
+    // Entrance animation
+    if (_cardEntranceActive[i]) {
+      const elapsed = now - _cardEntranceStart[i]
+      const t = Math.min(1, elapsed / 500)
+      const e = easeOutCubic(t)
+      _cardOpacity[i] = e
+      _cardTranslateY[i] = 40 * (1 - e)
+      if (t >= 1) {
+        _cardEntranceActive[i] = 0
+        _cardOpacity[i] = 1
+        _cardTranslateY[i] = 0
+        _enteredCount++
+        if (_enteredCount >= CARD_COUNT && !_allEntered) {
+          _allEntered = true
+          engine.emit(AllCardsEntered, undefined)
+          // Start welcome tween
+          _welcomeActive = true
+          _welcomeStart = performance.now()
+        }
+      }
+    }
 
-// After all cards enter, trigger welcome fade
-engine.pipe(AllCardsEntered, WelcomeFadeStart, () => undefined)
+    // Hover scale (lerp toward target)
+    _cardHoverScale[i] += (_cardHoverTarget[i] - _cardHoverScale[i]) * 0.15
 
-// ---------------------------------------------------------------------------
-// Welcome message tween
-// ---------------------------------------------------------------------------
+    // Shadow (lerp toward target)
+    _cardShadow[i] += (_cardShadowTarget[i] - _cardShadow[i]) * 0.12
+  }
 
-export const welcomeOpacity = engine.tween({
-  start: WelcomeFadeStart,
-  done: WelcomeFadeDone,
-  from: 0,
-  to: 1,
-  duration: 800,
-  easing: (t: number) => t * t * (3 - 2 * t), // smoothstep
-})
-
-export const welcomeTranslateY = engine.tween({
-  start: WelcomeFadeStart,
-  from: 20,
-  to: 0,
-  duration: 800,
-  easing: (t: number) => 1 - Math.pow(1 - t, 3),
-})
-
-// ---------------------------------------------------------------------------
-// Signals to track state
-// ---------------------------------------------------------------------------
-
-export const allEntered = engine.signal<boolean>(
-  AllCardsEntered,
-  false,
-  () => true,
-)
-
-// Start the frame loop for animations
-engine.startFrameLoop()
+  // Welcome tween
+  if (_welcomeActive) {
+    const elapsed = now - _welcomeStart
+    const t = Math.min(1, elapsed / 800)
+    _welcomeOpacity = smoothstep(t)
+    _welcomeTranslateY = 20 * (1 - easeOutCubic(t))
+    if (t >= 1) _welcomeActive = false
+  }
+}

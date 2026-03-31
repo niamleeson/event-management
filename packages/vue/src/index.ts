@@ -6,7 +6,7 @@ import {
   type Ref,
   type InjectionKey,
 } from 'vue'
-import type { Engine, EventType, Signal, TweenValue, SpringValue } from '@pulse/core'
+import type { Engine, EventType } from '@pulse/core'
 
 /** Injection key for providing the Pulse engine to the component tree */
 export const PulseKey: InjectionKey<Engine> = Symbol('pulse')
@@ -24,7 +24,7 @@ export function providePulse(engine: Engine): void {
  * Must be called inside setup() of a component that is a descendant
  * of a component that called providePulse().
  */
-export function usePulse(): Engine {
+export function useEngine(): Engine {
   const engine = inject(PulseKey)
   if (!engine) {
     throw new Error(
@@ -35,45 +35,46 @@ export function usePulse(): Engine {
 }
 
 /**
- * Subscribe to a Pulse Signal and return a reactive Vue ref
- * that stays in sync with the signal's value.
+ * Subscribe to a Pulse event and return a reactive Vue ref
+ * that stays in sync with event payloads.
  * Automatically unsubscribes when the component is unmounted.
  */
-export function useSignal<T>(signal: Signal<T>): Ref<T> {
-  const value = ref(signal.value) as Ref<T>
-  const unsub = signal.subscribe((next: T) => {
-    value.value = next
+export function usePulse<T>(event: EventType<T>, initial: T): Ref<T> {
+  const engine = useEngine()
+  const val = ref(initial) as Ref<T>
+  const unsub = engine.on(event, (v: T) => {
+    val.value = v
   })
   onUnmounted(unsub)
-  return value
+  return val
 }
 
 /**
- * Subscribe to a Pulse TweenValue and return a reactive Vue ref
- * that tracks the tween's current numeric value.
- * Automatically unsubscribes when the component is unmounted.
+ * Subscribe to a value with a .subscribe() method (e.g. tween/spring objects)
+ * and return a reactive Vue ref. Automatically unsubscribes on unmount.
  */
-export function useTween(tween: TweenValue): Ref<number> {
-  const value = ref(tween.value)
-  const unsub = tween.subscribe((next: number) => {
-    value.value = next
-  })
+export function useTween(tweenObj: { value: number; subscribe: (cb: (v: number) => void) => () => void }): Ref<number> {
+  const val = ref(tweenObj.value)
+  const unsub = tweenObj.subscribe((v: number) => { val.value = v })
   onUnmounted(unsub)
-  return value
+  return val
+}
+
+export function useSpring(springObj: { value: number; subscribe: (cb: (v: number) => void) => () => void }): Ref<number> {
+  const val = ref(springObj.value)
+  const unsub = springObj.subscribe((v: number) => { val.value = v })
+  onUnmounted(unsub)
+  return val
 }
 
 /**
- * Subscribe to a Pulse SpringValue and return a reactive Vue ref
- * that tracks the spring's current numeric value.
- * Automatically unsubscribes when the component is unmounted.
+ * Subscribe to a Signal (object with .value and .subscribe()) and return a reactive Vue ref.
  */
-export function useSpring(spring: SpringValue): Ref<number> {
-  const value = ref(spring.value)
-  const unsub = spring.subscribe((next: number) => {
-    value.value = next
-  })
+export function useSignal<T>(signal: { value: T; subscribe: (cb: (v: T, prev: T) => void) => () => void }): Ref<T> {
+  const val = ref(signal.value) as Ref<T>
+  const unsub = signal.subscribe((v: T) => { val.value = v })
   onUnmounted(unsub)
-  return value
+  return val
 }
 
 /**
@@ -81,18 +82,8 @@ export function useSpring(spring: SpringValue): Ref<number> {
  * Usage: const emit = useEmit(); emit(MyEvent, payload);
  */
 export function useEmit(): <T>(type: EventType<T>, payload: T) => void {
-  const engine = usePulse()
+  const engine = useEngine()
   return <T>(type: EventType<T>, payload: T) => {
     engine.emit(type, payload)
   }
-}
-
-/**
- * Subscribe to a Pulse EventType and invoke handler on each event.
- * Automatically unsubscribes when the component is unmounted.
- */
-export function useEvent<T>(type: EventType<T>, handler: (payload: T) => void): void {
-  const engine = usePulse()
-  const unsub = engine.on(type, handler)
-  onUnmounted(unsub)
 }

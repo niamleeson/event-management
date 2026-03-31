@@ -26,7 +26,7 @@ export const TOTAL_ITEMS = 10000
 export const ITEM_HEIGHT = 64
 export const OVERSCAN = 5
 export const BATCH_SIZE = 50
-export const PREFETCH_THRESHOLD = 200 // pixels before end to trigger prefetch
+export const PREFETCH_THRESHOLD = 200
 
 // ---------------------------------------------------------------------------
 // Events
@@ -36,56 +36,42 @@ export const ScrollTo = engine.event<number>('ScrollTo')
 export const ItemsLoaded = engine.event<{ startIndex: number; items: VirtualItem[] }>('ItemsLoaded')
 export const LoadBatch = engine.event<number>('LoadBatch')
 export const SearchChanged = engine.event<string>('SearchChanged')
+export const StateChanged = engine.event<void>('StateChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const scrollTop = engine.signal<number>(
-  ScrollTo, 0, (_prev, pos) => Math.max(0, pos),
-)
+let _scrollTop = 0
+let _searchQuery = ''
+let _loadedItems = new Map<number, VirtualItem>()
+let _loadingRanges = new Set<number>()
+let _totalLoadedCount = 0
 
-export const searchQuery = engine.signal<string>(
-  SearchChanged, '', (_prev, q) => q,
-)
+export function getScrollTop(): number { return _scrollTop }
+export function getSearchQuery(): string { return _searchQuery }
+export function getLoadedItems(): Map<number, VirtualItem> { return _loadedItems }
+export function getLoadingRanges(): Set<number> { return _loadingRanges }
+export function getTotalLoadedCount(): number { return _totalLoadedCount }
 
-// Loaded items cache
-export const loadedItems = engine.signal<Map<number, VirtualItem>>(
-  ItemsLoaded, new Map(),
-  (prev, { startIndex, items }) => {
-    const next = new Map(prev)
-    items.forEach((item, i) => {
-      next.set(startIndex + i, item)
-    })
-    return next
-  },
-)
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
 
-export const loadingRanges = engine.signal<Set<number>>(
-  LoadBatch, new Set(),
-  (prev, batchStart) => {
-    const next = new Set(prev)
-    next.add(batchStart)
-    return next
-  },
-)
-
-engine.signalUpdate(loadingRanges, ItemsLoaded, (prev, { startIndex }) => {
-  const next = new Set(prev)
-  next.delete(startIndex)
-  return next
+engine.on(ScrollTo, (pos: number) => {
+  _scrollTop = Math.max(0, pos)
+  engine.emit(StateChanged, undefined)
 })
 
-export const totalLoadedCount = engine.signal<number>(
-  ItemsLoaded, 0, (prev, { items }) => prev + items.length,
-)
+engine.on(SearchChanged, (q: string) => {
+  _searchQuery = q
+  engine.emit(StateChanged, undefined)
+})
 
-// ---------------------------------------------------------------------------
-// Async — simulate loading batches
-// ---------------------------------------------------------------------------
+engine.on(LoadBatch, (batchStart: number) => {
+  _loadingRanges = new Set(_loadingRanges)
+  _loadingRanges.add(batchStart)
 
-engine.on(LoadBatch, (batchStart) => {
-  // Simulate async network delay
   const delay = 200 + Math.random() * 300
   setTimeout(() => {
     const items: VirtualItem[] = []
@@ -104,8 +90,19 @@ engine.on(LoadBatch, (batchStart) => {
   }, delay)
 })
 
+engine.on(ItemsLoaded, ({ startIndex, items }) => {
+  _loadedItems = new Map(_loadedItems)
+  items.forEach((item, i) => {
+    _loadedItems.set(startIndex + i, item)
+  })
+  _loadingRanges = new Set(_loadingRanges)
+  _loadingRanges.delete(startIndex)
+  _totalLoadedCount += items.length
+  engine.emit(StateChanged, undefined)
+})
+
 // ---------------------------------------------------------------------------
-// Computed helpers (called from page)
+// Computed helpers
 // ---------------------------------------------------------------------------
 
 export function getVisibleRange(scrollPos: number, viewportHeight: number): { start: number; end: number } {
@@ -119,7 +116,7 @@ export function ensureLoaded(start: number, end: number): void {
   const batchEnd = Math.ceil((end + 1) / BATCH_SIZE) * BATCH_SIZE
 
   for (let i = batchStart; i < batchEnd; i += BATCH_SIZE) {
-    if (!loadingRanges.value.has(i) && !loadedItems.value.has(i)) {
+    if (!_loadingRanges.has(i) && !_loadedItems.has(i)) {
       engine.emit(LoadBatch, i)
     }
   }

@@ -1,103 +1,23 @@
-import { For, Show, onMount, onCleanup } from 'solid-js'
-import { useSignal, useEmit, useTween } from '@pulse/solid'
-import type { Signal, TweenValue } from '@pulse/core'
-import { engine } from './engine'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  CurrentTrackChanged,
+  IsPlayingChanged,
+  ProgressChanged,
+  ShuffleChanged,
+  RepeatChanged,
+  Play,
+  Pause,
+  NextTrack,
+  PrevTrack,
+  Seek,
+  ShuffleToggle,
+  RepeatToggle,
+  type Track,
+} from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Playlist data                                                     */
-/* ------------------------------------------------------------------ */
-
-const PLAYLIST = [
-  { title: 'Midnight Drive', artist: 'Neon Pulse', duration: 234, color: '#6c5ce7' },
-  { title: 'Ocean Breeze', artist: 'Wave Collective', duration: 198, color: '#0984e3' },
-  { title: 'Electric Dreams', artist: 'Synth Wave', duration: 267, color: '#e17055' },
-  { title: 'Starlight', artist: 'Cosmic Echo', duration: 312, color: '#00b894' },
-  { title: 'Urban Jungle', artist: 'Beat Factory', duration: 183, color: '#d63031' },
-  { title: 'Crystal Cave', artist: 'Deep Ambient', duration: 289, color: '#00cec9' },
-]
-
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
-
-const Play = engine.event('Play')
-const Pause = engine.event('Pause')
-const NextTrack = engine.event('NextTrack')
-const PrevTrack = engine.event('PrevTrack')
-const SelectTrack = engine.event<number>('SelectTrack')
-const ProgressUpdate = engine.event<number>('ProgressUpdate')
-const BeatDetected = engine.event<number>('BeatDetected')
-
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-const isPlaying = engine.signal<boolean>(Play, false, () => true)
-engine.signalUpdate(isPlaying, Pause, () => false)
-
-const currentTrack = engine.signal<number>(SelectTrack, 0, (_prev, idx) => idx)
-engine.signalUpdate(currentTrack, NextTrack, (prev) => (prev + 1) % PLAYLIST.length)
-engine.signalUpdate(currentTrack, PrevTrack, (prev) => (prev - 1 + PLAYLIST.length) % PLAYLIST.length)
-
-const progress = engine.signal<number>(ProgressUpdate, 0, (_prev, p) => p)
-engine.signalUpdate(progress, SelectTrack, () => 0)
-
-// Album art spin angle
-const spinAngle = engine.signal<number>(ProgressUpdate, 0, (prev) => prev + 1)
-
-// Visualizer bars (32 bars, updated on frame)
-const visualizerData: number[] = new Array(32).fill(0)
-
-// Progress tween
-const progressStart = engine.event('ProgressStart')
-const progressTween: TweenValue = engine.tween({
-  start: progressStart,
-  from: () => progress.value,
-  to: () => progress.value,
-  duration: 500,
-  easing: 'easeOut',
-})
-
-/* ------------------------------------------------------------------ */
-/*  Frame handler: simulate playback & visualizer                     */
-/* ------------------------------------------------------------------ */
-
-let playbackTime = 0
-
-engine.on(engine.frame, ({ dt }) => {
-  if (!isPlaying.value) return
-
-  const track = PLAYLIST[currentTrack.value]
-  playbackTime += dt / 1000
-  const prog = Math.min(playbackTime / track.duration, 1)
-  engine.emit(ProgressUpdate, prog)
-
-  if (prog >= 1) {
-    playbackTime = 0
-    engine.emit(NextTrack, undefined)
-    engine.emit(Play, undefined)
-  }
-
-  // Simulate visualizer bars with pseudo beat detection
-  const time = playbackTime
-  for (let i = 0; i < 32; i++) {
-    const freq = (i + 1) / 32
-    const base = Math.sin(time * freq * 8) * 0.5 + 0.5
-    const beat = Math.sin(time * 2.5) > 0.8 ? 0.3 : 0
-    visualizerData[i] = Math.min(1, base * 0.7 + Math.random() * 0.2 + beat)
-  }
-
-  // Beat detection
-  if (Math.sin(time * 2.5) > 0.95 && Math.sin((time - dt / 1000) * 2.5) <= 0.95) {
-    engine.emit(BeatDetected, time)
-  }
-})
-
-engine.on(SelectTrack, () => { playbackTime = 0 })
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                           */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -105,156 +25,402 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
-function Visualizer() {
-  let canvasRef!: HTMLCanvasElement
-
-  onMount(() => {
-    const ctx = canvasRef.getContext('2d')!
-    const dispose = engine.on(engine.frame, () => {
-      const w = canvasRef.width
-      const h = canvasRef.height
-      ctx.clearRect(0, 0, w, h)
-
-      const barW = w / 32 - 2
-      const track = PLAYLIST[currentTrack.value]
-
-      for (let i = 0; i < 32; i++) {
-        const barH = visualizerData[i] * h * 0.8
-        const x = i * (barW + 2) + 1
-        const y = h - barH
-
-        const gradient = ctx.createLinearGradient(x, y, x, h)
-        gradient.addColorStop(0, track.color)
-        gradient.addColorStop(1, track.color + '33')
-        ctx.fillStyle = gradient
-        ctx.fillRect(x, y, barW, barH)
-      }
-    })
-    onCleanup(dispose)
-  })
-
-  return <canvas ref={canvasRef} width={500} height={120} style={{ width: '100%', height: '120px' }} />
+const styles = {
+  container: {
+    display: 'flex',
+    height: '100vh',
+    'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    background: '#121212',
+    color: '#fff',
+  },
+  sidebar: {
+    width: 280,
+    background: '#000',
+    'border-right': '1px solid #282828',
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    overflow: 'hidden',
+  },
+  sidebarHeader: {
+    padding: '20px 16px 12px',
+    'font-size': 12,
+    'font-weight': 700,
+    'text-transform': 'uppercase' as const,
+    'letter-spacing': 1.5,
+    color: '#b3b3b3',
+  },
+  playlistItem: (isActive: boolean) => ({
+    padding: '10px 16px',
+    cursor: 'pointer',
+    background: isActive ? '#282828' : 'transparent',
+    'border-left': isActive ? '3px solid #1db954' : '3px solid transparent',
+    transition: 'background 0.2s',
+  }),
+  playlistTitle: (isActive: boolean) => ({
+    'font-size': 14,
+    'font-weight': isActive ? 600 : 400,
+    color: isActive ? '#1db954' : '#fff',
+    'white-space': 'nowrap' as const,
+    overflow: 'hidden' as const,
+    'text-overflow': 'ellipsis' as const,
+  }),
+  playlistArtist: {
+    'font-size': 12,
+    color: '#b3b3b3',
+    'margin-top': 2,
+  },
+  playlistDuration: {
+    'font-size': 11,
+    color: '#666',
+    'margin-top': 2,
+  },
+  main: {
+    flex: 1,
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    overflow: 'hidden',
+  },
+  nowPlaying: {
+    flex: 1,
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    'align-items': 'center',
+    'justify-content': 'center',
+    gap: 24,
+    padding: 40,
+  },
+  albumArt: (color: string, rotation: number) => ({
+    width: 240,
+    height: 240,
+    'border-radius': '50%',
+    background: `conic-gradient(from ${rotation}deg, ${color}, ${color}88, ${color}44, ${color}88, ${color})`,
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'box-shadow': `0 8px 32px ${color}44`,
+    transition: 'box-shadow 0.5s',
+  }),
+  albumInner: {
+    width: 80,
+    height: 80,
+    'border-radius': '50%',
+    background: '#121212',
+    border: '2px solid #333',
+  },
+  trackInfo: {
+    'text-align': 'center' as const,
+  },
+  trackTitle: {
+    'font-size': 24,
+    'font-weight': 700,
+  },
+  trackArtist: {
+    'font-size': 16,
+    color: '#b3b3b3',
+    'margin-top': 4,
+  },
+  trackAlbum: {
+    'font-size': 13,
+    color: '#666',
+    'margin-top': 4,
+  },
+  visualizer: {
+    display: 'flex',
+    'align-items': 'flex-end',
+    gap: 2,
+    height: 80,
+    padding: '0 40px',
+    width: '100%',
+    'max-width': 500,
+  },
+  vizBar: (height: number, color: string) => ({
+    flex: 1,
+    height: `${height * 100}%`,
+    background: `linear-gradient(to top, ${color}, ${color}88)`,
+    'border-radius': '2px 2px 0 0',
+    transition: 'height 0.08s ease-out',
+    'min-height': 2,
+  }),
+  controls: {
+    padding: '20px 40px 30px',
+    background: '#181818',
+    'border-top': '1px solid #282828',
+  },
+  progressBar: {
+    display: 'flex',
+    'align-items': 'center',
+    gap: 10,
+    'margin-bottom': 16,
+  },
+  progressTime: {
+    'font-size': 11,
+    color: '#b3b3b3',
+    'min-width': 36,
+    'text-align': 'center' as const,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 4,
+    background: '#535353',
+    'border-radius': 2,
+    cursor: 'pointer',
+    position: 'relative' as const,
+  },
+  progressFill: (pct: number, color: string) => ({
+    height: '100%',
+    width: `${pct * 100}%`,
+    background: color,
+    'border-radius': 2,
+    position: 'relative' as const,
+  }),
+  progressThumb: {
+    position: 'absolute' as const,
+    right: -6,
+    top: -4,
+    width: 12,
+    height: 12,
+    'border-radius': '50%',
+    background: '#fff',
+  },
+  buttonRow: {
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    gap: 24,
+  },
+  controlBtn: (active?: boolean) => ({
+    background: 'none',
+    border: 'none',
+    color: active ? '#1db954' : '#b3b3b3',
+    'font-size': 20,
+    cursor: 'pointer',
+    padding: 8,
+    'border-radius': '50%',
+    transition: 'color 0.2s',
+  }),
+  playBtn: {
+    width: 48,
+    height: 48,
+    'border-radius': '50%',
+    background: '#fff',
+    border: 'none',
+    color: '#000',
+    'font-size': 20,
+    cursor: 'pointer',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+  },
+  volumeRow: {
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    gap: 8,
+    'margin-top': 12,
+  },
+  volumeSlider: {
+    width: 100,
+    height: 4,
+    background: '#535353',
+    'border-radius': 2,
+    cursor: 'pointer',
+    position: 'relative' as const,
+  },
+  volumeFill: (pct: number) => ({
+    height: '100%',
+    width: `${pct * 100}%`,
+    background: '#1db954',
+    'border-radius': 2,
+  }),
+  volumeLabel: {
+    'font-size': 11,
+    color: '#b3b3b3',
+  },
 }
 
-function TrackList() {
+const globalStyle = `
+body { margin: 0; overflow: hidden; }
+`
+
+// ---------------------------------------------------------------------------
+// Components
+// ---------------------------------------------------------------------------
+
+function Sidebar() {
   const emit = useEmit()
-  const current = useSignal(currentTrack)
-  const playing = useSignal(isPlaying)
+  const pl = samplePlaylist
+  const current = usePulse(CurrentTrackChanged, samplePlaylist[0])
+  const playing = usePulse(IsPlayingChanged, false)
+
+  const handleSelect = (track: Track) => {
+    emit(TrackChanged, track())
+    if (!playing()) {
+      emit(Play, undefined)
+    }
+  }
 
   return (
-    <div style={{ 'max-height': '200px', overflow: 'auto' }}>
-      <For each={PLAYLIST}>
-        {(track, i) => (
+    <div style={styles.sidebar}>
+      <div style={styles.sidebarHeader}>Queue</div>
+      <div style={{ flex: 1, 'overflow-y': 'auto' }}>
+        {pl.map((track) => (
           <div
-            onClick={() => { emit(SelectTrack, i()); emit(Play, undefined) }}
-            style={{
-              display: 'flex', 'align-items': 'center', gap: '12px', padding: '10px 16px',
-              cursor: 'pointer', background: current() === i() ? 'rgba(255,255,255,0.08)' : 'transparent',
-              'border-left': current() === i() ? `3px solid ${track.color}` : '3px solid transparent',
-              transition: 'background 0.2s',
-            }}
+            style={styles.playlistItem(track().id === current().id)}
+            onClick={() => handleSelect(track)}
           >
-            <div style={{
-              width: '36px', height: '36px', 'border-radius': '8px',
-              background: `linear-gradient(135deg, ${track.color}88, ${track.color}44)`,
-              display: 'flex', 'align-items': 'center', 'justify-content': 'center',
-              'font-size': '14px', color: '#fff',
-            }}>
-              {current() === i() && playing() ? '\u266B' : '\u25B6'}
+            <div style={styles.playlistTitle(track().id === current().id)}>
+              {track().title}
             </div>
-            <div style={{ flex: '1' }}>
-              <div style={{ color: current() === i() ? track.color : '#fff', 'font-size': '14px', 'font-weight': '500' }}>{track.title}</div>
-              <div style={{ color: '#888', 'font-size': '12px' }}>{track.artist}</div>
-            </div>
-            <div style={{ color: '#666', 'font-size': '12px' }}>{formatTime(track.duration)}</div>
+            <div style={styles.playlistArtist}>{track().artist}</div>
+            <div style={styles.playlistDuration}>{formatTime(track().duration)}</div>
           </div>
-        )}
-      </For>
+        ))}
+      </div>
     </div>
   )
 }
 
-export default function App() {
-  const emit = useEmit()
-  const playing = useSignal(isPlaying)
-  const current = useSignal(currentTrack)
-  const prog = useSignal(progress)
-  const spin = useSignal(spinAngle)
+function AlbumArt() {
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
+  const playing = usePulse(IsPlayingChanged, false)
+  const prog = usePulse(ProgressChanged, 0)
 
-  const track = () => PLAYLIST[current()]
-  const elapsed = () => prog() * track().duration
-  const remaining = () => track().duration - elapsed()
+  // Vinyl rotation: full rotations based on progress
+  const rotation = playing() ? (prog() * track().duration * 3) % 360 : 0
 
   return (
-    <div style={{
-      'min-height': '100vh', display: 'flex', 'flex-direction': 'column',
-      'max-width': '500px', margin: '0 auto', padding: '24px',
-    }}>
-      {/* Album art */}
-      <div style={{ display: 'flex', 'justify-content': 'center', 'margin-bottom': '24px' }}>
-        <div style={{
-          width: '200px', height: '200px', 'border-radius': '50%',
-          background: `linear-gradient(${spin()}deg, ${track().color}cc, ${track().color}44, #1a1a2e)`,
-          display: 'flex', 'align-items': 'center', 'justify-content': 'center',
-          'box-shadow': `0 0 40px ${track().color}44`,
-          border: '4px solid rgba(255,255,255,0.1)',
-          transition: 'background 0.5s',
-        }}>
-          <div style={{
-            width: '60px', height: '60px', 'border-radius': '50%', background: '#121212',
-            border: '2px solid rgba(255,255,255,0.1)',
-          }} />
+    <div style={styles.albumArt(track().color, rotation)}>
+      <div style={styles.albumInner} />
+    </div>
+  )
+}
+
+function Visualizer() {
+  const bars = usePulse(VisualizerChanged, Array(32).fill(0) as number[])
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
+  const playing = usePulse(IsPlayingChanged, false)
+
+  return (
+    <div style={styles.visualizer}>
+      {bars().map((h, i) => (
+        <div
+          style={styles.vizBar(playing() ? h : h * 0.1, track().color)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function NowPlaying() {
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
+
+  return (
+    <div style={styles.nowPlaying}>
+      <AlbumArt />
+      <div style={styles.trackInfo}>
+        <div style={styles.trackTitle}>{track().title}</div>
+        <div style={styles.trackArtist}>{track().artist}</div>
+        <div style={styles.trackAlbum}>{track().album}</div>
+      </div>
+      <Visualizer />
+    </div>
+  )
+}
+
+function ProgressBar() {
+  const emit = useEmit()
+  const prog = usePulse(ProgressChanged, 0)
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
+
+  const elapsed = prog() * track().duration
+  const remaining = track().duration - elapsed
+
+  const handleClick = (e: MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const pct = (e.clientX - rect.left) / rect.width
+    emit(Seek, Math.max(0, Math.min(1, pct)))
+  }
+
+  return (
+    <div style={styles.progressBar}>
+      <span style={styles.progressTime}>{formatTime(elapsed)}</span>
+      <div style={styles.progressTrack} onClick={handleClick}>
+        <div style={styles.progressFill(prog, track().color)}>
+          <div style={styles.progressThumb} />
         </div>
       </div>
+      <span style={styles.progressTime}>-{formatTime(remaining)}</span>
+    </div>
+  )
+}
 
-      {/* Track info */}
-      <div style={{ 'text-align': 'center', 'margin-bottom': '16px' }}>
-        <div style={{ 'font-size': '22px', 'font-weight': '700', color: track().color }}>{track().title}</div>
-        <div style={{ 'font-size': '14px', color: '#888', 'margin-top': '4px' }}>{track().artist}</div>
-      </div>
+function Controls() {
+  const emit = useEmit()
+  const playing = usePulse(IsPlayingChanged, false)
+  const shuf = usePulse(ShuffleChanged, false)
+  const rep = usePulse(RepeatChanged, false)
+  const vol = usePulse(VolumeChanged, 0.75)
 
-      {/* Visualizer */}
-      <div style={{ 'margin-bottom': '16px', background: 'rgba(255,255,255,0.03)', 'border-radius': '12px', overflow: 'hidden' }}>
-        <Visualizer />
-      </div>
+  const handleVolumeClick = (e: MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const pct = (e.clientX - rect.left) / rect.width
+    emit(VolumeSet, Math.max(0, Math.min(1, pct)))
+  }
 
-      {/* Progress bar */}
-      <div style={{ 'margin-bottom': '16px' }}>
-        <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', 'border-radius': '2px', overflow: 'hidden' }}>
-          <div style={{ height: '100%', background: track().color, width: `${prog() * 100}%`, transition: 'width 0.1s' }} />
-        </div>
-        <div style={{ display: 'flex', 'justify-content': 'space-between', 'margin-top': '4px', 'font-size': '11px', color: '#666' }}>
-          <span>{formatTime(elapsed())}</span>
-          <span>-{formatTime(remaining())}</span>
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div style={{ display: 'flex', 'justify-content': 'center', 'align-items': 'center', gap: '24px', 'margin-bottom': '24px' }}>
-        <button onClick={() => emit(PrevTrack, undefined)} style={{ background: 'none', border: 'none', color: '#fff', 'font-size': '24px', cursor: 'pointer' }}>{'\u23EE'}</button>
+  return (
+    <div style={styles.controls}>
+      <ProgressBar />
+      <div style={styles.buttonRow}>
+        <button style={styles.controlBtn(shuf)} onClick={() => emit(ShuffleToggle, undefined)} title="Shuffle">
+          {'⇄'}
+        </button>
+        <button style={styles.controlBtn()} onClick={() => emit(PrevTrack, undefined)} title="Previous">
+          {'⏮'}
+        </button>
         <button
+          style={styles.playBtn}
           onClick={() => emit(playing() ? Pause : Play, undefined)}
-          style={{
-            background: track().color, border: 'none', 'border-radius': '50%',
-            width: '56px', height: '56px', cursor: 'pointer', color: '#fff',
-            'font-size': '24px', display: 'flex', 'align-items': 'center', 'justify-content': 'center',
-            'box-shadow': `0 4px 16px ${track().color}44`,
-          }}
-        >{playing() ? '\u23F8' : '\u25B6'}</button>
-        <button onClick={() => emit(NextTrack, undefined)} style={{ background: 'none', border: 'none', color: '#fff', 'font-size': '24px', cursor: 'pointer' }}>{'\u23ED'}</button>
+          title={playing() ? 'Pause' : 'Play'}
+        >
+          {playing() ? '⏸' : '▶'}
+        </button>
+        <button style={styles.controlBtn()} onClick={() => emit(NextTrack, undefined)} title="Next">
+          {'⏭'}
+        </button>
+        <button style={styles.controlBtn(rep)} onClick={() => emit(RepeatToggle, undefined)} title="Repeat">
+          {'⟳'}
+        </button>
       </div>
-
-      {/* Playlist */}
-      <div style={{ background: 'rgba(255,255,255,0.03)', 'border-radius': '12px', overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', 'font-size': '13px', color: '#888', 'font-weight': '600', 'text-transform': 'uppercase', 'letter-spacing': '1px' }}>
-          Playlist
+      <div style={styles.volumeRow}>
+        <span style={styles.volumeLabel}>{'🔈'}</span>
+        <div style={styles.volumeSlider} onClick={handleVolumeClick}>
+          <div style={styles.volumeFill(vol)} />
         </div>
-        <TrackList />
+        <span style={styles.volumeLabel}>{Math.round(vol() * 100)}%</span>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+export default function App() {
+  return (
+    <>
+      <style>{globalStyle}</style>
+      <div style={styles.container}>
+        <Sidebar />
+        <div style={styles.main}>
+          <NowPlaying />
+          <Controls />
+        </div>
+      </div>
+    </>
   )
 }

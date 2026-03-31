@@ -1,15 +1,14 @@
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import { useRef, useEffect, useCallback } from 'react'
 import {
-  currentTool,
-  currentColor,
-  brushSize,
-  strokes,
-  undoStack,
-  redoStack,
-  layers,
-  activeLayer,
-  currentStroke,
+  CurrentToolChanged,
+  CurrentColorChanged,
+  BrushSizeChanged,
+  StrokesChanged,
+  UndoStackChanged,
+  RedoStackChanged,
+  LayersChanged,
+  ActiveLayerChanged,
   StrokeStart,
   StrokeMove,
   StrokeEnd,
@@ -23,10 +22,8 @@ import {
   LayerSelected,
   LayerToggled,
   setCanvasRef,
-  saveProject,
-  loadProject,
 } from './engine'
-import type { Tool } from './engine'
+import type { Tool, Layer } from './engine'
 
 // ---------------------------------------------------------------------------
 // Color presets
@@ -106,14 +103,14 @@ function ColorPicker({ color, onColorChange }: { color: string; onColorChange: (
 
 export default function App() {
   const emit = useEmit()
-  const tool = useSignal(currentTool)
-  const color = useSignal(currentColor)
-  const size = useSignal(brushSize)
-  const strokeList = useSignal(strokes)
-  const undos = useSignal(undoStack)
-  const redos = useSignal(redoStack)
-  const layerList = useSignal(layers)
-  const activeLayerId = useSignal(activeLayer)
+  const tool = usePulse(CurrentToolChanged, 'brush' as Tool)
+  const color = usePulse(CurrentColorChanged, '#3b82f6')
+  const size = usePulse(BrushSizeChanged, 4)
+  const strokeList = usePulse(StrokesChanged, [] as any[])
+  const undos = usePulse(UndoStackChanged, [] as any[])
+  const redos = usePulse(RedoStackChanged, [] as any[])
+  const layerList = usePulse(LayersChanged, [{ id: 1, name: 'Layer 1', visible: true }] as Layer[])
+  const activeLayerId = usePulse(ActiveLayerChanged, 1)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const canvasElRef = useRef<HTMLCanvasElement>(null)
   const isDrawing = useRef(false)
@@ -284,7 +281,7 @@ export default function App() {
             cursor: undos.length > 0 ? 'pointer' : 'default',
           }}
         >
-          \u21B6
+          {'\u21B6'}
         </button>
         <button
           onClick={() => emit(RedoStroke, undefined)}
@@ -300,7 +297,7 @@ export default function App() {
             cursor: redos.length > 0 ? 'pointer' : 'default',
           }}
         >
-          \u21B7
+          {'\u21B7'}
         </button>
         <button
           onClick={() => emit(ClearCanvas, undefined)}
@@ -317,52 +314,6 @@ export default function App() {
           }}
         >
           Clear
-        </button>
-
-        <div style={{ width: 1, height: 24, background: '#334155' }} />
-
-        {/* Save / Load project via engine.snapshot() / engine.restore() */}
-        <button
-          onClick={() => {
-            const snap = saveProject()
-            const serializable = Object.fromEntries(snap)
-            localStorage.setItem('pulse-paint-project', JSON.stringify(serializable))
-          }}
-          title="Save project to localStorage"
-          style={{
-            padding: '4px 10px',
-            borderRadius: 6,
-            border: '1px solid #10b98140',
-            background: 'transparent',
-            color: '#34d399',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Save
-        </button>
-        <button
-          onClick={() => {
-            const raw = localStorage.getItem('pulse-paint-project')
-            if (!raw) return
-            const parsed = JSON.parse(raw)
-            const snap = new Map(Object.entries(parsed))
-            loadProject(snap)
-          }}
-          title="Load project from localStorage"
-          style={{
-            padding: '4px 10px',
-            borderRadius: 6,
-            border: '1px solid #6366f140',
-            background: 'transparent',
-            color: '#818cf8',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Load
         </button>
 
         <div style={{ flex: 1 }} />

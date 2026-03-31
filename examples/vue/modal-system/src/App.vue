@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { providePulse, useEmit, useSignal, useTween } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, OpenModal, CloseModal, CloseTopModal,
-  modalStack, backdropOpacity, scaleEntranceTweens, fadeEntranceTweens, SIZE_WIDTHS,
+  engine,
+  OpenModal,
+  CloseModal,
+  CloseTopModal,
+  SIZE_WIDTHS,
+  ModalStackChanged,
+  BackdropOpacityChanged,
+  getModalStack,
+  getBackdropOpacity,
 } from './engine'
 import type { ModalSize } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const stack = useSignal(modalStack)
-const backdrop = useTween(backdropOpacity)
-
-const scaleVals = Array.from({ length: 10 }, (_, i) => useTween(scaleEntranceTweens[i]))
-const fadeVals = Array.from({ length: 10 }, (_, i) => useTween(fadeEntranceTweens[i]))
+const stack = usePulse(ModalStackChanged, getModalStack())
+const backdrop = usePulse(BackdropOpacityChanged, getBackdropOpacity())
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'Escape') emit(CloseTopModal, undefined)
@@ -26,7 +30,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 const DEMO_MODALS: { title: string; content: string; size: ModalSize }[] = [
   { title: 'Small Modal', content: 'This is a small modal dialog. You can stack multiple modals!', size: 'sm' },
   { title: 'Medium Modal', content: 'This is a medium-sized modal with more content space. Try opening another modal on top of this one to see the stacking effect with offset positioning.', size: 'md' },
-  { title: 'Large Modal', content: 'This is a large modal. It has the most content space. Modals stack with scale/fade tweens, backdrop blur, and offset positioning. Press Escape to close the top modal, or click the X button. Focus is trapped within the modal.', size: 'lg' },
+  { title: 'Large Modal', content: 'This is a large modal. It has the most content space. Modals stack with backdrop blur and offset positioning. Press Escape to close the top modal, or click the X button. Focus is trapped within the modal.', size: 'lg' },
 ]
 </script>
 
@@ -86,8 +90,7 @@ const DEMO_MODALS: { title: string; content: string; size: ModalSize }[] = [
           boxShadow: '0 16px 64px rgba(0,0,0,0.5)',
           border: '1px solid rgba(255,255,255,0.1)',
           pointerEvents: 'all',
-          transform: `scale(${scaleVals[i % 10].value}) translateY(${i * -12}px)`,
-          opacity: fadeVals[i % 10].value,
+          transform: `translateY(${i * -12}px)`,
         }"
         @click.stop
       >

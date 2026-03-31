@@ -1,15 +1,14 @@
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import { useCallback, useRef } from 'react'
 import {
-  sortState,
-  filters,
-  currentPage,
-  pageSize,
-  selectedRows,
-  expandedRows,
-  searchQuery,
-  columnWidths,
-  isLoading,
+  SortStateChanged,
+  FiltersChanged,
+  CurrentPageChanged,
+  SelectedRowsChanged,
+  ExpandedRowsChanged,
+  SearchQueryChanged,
+  ColumnWidthsChanged,
+  IsLoadingChanged,
   SortChanged,
   FilterChanged,
   PageChanged,
@@ -20,9 +19,10 @@ import {
   ColumnResized,
   SelectAll,
   DeselectAll,
+  pageSize,
   getProcessedData,
 } from './engine'
-import type { SortDirection, RowData } from './engine'
+import type { SortDirection, RowData, SortState, FilterState } from './engine'
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -84,8 +84,10 @@ function SortHeader({
   width: number
 }) {
   const emit = useEmit()
-  const sort = useSignal(sortState)
-  const widths = useSignal(columnWidths)
+  const sort = usePulse(SortStateChanged, { column: '', direction: null } as SortState)
+  const widths = usePulse(ColumnWidthsChanged, {
+    id: 60, name: 160, email: 200, role: 100, status: 90, created: 110, revenue: 110, actions: 80,
+  } as Record<string, number>)
   const resizing = useRef(false)
   const startX = useRef(0)
   const startWidth = useRef(0)
@@ -223,14 +225,16 @@ function ExpandedDetail({ row }: { row: RowData }) {
 
 export default function App() {
   const emit = useEmit()
-  const sort = useSignal(sortState)
-  const filterState = useSignal(filters)
-  const page = useSignal(currentPage)
-  const selected = useSignal(selectedRows)
-  const expanded = useSignal(expandedRows)
-  const search = useSignal(searchQuery)
-  const widths = useSignal(columnWidths)
-  const loading = useSignal(isLoading)
+  const sort = usePulse(SortStateChanged, { column: '', direction: null } as SortState)
+  const filterState = usePulse(FiltersChanged, {} as FilterState)
+  const page = usePulse(CurrentPageChanged, 1)
+  const selected = usePulse(SelectedRowsChanged, new Set<string>())
+  const expanded = usePulse(ExpandedRowsChanged, new Set<string>())
+  const search = usePulse(SearchQueryChanged, '')
+  const widths = usePulse(ColumnWidthsChanged, {
+    id: 60, name: 160, email: 200, role: 100, status: 90, created: 110, revenue: 110, actions: 80,
+  } as Record<string, number>)
+  const loading = usePulse(IsLoadingChanged, false)
 
   const { rows, totalRows, totalPages } = getProcessedData()
   const allVisibleSelected = rows.length > 0 && rows.every((r) => selected.has(r.id))

@@ -1,11 +1,10 @@
 import { useRef, useCallback } from 'react'
-import { useSignal, useEmit, useSpring } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  tasks,
-  view,
-  zoom,
-  dragState,
-  snapSpring,
+  TasksChanged,
+  ViewStateChanged,
+  ZoomStateChanged,
+  DragStateChanged,
   TaskDragStart,
   TaskDragMove,
   TaskDragEnd,
@@ -17,6 +16,7 @@ import {
   type Task,
   type ZoomLevel,
   type ViewRange,
+  type DragState,
 } from './engine'
 
 // ---------------------------------------------------------------------------
@@ -256,12 +256,31 @@ body { margin: 0; overflow: hidden; }
 `
 
 // ---------------------------------------------------------------------------
+// Initial values for usePulse
+// ---------------------------------------------------------------------------
+
+const initialTasks: Task[] = [
+  { id: 't1', title: 'Project Kickoff', category: 'Planning', start: 0, duration: 3, dependencies: [], color: categoryColors['Planning'] },
+  { id: 't2', title: 'Requirements Gathering', category: 'Planning', start: 3, duration: 5, dependencies: ['t1'], color: categoryColors['Planning'] },
+  { id: 't3', title: 'UI/UX Design', category: 'Design', start: 8, duration: 7, dependencies: ['t2'], color: categoryColors['Design'] },
+  { id: 't4', title: 'Architecture Design', category: 'Design', start: 8, duration: 5, dependencies: ['t2'], color: categoryColors['Design'] },
+  { id: 't5', title: 'Frontend Development', category: 'Development', start: 15, duration: 14, dependencies: ['t3'], color: categoryColors['Development'] },
+  { id: 't6', title: 'Backend Development', category: 'Development', start: 13, duration: 16, dependencies: ['t4'], color: categoryColors['Development'] },
+  { id: 't7', title: 'API Integration', category: 'Development', start: 29, duration: 5, dependencies: ['t5', 't6'], color: categoryColors['Development'] },
+  { id: 't8', title: 'Unit Testing', category: 'Testing', start: 29, duration: 7, dependencies: ['t5'], color: categoryColors['Testing'] },
+  { id: 't9', title: 'Integration Testing', category: 'Testing', start: 34, duration: 5, dependencies: ['t7', 't8'], color: categoryColors['Testing'] },
+  { id: 't10', title: 'Deployment & Launch', category: 'Deployment', start: 39, duration: 3, dependencies: ['t9'], color: categoryColors['Deployment'] },
+]
+
+const initialDragState: DragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+
+// ---------------------------------------------------------------------------
 // Components
 // ---------------------------------------------------------------------------
 
 function TopBar() {
   const emit = useEmit()
-  const currentZoom = useSignal(zoom)
+  const currentZoom = usePulse(ZoomStateChanged, 'day' as ZoomLevel)
 
   const zoomLevels: ZoomLevel[] = ['day', 'week', 'month']
   const categories = Object.entries(categoryColors)
@@ -293,8 +312,8 @@ function TopBar() {
 }
 
 function Sidebar() {
-  const allTasks = useSignal(tasks)
-  const drag = useSignal(dragState)
+  const allTasks = usePulse(TasksChanged, initialTasks)
+  const drag = usePulse(DragStateChanged, initialDragState)
 
   return (
     <div style={styles.sidebar}>
@@ -381,11 +400,10 @@ function DependencyArrows({ taskList, dayWidth, viewStart }: {
 
 function ChartBody() {
   const emit = useEmit()
-  const allTasks = useSignal(tasks)
-  const currentView = useSignal(view)
-  const currentZoom = useSignal(zoom)
-  const drag = useSignal(dragState)
-  const snapVal = useSpring(snapSpring)
+  const allTasks = usePulse(TasksChanged, initialTasks)
+  const currentView = usePulse(ViewStateChanged, { start: -2, end: 50 } as ViewRange)
+  const currentZoom = usePulse(ZoomStateChanged, 'day' as ZoomLevel)
+  const drag = usePulse(DragStateChanged, initialDragState)
 
   const dayWidth = getDayWidth(currentZoom)
   const totalDays = currentView.end - currentView.start

@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { useSignal } from '@pulse/vue'
-import { userDetails, isLoadingDetails, selectedUserId, type UserDetails } from './engine'
+import { usePulse } from '@pulse/vue'
+import {
+  userDetails,
+  isLoadingDetails,
+  selectedUserId,
+  type UserDetails,
+  UserDetailsChanged,
+  IsLoadingDetailsChanged,
+  SelectedUserIdChanged,
+} from './engine'
 
-const details = useSignal(userDetails)
-const loading = useSignal(isLoadingDetails)
-const selected = useSignal(selectedUserId)
+const details = usePulse(UserDetailsChanged, userDetails)
+const loading = usePulse(IsLoadingDetailsChanged, isLoadingDetails)
+const selected = usePulse(SelectedUserIdChanged, selectedUserId)
 
 const colors = {
   primary: '#4361ee',

@@ -1,13 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { providePulse, useSignal, useSpring, useEmit } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
   engine,
-  cards,
-  dragState,
-  cardStatuses,
-  dragSpringX,
-  dragSpringY,
   DragStart,
   DragMove,
   DragEnd,
@@ -16,16 +11,23 @@ import {
   type KanbanCard,
   type ColumnId,
   type CardStatus,
+  CardsChanged,
+  DragStateChanged,
+  DragPositionChanged,
+  CardStatusesChanged,
+  getCards,
+  getDragState,
+  getDragPosition,
+  getCardStatuses,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const allCards = useSignal(cards)
-const drag = useSignal(dragState)
-const statuses = useSignal(cardStatuses)
-const springX = useSpring(dragSpringX)
-const springY = useSpring(dragSpringY)
+const allCards = usePulse(CardsChanged, getCards())
+const drag = usePulse(DragStateChanged, getDragState())
+const statuses = usePulse(CardStatusesChanged, getCardStatuses())
+const dragPos = usePulse(DragPositionChanged, getDragPosition())
 
 const COLUMNS: { id: ColumnId; title: string; color: string }[] = [
   { id: 'todo', title: 'Todo', color: '#4361ee' },
@@ -163,7 +165,7 @@ function ghostCard() {
     <div :style="{ textAlign: 'center', marginBottom: '32px' }">
       <h1 :style="{ fontSize: '36px', fontWeight: 800, color: '#f1f5f9', margin: 0 }">Pulse Kanban</h1>
       <p :style="{ color: '#94a3b8', fontSize: '14px', marginTop: '6px' }">
-        Drag cards between columns. Spring physics follow your mouse. Saves auto-retry on failure.
+        Drag cards between columns. Saves auto-retry on failure.
       </p>
     </div>
 
@@ -289,8 +291,8 @@ function ghostCard() {
         borderRadius: '12px',
         padding: '16px',
         boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-        left: `${springX - drag.offsetX}px`,
-        top: `${springY - drag.offsetY}px`,
+        left: `${dragPos.x - drag.offsetX}px`,
+        top: `${dragPos.y - drag.offsetY}px`,
       }"
     >
       <p :style="{ fontSize: '15px', fontWeight: 600, color: '#e2e8f0', margin: 0, marginBottom: '4px' }">{{ ghostCard()!.title }}</p>

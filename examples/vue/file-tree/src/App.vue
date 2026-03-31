@@ -1,17 +1,29 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, FILE_TREE, FILE_ICONS, ToggleFolder, SelectFile, SearchChanged, KeyNav,
-  expandedFolders, selectedFile, searchQuery, getBreadcrumbs,
+  engine,
+  FILE_TREE,
+  FILE_ICONS,
+  ToggleFolder,
+  SelectFile,
+  SearchChanged,
+  KeyNav,
+  ExpandedFoldersChanged,
+  SelectedFileChanged,
+  SearchQueryChanged,
+  getBreadcrumbs,
+  getExpandedFolders,
+  getSelectedFile,
+  getSearchQuery,
 } from './engine'
 import type { FileNode } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const expanded = useSignal(expandedFolders)
-const selected = useSignal(selectedFile)
-const query = useSignal(searchQuery)
+const expanded = usePulse(ExpandedFoldersChanged, getExpandedFolders())
+const selected = usePulse(SelectedFileChanged, getSelectedFile())
+const query = usePulse(SearchQueryChanged, getSearchQuery())
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'ArrowUp') { e.preventDefault(); emit(KeyNav, 'up') }
@@ -87,9 +99,9 @@ const TreeNode = defineComponent({
   },
   setup(props) {
     const emit = useEmit()
-    const expanded = useSignal(expandedFolders)
-    const selected = useSignal(selectedFile)
-    const query = useSignal(searchQuery)
+    const expanded = usePulse(ExpandedFoldersChanged, getExpandedFolders())
+    const selected = usePulse(SelectedFileChanged, getSelectedFile())
+    const query = usePulse(SearchQueryChanged, getSearchQuery())
 
     function matchesSearch(node: FileNode): boolean {
       if (!query.value) return true

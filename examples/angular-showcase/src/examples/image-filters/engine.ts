@@ -1,38 +1,9 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface FilterConfig {
-  id: string
-  name: string
-  property: string
-  min: number
-  max: number
-  default: number
-  unit: string
-}
-
-export interface FilterState {
-  id: string
-  value: number
-}
-
-export interface HistorySnapshot {
-  filters: FilterState[]
-  timestamp: number
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+export interface FilterConfig { id: string; name: string; property: string; min: number; max: number; default: number; unit: string }
+export interface FilterState { id: string; value: number }
 
 export const FILTERS: FilterConfig[] = [
   { id: 'brightness', name: 'Brightness', property: 'brightness', min: 0, max: 200, default: 100, unit: '%' },
@@ -45,10 +16,6 @@ export const FILTERS: FilterConfig[] = [
   { id: 'invert', name: 'Invert', property: 'invert', min: 0, max: 100, default: 0, unit: '%' },
 ]
 
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
-
 export const UpdateFilter = engine.event<FilterState>('UpdateFilter')
 export const ReorderFilters = engine.event<string[]>('ReorderFilters')
 export const Undo = engine.event<void>('Undo')
@@ -57,67 +24,40 @@ export const ResetAll = engine.event<void>('ResetAll')
 export const ToggleSplit = engine.event<void>('ToggleSplit')
 export const PushHistory = engine.event<void>('PushHistory')
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
+export const FilterValuesChanged = engine.event<Record<string, number>>('FilterValuesChanged')
+export const FilterOrderChanged = engine.event<string[]>('FilterOrderChanged')
+export const SplitViewChanged = engine.event<boolean>('SplitViewChanged')
+export const CanUndoChanged = engine.event<boolean>('CanUndoChanged')
+export const CanRedoChanged = engine.event<boolean>('CanRedoChanged')
 
-export const filterValues = engine.signal<Record<string, number>>(
-  UpdateFilter,
-  Object.fromEntries(FILTERS.map((f) => [f.id, f.default])),
-  (prev, { id, value }) => ({ ...prev, [id]: value }),
-)
+let filterValues: Record<string, number> = Object.fromEntries(FILTERS.map((f) => [f.id, f.default]))
+let filterOrder: string[] = FILTERS.map((f) => f.id)
+let splitView = false
+const undoStack: FilterState[][] = []
+const redoStack: FilterState[][] = []
 
-engine.signalUpdate(filterValues, ResetAll, () =>
-  Object.fromEntries(FILTERS.map((f) => [f.id, f.default])),
-)
-
-export const filterOrder = engine.signal<string[]>(
-  ReorderFilters,
-  FILTERS.map((f) => f.id),
-  (_prev, order) => order,
-)
-
-export const splitView = engine.signal<boolean>(ToggleSplit, false, (prev) => !prev)
-
-// Undo/Redo history
-const undoStack: HistorySnapshot[] = []
-const redoStack: HistorySnapshot[] = []
+engine.on(UpdateFilter, ({ id, value }) => { filterValues = { ...filterValues, [id]: value }; engine.emit(FilterValuesChanged, filterValues) })
+engine.on(ReorderFilters, (order) => { filterOrder = order; engine.emit(FilterOrderChanged, order) })
+engine.on(ToggleSplit, () => { splitView = !splitView; engine.emit(SplitViewChanged, splitView) })
+engine.on(ResetAll, () => { filterValues = Object.fromEntries(FILTERS.map((f) => [f.id, f.default])); engine.emit(FilterValuesChanged, filterValues) })
 
 engine.on(PushHistory, () => {
-  undoStack.push({
-    filters: Object.entries(filterValues.value).map(([id, value]) => ({ id, value })),
-    timestamp: Date.now(),
-  })
-  redoStack.length = 0
+  undoStack.push(Object.entries(filterValues).map(([id, value]) => ({ id, value }))); redoStack.length = 0
+  engine.emit(CanUndoChanged, true); engine.emit(CanRedoChanged, false)
 })
 
 engine.on(Undo, () => {
   if (undoStack.length === 0) return
-  const current = Object.entries(filterValues.value).map(([id, value]) => ({ id, value }))
-  redoStack.push({ filters: current, timestamp: Date.now() })
+  redoStack.push(Object.entries(filterValues).map(([id, value]) => ({ id, value })))
   const snapshot = undoStack.pop()!
-  for (const f of snapshot.filters) {
-    filterValues.set({ ...filterValues.value, [f.id]: f.value })
-  }
+  filterValues = Object.fromEntries(snapshot.map((f) => [f.id, f.value]))
+  engine.emit(FilterValuesChanged, filterValues); engine.emit(CanUndoChanged, undoStack.length > 0); engine.emit(CanRedoChanged, true)
 })
 
 engine.on(Redo, () => {
   if (redoStack.length === 0) return
-  const current = Object.entries(filterValues.value).map(([id, value]) => ({ id, value }))
-  undoStack.push({ filters: current, timestamp: Date.now() })
+  undoStack.push(Object.entries(filterValues).map(([id, value]) => ({ id, value })))
   const snapshot = redoStack.pop()!
-  for (const f of snapshot.filters) {
-    filterValues.set({ ...filterValues.value, [f.id]: f.value })
-  }
+  filterValues = Object.fromEntries(snapshot.map((f) => [f.id, f.value]))
+  engine.emit(FilterValuesChanged, filterValues); engine.emit(CanUndoChanged, true); engine.emit(CanRedoChanged, redoStack.length > 0)
 })
-
-export const canUndo = engine.signal<boolean>(PushHistory, false, () => true)
-engine.signalUpdate(canUndo, Undo, () => undoStack.length > 0)
-engine.signalUpdate(canUndo, Redo, () => undoStack.length > 0)
-
-export const canRedo = engine.signal<boolean>(Redo, false, () => redoStack.length > 0)
-engine.signalUpdate(canRedo, Undo, () => redoStack.length > 0)
-engine.signalUpdate(canRedo, PushHistory, () => false)
-
-// Start frame loop
-engine.startFrameLoop()

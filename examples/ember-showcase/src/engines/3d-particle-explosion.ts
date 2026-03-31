@@ -45,62 +45,66 @@ export const ClearParticles = engine.event<void>('ClearParticles')
 export const ToggleGravity = engine.event<void>('ToggleGravity')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const particles = engine.signal<Particle[]>(
-  SpawnExplosion,
-  [],
-  (prev, spawn) => {
-    const newParticles: Particle[] = []
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const angle = (Math.PI * 2 * i) / PARTICLE_COUNT + (Math.random() - 0.5) * 0.5
-      const speed = 2 + Math.random() * 6
-      newParticles.push({
-        x: spawn.x,
-        y: spawn.y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1,
-        maxLife: 60 + Math.random() * 60,
-        color: COLORS[Math.floor(Math.random() * COLORS.length)],
-        size: 2 + Math.random() * 4,
-        trail: [],
-      })
-    }
-    return [...prev, ...newParticles]
-  },
-)
+let _particles: Particle[] = []
+let _gravityEnabled = true
+let _explosionCount = 0
+let _activeParticleCount = 0
 
-engine.signalUpdate(particles, ClearParticles, () => [])
-
-export const gravityEnabled = engine.signal<boolean>(
-  ToggleGravity, true, (prev) => !prev,
-)
-
-export const explosionCount = engine.signal<number>(
-  SpawnExplosion, 0, (prev) => prev + 1,
-)
-
-export const activeParticleCount = engine.signal<number>(
-  SpawnExplosion, 0, (prev) => prev, // updated in frame loop
-)
+export function getParticles(): Particle[] { return _particles }
+export function getGravityEnabled(): boolean { return _gravityEnabled }
+export function getExplosionCount(): number { return _explosionCount }
+export function getActiveParticleCount(): number { return _activeParticleCount }
 
 // ---------------------------------------------------------------------------
-// Frame loop updates particles via direct mutation for performance
-// The page will read particles.value each frame
+// Event handlers
 // ---------------------------------------------------------------------------
 
-engine.on(engine.frame, ({ dt }) => {
-  const ps = particles.value
-  if (ps.length === 0) return
+engine.on(SpawnExplosion, (spawn: SpawnPayload) => {
+  const newParticles: Particle[] = []
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / PARTICLE_COUNT + (Math.random() - 0.5) * 0.5
+    const speed = 2 + Math.random() * 6
+    newParticles.push({
+      x: spawn.x,
+      y: spawn.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      maxLife: 60 + Math.random() * 60,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      size: 2 + Math.random() * 4,
+      trail: [],
+    })
+  }
+  _particles = [..._particles, ...newParticles]
+  _explosionCount++
+})
 
-  const g = gravityEnabled.value ? GRAVITY : 0
-  const dtScale = Math.min(dt / 16.67, 3) // normalize to 60fps
+engine.on(ClearParticles, () => {
+  _particles = []
+  _activeParticleCount = 0
+})
 
-  let alive = 0
+engine.on(ToggleGravity, () => {
+  _gravityEnabled = !_gravityEnabled
+})
+
+// ---------------------------------------------------------------------------
+// Frame update (called from page via rAF)
+// ---------------------------------------------------------------------------
+
+export function updateFrame(dt: number): void {
+  if (_particles.length === 0) return
+
+  const g = _gravityEnabled ? GRAVITY : 0
+  const dtScale = Math.min(dt / 16.67, 3)
+
   const next: Particle[] = []
-  for (const p of ps) {
+  let alive = 0
+  for (const p of _particles) {
     p.trail.push({ x: p.x, y: p.y })
     if (p.trail.length > TRAIL_LENGTH) p.trail.shift()
 
@@ -115,10 +119,6 @@ engine.on(engine.frame, ({ dt }) => {
     }
   }
 
-  // Force signal update by setting new array reference
-  particles.set(next)
-  activeParticleCount.set(alive)
-})
-
-// Start frame loop
-engine.startFrameLoop()
+  _particles = next
+  _activeParticleCount = alive
+}

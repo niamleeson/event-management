@@ -1,5 +1,4 @@
-import { createEngine, createSignal } from '@pulse/core'
-import type { Signal } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -48,9 +47,15 @@ export const ExportRequested = engine.event<void>('ExportRequested')
 export const SelectAll = engine.event<void>('SelectAll')
 export const DeselectAll = engine.event<void>('DeselectAll')
 
-// Internal for async loading simulation
-const DataLoading = engine.event<void>('DataLoading')
-const DataLoaded = engine.event<void>('DataLoaded')
+// State-changed events for React subscriptions
+export const SortStateChanged = engine.event<SortState>('SortStateChanged')
+export const FiltersChanged = engine.event<FilterState>('FiltersChanged')
+export const CurrentPageChanged = engine.event<number>('CurrentPageChanged')
+export const SelectedRowsChanged = engine.event<Set<string>>('SelectedRowsChanged')
+export const ExpandedRowsChanged = engine.event<Set<string>>('ExpandedRowsChanged')
+export const SearchQueryChanged = engine.event<string>('SearchQueryChanged')
+export const ColumnWidthsChanged = engine.event<Record<string, number>>('ColumnWidthsChanged')
+export const IsLoadingChanged = engine.event<boolean>('IsLoadingChanged')
 
 // ---------------------------------------------------------------------------
 // Generate mock data (1000 rows)
@@ -101,42 +106,17 @@ function generateData(): RowData[] {
 const ALL_DATA = generateData()
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const data: Signal<RowData[]> = createSignal<RowData[]>(ALL_DATA)
-engine['_signals'].push(data)
-
-export const sortState = engine.signal<SortState>(
-  SortChanged,
-  { column: '', direction: null },
-  (_prev, state) => state,
-)
-
-export const filters: Signal<FilterState> = createSignal<FilterState>({})
-engine['_signals'].push(filters)
-
-export const currentPage = engine.signal<number>(
-  PageChanged,
-  1,
-  (_prev, page) => page,
-)
-
+let sortState: SortState = { column: '', direction: null }
+let filters: FilterState = {}
+let currentPage = 1
 export const pageSize = 20
-
-export const selectedRows: Signal<Set<string>> = createSignal<Set<string>>(new Set())
-engine['_signals'].push(selectedRows)
-
-export const expandedRows: Signal<Set<string>> = createSignal<Set<string>>(new Set())
-engine['_signals'].push(expandedRows)
-
-export const searchQuery = engine.signal<string>(
-  SearchChanged,
-  '',
-  (_prev, query) => query,
-)
-
-export const columnWidths: Signal<Record<string, number>> = createSignal<Record<string, number>>({
+let selectedRows: Set<string> = new Set()
+let expandedRows: Set<string> = new Set()
+let searchQuery = ''
+let columnWidths: Record<string, number> = {
   id: 60,
   name: 160,
   email: 200,
@@ -145,11 +125,8 @@ export const columnWidths: Signal<Record<string, number>> = createSignal<Record<
   created: 110,
   revenue: 110,
   actions: 80,
-})
-engine['_signals'].push(columnWidths)
-
-export const isLoading: Signal<boolean> = createSignal<boolean>(false)
-engine['_signals'].push(isLoading)
+}
+let isLoading = false
 
 // ---------------------------------------------------------------------------
 // Data processing: sort, filter, search, paginate
@@ -163,7 +140,7 @@ export function getProcessedData(): {
   let result = [...ALL_DATA]
 
   // Search
-  const query = searchQuery.value.toLowerCase()
+  const query = searchQuery.toLowerCase()
   if (query) {
     result = result.filter(
       (row) =>
@@ -175,8 +152,7 @@ export function getProcessedData(): {
   }
 
   // Filters
-  const f = filters.value
-  for (const [col, val] of Object.entries(f)) {
+  for (const [col, val] of Object.entries(filters)) {
     if (!val) continue
     result = result.filter((row) => {
       const cellVal = String((row as any)[col]).toLowerCase()
@@ -185,8 +161,8 @@ export function getProcessedData(): {
   }
 
   // Sort
-  const sort = sortState.value
-  if (sort.column && sort.direction) {
+  if (sortState.column && sortState.direction) {
+    const sort = sortState
     result.sort((a, b) => {
       const aVal = (a as any)[sort.column]
       const bVal = (b as any)[sort.column]
@@ -204,8 +180,7 @@ export function getProcessedData(): {
   const totalPages = Math.ceil(totalRows / pageSize)
 
   // Paginate
-  const page = currentPage.value
-  const start = (page - 1) * pageSize
+  const start = (currentPage - 1) * pageSize
   const rows = result.slice(start, start + pageSize)
 
   return { rows, totalRows, totalPages }
@@ -215,84 +190,98 @@ export function getProcessedData(): {
 // Event handlers
 // ---------------------------------------------------------------------------
 
+engine.on(SortChanged, (state) => {
+  sortState = state
+  engine.emit(SortStateChanged, sortState)
+  simulateLoad()
+})
+
 engine.on(FilterChanged, ({ column, value }) => {
-  const current = { ...filters.value }
+  const current = { ...filters }
   if (value) {
     current[column] = value
   } else {
     delete current[column]
   }
-  filters.set(current)
+  filters = current
+  engine.emit(FiltersChanged, filters)
   // Reset to page 1 on filter change
-  engine.emit(PageChanged, 1)
+  currentPage = 1
+  engine.emit(CurrentPageChanged, currentPage)
+})
+
+engine.on(PageChanged, (page) => {
+  currentPage = page
+  engine.emit(CurrentPageChanged, currentPage)
+  simulateLoad()
 })
 
 engine.on(RowSelected, (id) => {
-  const current = new Set(selectedRows.value)
+  const current = new Set(selectedRows)
   if (current.has(id)) {
     current.delete(id)
   } else {
     current.add(id)
   }
-  selectedRows.set(current)
+  selectedRows = current
+  engine.emit(SelectedRowsChanged, selectedRows)
 })
 
 engine.on(RowExpanded, (id) => {
-  const current = new Set(expandedRows.value)
+  const current = new Set(expandedRows)
   if (current.has(id)) {
     current.delete(id)
   } else {
     current.add(id)
   }
-  expandedRows.set(current)
+  expandedRows = current
+  engine.emit(ExpandedRowsChanged, expandedRows)
 })
 
 engine.on(SelectAll, () => {
   const { rows } = getProcessedData()
   const allIds = new Set(rows.map((r) => r.id))
-  const current = new Set(selectedRows.value)
+  const current = new Set(selectedRows)
   const allSelected = rows.every((r) => current.has(r.id))
   if (allSelected) {
-    // Deselect all visible
     for (const id of allIds) current.delete(id)
   } else {
-    // Select all visible
     for (const id of allIds) current.add(id)
   }
-  selectedRows.set(current)
+  selectedRows = current
+  engine.emit(SelectedRowsChanged, selectedRows)
 })
 
 engine.on(DeselectAll, () => {
-  selectedRows.set(new Set())
+  selectedRows = new Set()
+  engine.emit(SelectedRowsChanged, selectedRows)
 })
 
 engine.on(BulkAction, ({ action, ids }) => {
-  // In a real app, this would trigger an API call
   console.log(`Bulk action: ${action} on ${ids.length} rows`)
-  selectedRows.set(new Set())
+  selectedRows = new Set()
+  engine.emit(SelectedRowsChanged, selectedRows)
 })
 
 engine.on(ColumnResized, ({ column, width }) => {
-  columnWidths.set({ ...columnWidths.value, [column]: Math.max(50, width) })
+  columnWidths = { ...columnWidths, [column]: Math.max(50, width) }
+  engine.emit(ColumnWidthsChanged, columnWidths)
+})
+
+engine.on(SearchChanged, (query) => {
+  searchQuery = query
+  engine.emit(SearchQueryChanged, searchQuery)
+  currentPage = 1
+  engine.emit(CurrentPageChanged, currentPage)
+  simulateLoad()
 })
 
 // Simulate async data fetch delay on sort/filter/page change
 function simulateLoad() {
-  isLoading.set(true)
+  isLoading = true
+  engine.emit(IsLoadingChanged, isLoading)
   setTimeout(() => {
-    isLoading.set(false)
+    isLoading = false
+    engine.emit(IsLoadingChanged, isLoading)
   }, 200)
 }
-
-engine.on(SortChanged, () => simulateLoad())
-engine.on(PageChanged, () => simulateLoad())
-engine.on(SearchChanged, () => {
-  engine.emit(PageChanged, 1)
-  simulateLoad()
-})
-
-// ---------------------------------------------------------------------------
-// Start frame loop
-// ---------------------------------------------------------------------------
-
-engine.startFrameLoop()

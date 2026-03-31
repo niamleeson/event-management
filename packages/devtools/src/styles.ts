@@ -595,59 +595,6 @@ export const DEVTOOLS_CSS = /* css */ `
   font-size: 12px;
 }
 
-/* Progress bars for tweens */
-.pd-progress-bar {
-  width: 100%;
-  height: 6px;
-  background: var(--pd-bg-input);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-top: 2px;
-}
-
-.pd-progress-fill {
-  height: 100%;
-  background: var(--pd-accent);
-  border-radius: 3px;
-  transition: width 60ms linear;
-}
-
-.pd-progress-fill.pd-tween-active {
-  background: var(--pd-green);
-}
-
-.pd-spring-velocity {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pd-spring-indicator {
-  display: inline-block;
-  width: 40px;
-  height: 4px;
-  background: var(--pd-bg-input);
-  border-radius: 2px;
-  position: relative;
-  overflow: hidden;
-}
-
-.pd-spring-indicator-fill {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  height: 100%;
-  background: var(--pd-orange);
-  border-radius: 2px;
-  transition: width 60ms linear, left 60ms linear;
-}
-
-.pd-spring-settled {
-  color: var(--pd-green);
-  font-size: 10px;
-  font-weight: 600;
-}
-
 /* ---- Event Fire Panel ---- */
 .pd-fire-form {
   display: flex;

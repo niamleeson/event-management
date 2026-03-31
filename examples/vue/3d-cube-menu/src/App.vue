@@ -1,16 +1,26 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSpring, useSignal } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, FACES, DragStart, DragMove, DragEnd, FaceSelected,
-  rotXSpring, rotYSpring, selectedFace,
+  engine,
+  FACES,
+  DragStart,
+  DragMove,
+  DragEnd,
+  FaceSelected,
+  rotXSpring,
+  rotYSpring,
+  selectedFace,
+  SelectedFaceChanged,
+  RotXSpringVal,
+  RotYSpringVal,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const rotX = useSpring(rotXSpring)
-const rotY = useSpring(rotYSpring)
-const selected = useSignal(selectedFace)
+const rotX = usePulse(RotXSpringVal, rotXSpring.value)
+const rotY = usePulse(RotYSpringVal, rotYSpring.value)
+const selected = usePulse(SelectedFaceChanged, selectedFace)
 
 let dragging = false
 let lastPos = { x: 0, y: 0 }

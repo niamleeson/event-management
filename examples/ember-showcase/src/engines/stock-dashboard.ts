@@ -57,68 +57,85 @@ export const DismissAlert = engine.event<string>('DismissAlert')
 export const SetAlertThreshold = engine.event<{ symbol: string; threshold: number | null }>('SetAlertThreshold')
 export const ToggleFeed = engine.event<void>('ToggleFeed')
 export const SelectStock = engine.event<string | null>('SelectStock')
+export const StocksChanged = engine.event<void>('StocksChanged')
+export const AlertsChanged = engine.event<void>('AlertsChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const stocks = engine.signal<Stock[]>(
-  PriceUpdated, INITIAL_STOCKS.map((s) => ({ ...s, history: [s.price] })),
-  (prev, { symbol, price }) => prev.map((s) => {
+let _stocks: Stock[] = INITIAL_STOCKS.map((s) => ({ ...s, history: [s.price] }))
+let _alerts: StockAlert[] = []
+let _feedRunning = true
+let _selectedStock: string | null = null
+
+export function getStocks(): Stock[] { return _stocks }
+export function getAlerts(): StockAlert[] { return _alerts }
+export function getFeedRunning(): boolean { return _feedRunning }
+export function getSelectedStock(): string | null { return _selectedStock }
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(PriceUpdated, ({ symbol, price }) => {
+  _stocks = _stocks.map((s) => {
     if (s.symbol !== symbol) return s
-    const change = price - s.price
-    const changePercent = (change / s.price) * 100
+    const prevPrice = s.price
+    const change = price - prevPrice
+    const changePercent = (change / prevPrice) * 100
     const history = [...s.history, price].slice(-SPARKLINE_LENGTH)
+
+    // Check alert threshold
+    if (s.alertThreshold !== null) {
+      if (prevPrice <= s.alertThreshold && price > s.alertThreshold) {
+        engine.emit(AlertTriggered, {
+          id: `alert-${Date.now()}-${symbol}`,
+          symbol,
+          price,
+          threshold: s.alertThreshold,
+          timestamp: Date.now(),
+          type: 'above',
+        })
+      } else if (prevPrice >= s.alertThreshold && price < s.alertThreshold) {
+        engine.emit(AlertTriggered, {
+          id: `alert-${Date.now()}-${symbol}`,
+          symbol,
+          price,
+          threshold: s.alertThreshold,
+          timestamp: Date.now(),
+          type: 'below',
+        })
+      }
+    }
+
     return { ...s, price, change, changePercent, history }
-  }),
-)
+  })
+  engine.emit(StocksChanged, undefined)
+})
 
-engine.signalUpdate(stocks, SetAlertThreshold, (prev, { symbol, threshold }) =>
-  prev.map((s) => s.symbol === symbol ? { ...s, alertThreshold: threshold } : s),
-)
+engine.on(SetAlertThreshold, ({ symbol, threshold }) => {
+  _stocks = _stocks.map((s) => s.symbol === symbol ? { ...s, alertThreshold: threshold } : s)
+  engine.emit(StocksChanged, undefined)
+})
 
-export const alerts = engine.signal<StockAlert[]>(
-  AlertTriggered, [], (prev, alert) => [alert, ...prev].slice(0, 20),
-)
-engine.signalUpdate(alerts, DismissAlert, (prev, id) => prev.filter((a) => a.id !== id))
+engine.on(AlertTriggered, (alert: StockAlert) => {
+  _alerts = [alert, ..._alerts].slice(0, 20)
+  engine.emit(AlertsChanged, undefined)
+})
 
-export const feedRunning = engine.signal<boolean>(
-  ToggleFeed, true, (prev) => !prev,
-)
+engine.on(DismissAlert, (id: string) => {
+  _alerts = _alerts.filter((a) => a.id !== id)
+  engine.emit(AlertsChanged, undefined)
+})
 
-export const selectedStock = engine.signal<string | null>(
-  SelectStock, null, (_prev, sym) => sym,
-)
+engine.on(ToggleFeed, () => {
+  _feedRunning = !_feedRunning
+})
 
-// ---------------------------------------------------------------------------
-// Threshold alert logic
-// ---------------------------------------------------------------------------
-
-engine.pipeIf(PriceUpdated, AlertTriggered, ({ symbol, price }) => {
-  const stock = stocks.value.find((s) => s.symbol === symbol)
-  if (!stock || stock.alertThreshold === null) return null
-
-  const prevPrice = stock.price
-  if (prevPrice <= stock.alertThreshold && price > stock.alertThreshold) {
-    return {
-      id: `alert-${Date.now()}-${symbol}`,
-      symbol,
-      price,
-      threshold: stock.alertThreshold,
-      timestamp: Date.now(),
-      type: 'above' as const,
-    }
-  } else if (prevPrice >= stock.alertThreshold && price < stock.alertThreshold) {
-    return {
-      id: `alert-${Date.now()}-${symbol}`,
-      symbol,
-      price,
-      threshold: stock.alertThreshold,
-      timestamp: Date.now(),
-      type: 'below' as const,
-    }
-  }
-  return null
+engine.on(SelectStock, (sym: string | null) => {
+  _selectedStock = sym
+  engine.emit(StocksChanged, undefined)
 })
 
 // ---------------------------------------------------------------------------
@@ -130,8 +147,8 @@ let feedInterval: ReturnType<typeof setInterval> | null = null
 export function startFeed() {
   if (feedInterval) return
   feedInterval = setInterval(() => {
-    if (!feedRunning.value) return
-    for (const stock of stocks.value) {
+    if (!_feedRunning) return
+    for (const stock of _stocks) {
       const volatility = stock.price * 0.008
       const change = (Math.random() - 0.5) * 2 * volatility
       const newPrice = Math.max(1, stock.price + change)

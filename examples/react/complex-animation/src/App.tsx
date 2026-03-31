@@ -1,19 +1,14 @@
 import { useEffect } from 'react'
-import { useSignal, useTween, useSpring, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  engine,
   CARDS,
   CARD_COUNT,
   PageLoaded,
   HoverCard,
   UnhoverCard,
-  cardOpacity,
-  cardTranslateY,
-  cardHoverScale,
-  cardHoverShadow,
-  welcomeOpacity,
-  welcomeTranslateY,
-  allEntered,
+  CardAnimStateChanged,
+  AllCardsEnteredEvent,
+  WelcomeAnimChanged,
   type CardData,
 } from './engine'
 
@@ -23,10 +18,17 @@ import {
 
 function AnimatedCard({ card, index }: { card: CardData; index: number }) {
   const emit = useEmit()
-  const opacity = useTween(cardOpacity[index])
-  const translateY = useTween(cardTranslateY[index])
-  const scale = useTween(cardHoverScale[index])
-  const shadowSize = useSpring(cardHoverShadow[index])
+  const anim = usePulse(CardAnimStateChanged, {
+    opacities: Array(CARD_COUNT).fill(0),
+    translateYs: Array(CARD_COUNT).fill(40),
+    hoverScales: Array(CARD_COUNT).fill(1),
+    hoverShadows: Array(CARD_COUNT).fill(0),
+  })
+
+  const opacity = anim.opacities[index]
+  const translateY = anim.translateYs[index]
+  const scale = anim.hoverScales[index]
+  const shadowSize = anim.hoverShadows[index]
 
   return (
     <div
@@ -41,8 +43,8 @@ function AnimatedCard({ card, index }: { card: CardData; index: number }) {
         borderTop: `4px solid ${card.color}`,
         transition: 'box-shadow 0.05s',
       }}
-      onMouseEnter={() => emit(HoverCard[index], index)}
-      onMouseLeave={() => emit(UnhoverCard[index], index)}
+      onMouseEnter={() => emit(HoverCard, index)}
+      onMouseLeave={() => emit(UnhoverCard, index)}
     >
       <div
         style={{
@@ -82,17 +84,16 @@ function AnimatedCard({ card, index }: { card: CardData; index: number }) {
 // ---------------------------------------------------------------------------
 
 function WelcomeMessage() {
-  const entered = useSignal(allEntered)
-  const opacity = useTween(welcomeOpacity)
-  const translateY = useTween(welcomeTranslateY)
+  const entered = usePulse(AllCardsEnteredEvent, false)
+  const welcomeAnim = usePulse(WelcomeAnimChanged, { opacity: 0, translateY: 20 })
 
-  if (!entered && opacity === 0) return null
+  if (!entered && welcomeAnim.opacity === 0) return null
 
   return (
     <div
       style={{
-        opacity,
-        transform: `translateY(${translateY}px)`,
+        opacity: welcomeAnim.opacity,
+        transform: `translateY(${welcomeAnim.translateY}px)`,
         textAlign: 'center',
         marginTop: 48,
         padding: '32px 24px',
@@ -127,7 +128,6 @@ export default function App() {
 
   // Fire PageLoaded on mount
   useEffect(() => {
-    // Small delay to ensure everything is mounted
     const timer = setTimeout(() => {
       emit(PageLoaded, undefined)
     }, 300)
@@ -167,8 +167,8 @@ export default function App() {
               marginRight: 'auto',
             }}
           >
-            Cards cascade in with staggered tweens. Hover for spring-driven
-            shadows. A join rule fires after all cards enter.
+            Cards cascade in with staggered animations. Hover for spring-driven
+            shadows. A join fires after all cards enter.
           </p>
         </div>
 

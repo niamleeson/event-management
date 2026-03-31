@@ -191,7 +191,7 @@ export class AppComponent implements OnDestroy {
     {
       path: 'todo-list',
       label: 'Todo List',
-      description: 'CRUD with validation pipes',
+      description: 'CRUD with event-driven validation',
     },
     {
       path: 'api-call',
@@ -201,7 +201,7 @@ export class AppComponent implements OnDestroy {
     {
       path: 'simple-animation',
       label: 'Simple Animation',
-      description: 'Tween-powered counter',
+      description: 'Animated counter with rAF',
     },
     {
       path: 'complex-animation',
@@ -211,7 +211,7 @@ export class AppComponent implements OnDestroy {
     {
       path: 'drag-api-animation',
       label: 'Drag & Drop',
-      description: 'Kanban with spring physics',
+      description: 'Kanban with drag and drop',
     },
     {
       path: 'realtime-dashboard',
@@ -227,12 +227,12 @@ export class AppComponent implements OnDestroy {
     {
       path: '3d-card-flip',
       label: '3D Card Flip',
-      description: '4x2 grid with flip tweens',
+      description: '4x2 grid with flip animations',
     },
     {
       path: '3d-cube-menu',
       label: '3D Cube Menu',
-      description: 'Drag-rotate cube, spring snap',
+      description: 'Drag-rotate cube, snap to face',
     },
     {
       path: '3d-particle-explosion',
@@ -242,12 +242,12 @@ export class AppComponent implements OnDestroy {
     {
       path: '3d-carousel',
       label: '3D Carousel',
-      description: 'Auto-rotate 3D circle layout',
+      description: 'Auto-rotate 3D card circle',
     },
     {
       path: '3d-layered-parallax',
       label: 'Layered Parallax',
-      description: '5-layer spring camera tilt',
+      description: '5-layer mouse-driven parallax',
     },
     {
       path: '3d-morphing-grid',

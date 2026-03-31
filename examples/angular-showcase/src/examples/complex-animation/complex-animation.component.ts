@@ -1,4 +1,4 @@
-import { Component, type WritableSignal, AfterViewInit, OnInit, OnDestroy } from '@angular/core'
+import { Component, type WritableSignal, AfterViewInit, OnInit, OnDestroy, signal as ngSignal } from '@angular/core'
 import { providePulse, PulseService } from '@pulse/angular'
 import {
   engine,
@@ -7,13 +7,13 @@ import {
   PageLoaded,
   HoverCard,
   UnhoverCard,
-  cardOpacity,
-  cardTranslateY,
-  cardHoverScale,
-  cardHoverShadow,
-  welcomeOpacity,
-  welcomeTranslateY,
-  allEntered,
+  CardOpacityChanged,
+  CardTranslateYChanged,
+  CardScaleChanged,
+  CardShadowChanged,
+  AllEnteredChanged,
+  WelcomeOpacityChanged,
+  WelcomeTranslateYChanged,
   type CardData,
 } from './engine'
 
@@ -27,8 +27,8 @@ import {
         <div class="header">
           <h1 class="title">Staggered Card Entrance</h1>
           <p class="subtitle">
-            Cards cascade in with staggered tweens. Hover for spring-driven
-            shadows. A join rule fires after all cards enter.
+            Cards cascade in with staggered animations. Hover for spring-driven
+            shadows. A join fires after all cards enter.
           </p>
         </div>
 
@@ -66,81 +66,19 @@ import {
     </div>
   `,
   styles: [`
-    .page {
-      min-height: 100vh;
-      background: #f8f9fa;
-      padding: 60px 20px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    .wrapper {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    .header {
-      text-align: center;
-      margin-bottom: 48px;
-    }
-    .title {
-      font-size: 42px;
-      font-weight: 800;
-      color: #1a1a2e;
-      margin: 0;
-    }
-    .subtitle {
-      color: #6c757d;
-      font-size: 16px;
-      margin-top: 8px;
-      max-width: 500px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .card-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 20px;
-    }
-    .card {
-      background: #fff;
-      border-radius: 16px;
-      padding: 28px;
-      cursor: pointer;
-      transition: box-shadow 0.05s;
-    }
-    .card-icon {
-      font-size: 36px;
-      margin-bottom: 12px;
-    }
-    .card-title {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 700;
-      color: #1a1a2e;
-      margin-bottom: 8px;
-    }
-    .card-desc {
-      margin: 0;
-      font-size: 14px;
-      color: #6c757d;
-      line-height: 1.5;
-    }
-    .welcome {
-      text-align: center;
-      margin-top: 48px;
-      padding: 32px 24px;
-      background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%);
-      border-radius: 16px;
-      color: #fff;
-    }
-    .welcome-title {
-      margin: 0;
-      font-size: 28px;
-      font-weight: 700;
-    }
-    .welcome-text {
-      margin: 8px 0 0;
-      font-size: 16px;
-      opacity: 0.9;
-    }
+    .page { min-height: 100vh; background: #f8f9fa; padding: 60px 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .wrapper { max-width: 900px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 48px; }
+    .title { font-size: 42px; font-weight: 800; color: #1a1a2e; margin: 0; }
+    .subtitle { color: #6c757d; font-size: 16px; margin-top: 8px; max-width: 500px; margin-left: auto; margin-right: auto; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+    .card { background: #fff; border-radius: 16px; padding: 28px; cursor: pointer; transition: box-shadow 0.05s; }
+    .card-icon { font-size: 36px; margin-bottom: 12px; }
+    .card-title { margin: 0; font-size: 20px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
+    .card-desc { margin: 0; font-size: 14px; color: #6c757d; line-height: 1.5; }
+    .welcome { text-align: center; margin-top: 48px; padding: 32px 24px; background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%); border-radius: 16px; color: #fff; }
+    .welcome-title { margin: 0; font-size: 28px; font-weight: 700; }
+    .welcome-text { margin: 8px 0 0; font-size: 16px; opacity: 0.9; }
   `],
 })
 export class ComplexAnimationComponent implements AfterViewInit, OnInit, OnDestroy {
@@ -148,27 +86,34 @@ export class ComplexAnimationComponent implements AfterViewInit, OnInit, OnDestr
   cardCount = CARD_COUNT
 
   allEnteredSig: WritableSignal<boolean>
+  welcomeOp: WritableSignal<number>
+  welcomeTy: WritableSignal<number>
 
-  // Per-card Angular signals bridged from Pulse tweens/springs
   cardOpacities: WritableSignal<number>[] = []
   cardTranslates: WritableSignal<number>[] = []
   cardScales: WritableSignal<number>[] = []
   cardShadows: WritableSignal<number>[] = []
 
-  welcomeOp: WritableSignal<number>
-  welcomeTy: WritableSignal<number>
-
   constructor(private pulse: PulseService) {
-    this.allEnteredSig = pulse.signal(allEntered)
-    this.welcomeOp = pulse.tween(welcomeOpacity)
-    this.welcomeTy = pulse.tween(welcomeTranslateY)
+    this.allEnteredSig = pulse.use(AllEnteredChanged, false)
+    this.welcomeOp = pulse.use(WelcomeOpacityChanged, 0)
+    this.welcomeTy = pulse.use(WelcomeTranslateYChanged, 20)
 
-    // Bridge each card's tween/spring to Angular signals
     for (let i = 0; i < CARD_COUNT; i++) {
-      this.cardOpacities.push(pulse.tween(cardOpacity[i]))
-      this.cardTranslates.push(pulse.tween(cardTranslateY[i]))
-      this.cardScales.push(pulse.tween(cardHoverScale[i]))
-      this.cardShadows.push(pulse.spring(cardHoverShadow[i]))
+      const opSig = ngSignal(0)
+      const tySig = ngSignal(40)
+      const scSig = ngSignal(1)
+      const shSig = ngSignal(0)
+      this.cardOpacities.push(opSig)
+      this.cardTranslates.push(tySig)
+      this.cardScales.push(scSig)
+      this.cardShadows.push(shSig)
+      // Subscribe to per-card events
+      const unsub1 = engine.on(CardOpacityChanged[i], (e) => opSig.set(e.value))
+      const unsub2 = engine.on(CardTranslateYChanged[i], (e) => tySig.set(e.value))
+      const unsub3 = engine.on(CardScaleChanged[i], (e) => scSig.set(e.value))
+      const unsub4 = engine.on(CardShadowChanged[i], (e) => shSig.set(e.value))
+      // Note: cleanup handled by engine.destroy()
     }
   }
 
@@ -182,7 +127,6 @@ export class ComplexAnimationComponent implements AfterViewInit, OnInit, OnDestr
   }
 
   ngAfterViewInit(): void {
-    // Fire PageLoaded after a small delay to ensure everything is mounted
     setTimeout(() => {
       this.pulse.emit(PageLoaded, undefined)
     }, 300)

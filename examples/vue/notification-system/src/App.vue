@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSignal, useTween, useSpring } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, AddNotification, DismissNotification, FloodNotifications,
-  notifications, entranceTweens, reflowSprings,
-  PRIORITY_COLORS, PRIORITY_ICONS,
+  engine,
+  AddNotification,
+  DismissNotification,
+  FloodNotifications,
+  PRIORITY_COLORS,
+  PRIORITY_ICONS,
+  NotificationsChanged,
+  getNotifications,
 } from './engine'
 import type { Priority } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const notifs = useSignal(notifications)
-
-const entranceVals = Array.from({ length: 20 }, (_, i) => useTween(entranceTweens[i]))
-const reflowVals = Array.from({ length: 20 }, (_, i) => useSpring(reflowSprings[i]))
+const notifs = usePulse(NotificationsChanged, getNotifications())
 
 const DEMO_TYPES: { priority: Priority; title: string; message: string }[] = [
   { priority: 'info', title: 'Info', message: 'This is an informational notification.' },
@@ -60,8 +62,7 @@ const DEMO_TYPES: { priority: Priority; title: string; message: string }[] = [
       </div>
 
       <p :style="{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: '24px', fontSize: '13px' }">
-        Notifications appear top-right with entrance tweens and spring reflow.
-        They auto-dismiss based on priority.
+        Notifications appear top-right. They auto-dismiss based on priority.
       </p>
     </div>
 
@@ -71,11 +72,9 @@ const DEMO_TYPES: { priority: Priority; title: string; message: string }[] = [
         v-for="(notif, i) in notifs"
         :key="notif.id"
         :style="{
-          position: 'absolute',
-          top: `${reflowVals[i % 20].value}px`,
-          right: '0',
+          position: 'relative',
+          marginBottom: '8px',
           width: '100%',
-          transform: `translateX(${i === 0 ? entranceVals[0].value : 0}%)`,
           background: '#16213e',
           borderRadius: '10px',
           padding: '14px 16px',

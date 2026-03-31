@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { useSignal, useEmit } from '@pulse/vue'
+import { usePulse, useEmit } from '@pulse/vue'
 import {
   TodoTextChanged,
   TodoAdded,
-  currentText,
-  validationError,
+  CurrentTextChanged,
+  ValidationChanged,
+  getCurrentText,
+  getValidation,
   type Todo,
 } from './engine'
 
 const emit = useEmit()
-const text = useSignal(currentText)
-const validation = useSignal(validationError)
+const text = usePulse(CurrentTextChanged, getCurrentText())
+const validation = usePulse(ValidationChanged, getValidation())
 
 function handleAdd() {
   if (!validation.value.valid) return

@@ -96,54 +96,23 @@ export const SearchChanged = engine.event<string>('SearchChanged')
 export const CreateFile = engine.event<{ parentId: string; name: string }>('CreateFile')
 export const DeleteNode = engine.event<string>('DeleteNode')
 export const RenameNode = engine.event<{ id: string; name: string }>('RenameNode')
+export const TreeChanged = engine.event<void>('TreeChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const fileTree = engine.signal<FileNode[]>(
-  CreateFile, [...INITIAL_TREE],
-  (prev, { parentId, name }) => {
-    const ext = name.split('.').pop() || 'default'
-    const newNode: FileNode = {
-      id: `${parentId}/${name}`,
-      name,
-      type: name.includes('.') ? 'file' : 'folder',
-      icon: FILE_ICONS[ext] || FILE_ICONS.default,
-      size: '0kb',
-      children: name.includes('.') ? undefined : [],
-    }
-    return addToTree(prev, parentId, newNode)
-  },
-)
+let _fileTree: FileNode[] = [...INITIAL_TREE]
+let _expandedNodes = new Set(['src', 'src/engines', 'src/pages'])
+let _selectedNode: string | null = null
+let _contextMenu: ContextMenuState = { visible: false, x: 0, y: 0, nodeId: null }
+let _searchQuery = ''
 
-engine.signalUpdate(fileTree, DeleteNode, (prev, id) => removeFromTree(prev, id))
-engine.signalUpdate(fileTree, RenameNode, (prev, { id, name }) => renameInTree(prev, id, name))
-
-export const expandedNodes = engine.signal<Set<string>>(
-  ToggleExpand,
-  new Set(['src', 'src/engines', 'src/pages']),
-  (prev, id) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  },
-)
-
-export const selectedNode = engine.signal<string | null>(
-  SelectNode, null, (_prev, id) => id,
-)
-
-export const contextMenu = engine.signal<ContextMenuState>(
-  ShowContextMenu, { visible: false, x: 0, y: 0, nodeId: null },
-  (_prev, state) => state,
-)
-engine.signalUpdate(contextMenu, HideContextMenu, () => ({ visible: false, x: 0, y: 0, nodeId: null }))
-
-export const searchQuery = engine.signal<string>(
-  SearchChanged, '', (_prev, q) => q,
-)
+export function getFileTree(): FileNode[] { return _fileTree }
+export function getExpandedNodes(): Set<string> { return _expandedNodes }
+export function getSelectedNode(): string | null { return _selectedNode }
+export function getContextMenu(): ContextMenuState { return _contextMenu }
+export function getSearchQuery(): string { return _searchQuery }
 
 // ---------------------------------------------------------------------------
 // Tree manipulation helpers
@@ -175,7 +144,6 @@ function renameInTree(nodes: FileNode[], id: string, name: string): FileNode[] {
   })
 }
 
-// Helper: flatten tree for search
 export function flattenTree(nodes: FileNode[]): FileNode[] {
   const result: FileNode[] = []
   function walk(list: FileNode[]) {
@@ -187,3 +155,58 @@ export function flattenTree(nodes: FileNode[]): FileNode[] {
   walk(nodes)
   return result
 }
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(ToggleExpand, (id: string) => {
+  _expandedNodes = new Set(_expandedNodes)
+  if (_expandedNodes.has(id)) _expandedNodes.delete(id)
+  else _expandedNodes.add(id)
+  engine.emit(TreeChanged, undefined)
+})
+
+engine.on(SelectNode, (id: string) => {
+  _selectedNode = id
+  engine.emit(TreeChanged, undefined)
+})
+
+engine.on(ShowContextMenu, (state: ContextMenuState) => {
+  _contextMenu = state
+  engine.emit(TreeChanged, undefined)
+})
+
+engine.on(HideContextMenu, () => {
+  _contextMenu = { visible: false, x: 0, y: 0, nodeId: null }
+  engine.emit(TreeChanged, undefined)
+})
+
+engine.on(SearchChanged, (q: string) => {
+  _searchQuery = q
+  engine.emit(TreeChanged, undefined)
+})
+
+engine.on(CreateFile, ({ parentId, name }) => {
+  const ext = name.split('.').pop() || 'default'
+  const newNode: FileNode = {
+    id: `${parentId}/${name}`,
+    name,
+    type: name.includes('.') ? 'file' : 'folder',
+    icon: FILE_ICONS[ext] || FILE_ICONS.default,
+    size: '0kb',
+    children: name.includes('.') ? undefined : [],
+  }
+  _fileTree = addToTree(_fileTree, parentId, newNode)
+  engine.emit(TreeChanged, undefined)
+})
+
+engine.on(DeleteNode, (id: string) => {
+  _fileTree = removeFromTree(_fileTree, id)
+  engine.emit(TreeChanged, undefined)
+})
+
+engine.on(RenameNode, ({ id, name }) => {
+  _fileTree = renameInTree(_fileTree, id, name)
+  engine.emit(TreeChanged, undefined)
+})

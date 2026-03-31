@@ -1,11 +1,10 @@
 import { useRef, useEffect, useCallback } from 'react'
-import { useSignal, useSpring, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  cards,
-  dragState,
-  cardStatuses,
-  dragSpringX,
-  dragSpringY,
+  CardsChanged,
+  DragStateChanged,
+  DragPositionChanged,
+  CardStatusesChanged,
   DragStart,
   DragMove,
   DragEnd,
@@ -14,7 +13,6 @@ import {
   type KanbanCard,
   type ColumnId,
   type CardStatus,
-  type DragInfo,
 } from './engine'
 
 // ---------------------------------------------------------------------------
@@ -185,31 +183,12 @@ const styles = {
     padding: 16,
     boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
   } as React.CSSProperties,
-  dropZone: (isOver: boolean) =>
-    ({
-      minHeight: 60,
-      border: `2px dashed ${isOver ? '#4361ee' : 'transparent'}`,
-      borderRadius: 8,
-      transition: 'border-color 0.2s, background 0.2s',
-      background: isOver ? '#4361ee11' : 'transparent',
-    }) as React.CSSProperties,
-  devtoolsHint: {
-    textAlign: 'center' as const,
-    marginTop: 32,
-    padding: 16,
-    background: '#1e293b',
-    borderRadius: 12,
-    maxWidth: 500,
-    margin: '32px auto 0',
-  } as React.CSSProperties,
-  devtoolsText: {
-    color: '#94a3b8',
-    fontSize: 13,
-  } as React.CSSProperties,
-  devtoolsCode: {
-    color: '#4361ee',
-    fontFamily: 'monospace',
-    fontSize: 12,
+  dropZone: {
+    minHeight: 60,
+    border: '2px dashed transparent',
+    borderRadius: 8,
+    transition: 'border-color 0.2s, background 0.2s',
+    background: 'transparent',
   } as React.CSSProperties,
 }
 
@@ -219,8 +198,8 @@ const styles = {
 
 function KanbanCardComponent({ card }: { card: KanbanCard }) {
   const emit = useEmit()
-  const drag = useSignal(dragState)
-  const statuses = useSignal(cardStatuses)
+  const drag = usePulse(DragStateChanged, null as ReturnType<typeof DragStateChanged['__type']> | null)
+  const statuses = usePulse(CardStatusesChanged, {} as Record<string, CardStatus>)
   const cardRef = useRef<HTMLDivElement>(null)
 
   const status: CardStatus = statuses[card.id] ?? 'idle'
@@ -288,14 +267,13 @@ function KanbanCardComponent({ card }: { card: KanbanCard }) {
 }
 
 // ---------------------------------------------------------------------------
-// Ghost card (follows mouse during drag via spring)
+// Ghost card
 // ---------------------------------------------------------------------------
 
 function GhostCard() {
-  const drag = useSignal(dragState)
-  const allCards = useSignal(cards)
-  const springX = useSpring(dragSpringX)
-  const springY = useSpring(dragSpringY)
+  const drag = usePulse(DragStateChanged, null as any)
+  const allCards = usePulse(CardsChanged, [] as KanbanCard[])
+  const springPos = usePulse(DragPositionChanged, { x: 0, y: 0 })
 
   if (!drag) return null
 
@@ -306,8 +284,8 @@ function GhostCard() {
     <div
       style={{
         ...styles.ghostCard,
-        left: springX - drag.offsetX,
-        top: springY - drag.offsetY,
+        left: springPos.x - drag.offsetX,
+        top: springPos.y - drag.offsetY,
       }}
     >
       <p style={styles.cardTitle}>{card.title}</p>
@@ -329,17 +307,15 @@ function Column({
   title: string
   color: string
 }) {
-  const allCards = useSignal(cards)
-  const drag = useSignal(dragState)
+  const allCards = usePulse(CardsChanged, [] as KanbanCard[])
+  const drag = usePulse(DragStateChanged, null as any)
   const emit = useEmit()
-  const columnRef = useRef<HTMLDivElement>(null)
 
   const columnCards = allCards.filter((c) => c.column === id)
   const isDragging = drag !== null
-  const isOverRef = useRef(false)
 
   return (
-    <div style={styles.column(color)} ref={columnRef}>
+    <div style={styles.column(color)}>
       <div style={styles.columnHeader}>
         <span style={styles.columnTitle}>{title}</span>
         <span style={styles.columnCount(color)}>{columnCards.length}</span>
@@ -349,7 +325,7 @@ function Column({
       ))}
       {isDragging && (
         <div
-          style={styles.dropZone(false)}
+          style={styles.dropZone}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = '#4361ee'
             e.currentTarget.style.background = '#4361ee11'
@@ -394,7 +370,7 @@ function Column({
 
 export default function App() {
   const emit = useEmit()
-  const drag = useSignal(dragState)
+  const drag = usePulse(DragStateChanged, null as any)
 
   // Global mouse move/up handlers for drag
   useEffect(() => {
@@ -448,19 +424,6 @@ export default function App() {
       </div>
 
       <GhostCard />
-
-      <div style={styles.devtoolsHint}>
-        <p style={styles.devtoolsText}>
-          This example integrates with{' '}
-          <code style={styles.devtoolsCode}>@pulse/devtools</code>. Import and
-          connect to visualize event flow, signals, and the DAG in real-time.
-        </p>
-        <p style={{ ...styles.devtoolsText, marginTop: 8 }}>
-          <code style={styles.devtoolsCode}>
-            {`import { connectDevtools } from '@pulse/devtools'`}
-          </code>
-        </p>
-      </div>
     </div>
   )
 }

@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, TweenValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Grid config                                                       */
 /* ------------------------------------------------------------------ */
@@ -50,15 +46,17 @@ export const CycleShape = engine.event('CycleShape')
 /*  Current shape signal                                              */
 /* ------------------------------------------------------------------ */
 
-export const currentShape: Signal<Shape> = engine.signal(MorphToShape, 'flat' as Shape, (_prev, shape) => shape)
+export let currentShape = 'flat' as Shape
+export const CurrentShapeChanged = engine.event('CurrentShapeChanged')
+engine.on(MorphToShape, (v: any) => { currentShape = ((_prev, shape) => shape)(currentShape, v); engine.emit(CurrentShapeChanged, currentShape) })
 
 /* ------------------------------------------------------------------ */
 /*  Per-cell tweens for rotateX, rotateY, translateZ                  */
 /* ------------------------------------------------------------------ */
 
-export const cellRX: TweenValue[] = []
-export const cellRY: TweenValue[] = []
-export const cellTZ: TweenValue[] = []
+export const cellRX: any[] = []
+export const cellRY: any[] = []
+export const cellTZ: any[] = []
 
 for (let r = 0; r < GRID; r++) {
   for (let c = 0; c < GRID; c++) {
@@ -69,31 +67,100 @@ for (let r = 0; r < GRID; r++) {
     const ryStart = engine.event(`CellRY_${idx}`)
     const tzStart = engine.event(`CellTZ_${idx}`)
 
-    const rxTween = engine.tween({
+    let rxTween = { value: 0, active: false }
+const RxTweenVal = engine.event<number>('RxTweenVal')
+{
+  const _tc = {
       start: rxStart,
       from: () => cellRX[idx]?.value ?? 0,
-      to: () => shapePositions(currentShape.value, r, c).rx,
+      to: () => shapePositions(currentShape, r, c).rx,
       duration: 800,
       easing: (t: number) => 1 - Math.pow(1 - t, 3),
-    })
+    }
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; rxTween.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!rxTween.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      rxTween.value = f + (t - f) * _te(p)
+      engine.emit(RxTweenVal, rxTween.value)
+      if (p >= 1) { rxTween.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { rxTween.active = false })) }
+}
     cellRX.push(rxTween)
 
-    const ryTween = engine.tween({
+    let ryTween = { value: 0, active: false }
+const RyTweenVal = engine.event<number>('RyTweenVal')
+{
+  const _tc = {
       start: ryStart,
       from: () => cellRY[idx]?.value ?? 0,
-      to: () => shapePositions(currentShape.value, r, c).ry,
+      to: () => shapePositions(currentShape, r, c).ry,
       duration: 800,
       easing: (t: number) => 1 - Math.pow(1 - t, 3),
-    })
+    }
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; ryTween.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!ryTween.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      ryTween.value = f + (t - f) * _te(p)
+      engine.emit(RyTweenVal, ryTween.value)
+      if (p >= 1) { ryTween.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { ryTween.active = false })) }
+}
     cellRY.push(ryTween)
 
-    const tzTween = engine.tween({
+    let tzTween = { value: 0, active: false }
+const TzTweenVal = engine.event<number>('TzTweenVal')
+{
+  const _tc = {
       start: tzStart,
       from: () => cellTZ[idx]?.value ?? 0,
-      to: () => shapePositions(currentShape.value, r, c).tz,
+      to: () => shapePositions(currentShape, r, c).tz,
       duration: 800,
       easing: (t: number) => 1 - Math.pow(1 - t, 3),
-    })
+    }
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; tzTween.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!tzTween.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      tzTween.value = f + (t - f) * _te(p)
+      engine.emit(TzTweenVal, tzTween.value)
+      if (p >= 1) { tzTween.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { tzTween.active = false })) }
+}
     cellTZ.push(tzTween)
 
     // On MorphToShape, fire per-cell tweens with stagger
@@ -112,10 +179,10 @@ for (let r = 0; r < GRID; r++) {
 /* ------------------------------------------------------------------ */
 
 let shapeIndex = 0
-engine.pipe(CycleShape, MorphToShape, () => {
+engine.on(CycleShape, (v: any) => { engine.emit(MorphToShape, (() => {
   shapeIndex = (shapeIndex + 1) % SHAPES.length
   return SHAPES[shapeIndex]
-})
+})(v)) })
 
 // Auto-cycle every 3 seconds
 setInterval(() => {
@@ -124,5 +191,8 @@ setInterval(() => {
 
 // Initial morph
 setTimeout(() => engine.emit(MorphToShape, 'sphere'), 500)
+
+
+
 
 export { COLORS }

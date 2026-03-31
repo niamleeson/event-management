@@ -173,8 +173,8 @@ export const FormulaError = engine.event<FormulaErrorPayload>('FormulaError')
 // Pipe: CellEdited -> CellComputed
 // ---------------------------------------------------------------------------
 
-engine.pipe(CellEdited, [CellComputed, FormulaError], (payload: CellEditPayload) => {
-  const currentGrid = cells.value
+engine.on(CellEdited, (v: any) => { const _r = ((payload: CellEditPayload) => {
+  const currentGrid = cells
   const tempGrid = currentGrid.map(row => row.map(cell => ({ ...cell })))
   tempGrid[payload.row][payload.col] = { raw: payload.value, computed: payload.value }
 
@@ -196,25 +196,28 @@ engine.pipe(CellEdited, [CellComputed, FormulaError], (payload: CellEditPayload)
     { row: payload.row, col: payload.col, result: payload.value },
     undefined,
   ]
-})
+})(v); if (_r[0] !== undefined) engine.emit(CellComputed, _r[0]); if (_r[1] !== undefined) engine.emit(FormulaError, _r[1]) })
 
 // ---------------------------------------------------------------------------
 // Signals
 // ---------------------------------------------------------------------------
 
-export const cells = engine.signal<Grid>(CellEdited, makeEmptyGrid(), (prev, payload) => {
+export let cells = makeEmptyGrid()
+export const CellsChanged = engine.event('CellsChanged')
+engine.on(CellEdited, (v: any) => { cells = ((prev, payload) => {
   const newGrid = prev.map(row => row.map(cell => ({ ...cell })))
   newGrid[payload.row][payload.col] = {
     raw: payload.value,
     computed: payload.value,
   }
   return recomputeGrid(newGrid)
-})
+})(cells, v); engine.emit(CellsChanged, cells) })
 
-export const selectedCell = engine.signal<CellCoord>(
-  CellSelected,
-  { row: 0, col: 0 },
-  (_prev, coord) => coord,
-)
+export let selectedCell = { row: 0, col: 0 }
+export const SelectedCellChanged = engine.event('SelectedCellChanged')
+engine.on(CellSelected, (v: any) => { selectedCell = ((_prev, coord) => coord)(selectedCell, v); engine.emit(SelectedCellChanged, selectedCell) })
+
+
+
 
 export { colLabel, ROWS, COLS }

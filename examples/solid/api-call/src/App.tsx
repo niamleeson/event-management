@@ -1,15 +1,13 @@
-import { For, Show, createMemo } from 'solid-js'
-import { useSignal, useEmit } from '@pulse/solid'
+import { usePulse, useEmit } from '@pulse/solid'
 import {
-  searchQuery,
-  searchResults,
-  isSearching,
-  selectedUserId,
-  userDetails,
-  isLoadingDetails,
-  error,
   SearchInput,
+  SearchQueryChanged,
+  SearchLoading,
+  SearchDone,
+  SearchError,
   UserSelected,
+  UserDetailsDone,
+  UserDetailsLoading,
   type User,
   type UserDetails,
 } from './engine'
@@ -30,385 +28,322 @@ const colors = {
   success: '#2a9d8f',
 }
 
+const styles = {
+  container: {
+    'max-width': 720,
+    margin: '40px auto',
+    'font-family':
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    padding: '0 20px',
+  },
+  header: {
+    'text-align': 'center' as const,
+    'margin-bottom': 32,
+  },
+  title: {
+    'font-size': 36,
+    'font-weight': 700,
+    color: colors.text,
+    margin: 0,
+  },
+  subtitle: {
+    color: colors.muted,
+    'font-size': 14,
+    'margin-top': 4,
+  },
+  searchBox: {
+    position: 'relative' as const,
+    'margin-bottom': 24,
+  },
+  input: {
+    width: '100%',
+    padding: '14px 16px 14px 44px',
+    'font-size': 16,
+    border: `2px solid ${colors.border}`,
+    'border-radius': 12,
+    outline: 'none',
+    'box-sizing': 'border-box' as const,
+    transition: 'border-color 0.2s',
+  },
+  searchIcon: {
+    position: 'absolute' as const,
+    left: 16,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: colors.muted,
+    'font-size': 18,
+  },
+  spinner: {
+    position: 'absolute' as const,
+    right: 16,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: 20,
+    height: 20,
+    border: `2px solid ${colors.border}`,
+    'border-top': `2px solid ${colors.primary}`,
+    'border-radius': '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  grid: {
+    display: 'grid',
+    'grid-template-columns': '1fr 1fr',
+    gap: 16,
+  },
+  userCard: (selected: boolean) =>
+    ({
+      padding: 16,
+      background: selected ? colors.primaryLight : colors.card,
+      'border-radius': 12,
+      border: `2px solid ${selected ? colors.primary : colors.border}`,
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+    }),
+  avatar: {
+    width: 48,
+    height: 48,
+    'border-radius': '50%',
+    background: colors.primary,
+    color: '#fff',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'font-weight': 700,
+    'font-size': 16,
+    'margin-bottom': 8,
+  },
+  userName: {
+    'font-weight': 600,
+    'font-size': 16,
+    color: colors.text,
+    margin: 0,
+  },
+  userRole: {
+    'font-size': 13,
+    color: colors.muted,
+    margin: '2px 0 0',
+  },
+  detailsPanel: {
+    'margin-top': 24,
+    padding: 24,
+    background: colors.card,
+    'border-radius': 12,
+    border: `2px solid ${colors.border}`,
+  },
+  detailsHeader: {
+    display: 'flex',
+    'align-items': 'center',
+    gap: 16,
+    'margin-bottom': 16,
+  },
+  detailsAvatar: {
+    width: 64,
+    height: 64,
+    'border-radius': '50%',
+    background: colors.primary,
+    color: '#fff',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'font-weight': 700,
+    'font-size': 22,
+    'flex-shrink': 0,
+  },
+  detailField: {
+    'margin-bottom': 12,
+  },
+  detailLabel: {
+    'font-size': 12,
+    'font-weight': 600,
+    'text-transform': 'uppercase' as const,
+    color: colors.muted,
+    'letter-spacing': 0.5,
+  },
+  detailValue: {
+    'font-size': 15,
+    color: colors.text,
+    'margin-top': 2,
+  },
+  tag: {
+    display: 'inline-block',
+    padding: '4px 10px',
+    background: colors.primaryLight,
+    color: colors.primary,
+    'border-radius': 12,
+    'font-size': 12,
+    'font-weight': 600,
+    'margin-right': 6,
+    'margin-top': 4,
+  },
+  errorBox: {
+    padding: 16,
+    background: '#fef2f2',
+    border: `1px solid ${colors.danger}`,
+    'border-radius': 8,
+    color: colors.danger,
+    'font-size': 14,
+    'margin-bottom': 16,
+  },
+  empty: {
+    'text-align': 'center' as const,
+    padding: 40,
+    color: colors.muted,
+  },
+  loadingOverlay: {
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    padding: 40,
+    color: colors.muted,
+  },
+}
+
 // ---------------------------------------------------------------------------
 // Components
 // ---------------------------------------------------------------------------
 
 function SearchBar() {
   const emit = useEmit()
-  const query = useSignal(searchQuery)
-  const loading = useSignal(isSearching)
+  const query = usePulse(SearchQueryChanged, '')
+  const loading = usePulse(SearchLoading, false)
 
   return (
-    <div style={{ position: 'relative', 'margin-bottom': '24px' }}>
-      <span
-        style={{
-          position: 'absolute',
-          left: '16px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          color: colors.muted,
-          'font-size': '18px',
-        }}
-      >
-        &#128269;
-      </span>
+    <div style={styles.searchBox}>
+      <span style={styles.searchIcon}>&#128269;</span>
       <input
-        style={{
-          width: '100%',
-          padding: '14px 16px 14px 44px',
-          'font-size': '16px',
-          border: `2px solid ${colors.border}`,
-          'border-radius': '12px',
-          outline: 'none',
-          'box-sizing': 'border-box',
-          transition: 'border-color 0.2s',
-        }}
-        value={query()}
+        style={styles.input}
+        value={query}
         placeholder="Search users by name, email, or role..."
-        onInput={(e) => emit(SearchInput, e.currentTarget.value)}
+        onChange={(e) => emit(SearchInput, e.currentTarget.value)}
       />
-      <Show when={loading()}>
-        <div
-          style={{
-            position: 'absolute',
-            right: '16px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: '20px',
-            height: '20px',
-            border: `2px solid ${colors.border}`,
-            'border-top': `2px solid ${colors.primary}`,
-            'border-radius': '50%',
-            animation: 'spin 0.8s linear infinite',
-          }}
-        />
-      </Show>
+      {loading() && <div style={styles.spinner} />}
       <style>{`@keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }`}</style>
     </div>
   )
 }
 
-function UserCard(props: { user: User }) {
+function UserCard({ user }: { user: User }) {
   const emit = useEmit()
-  const selected = useSignal(selectedUserId)
-
-  const isSelected = createMemo(() => selected() === props.user.id)
+  const selected = usePulse(UserSelected, null as string | null)
 
   return (
     <div
-      style={{
-        padding: '16px',
-        background: isSelected() ? colors.primaryLight : colors.card,
-        'border-radius': '12px',
-        border: `2px solid ${isSelected() ? colors.primary : colors.border}`,
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-      }}
-      onClick={() => emit(UserSelected, props.user.id)}
+      style={styles.userCard(selected() === user.id)}
+      onClick={() => emit(UserSelected, user.id)}
       onMouseEnter={(e) => {
-        if (!isSelected()) {
+        if (selected() !== user.id) {
           e.currentTarget.style.borderColor = colors.primary
           e.currentTarget.style.transform = 'translateY(-2px)'
         }
       }}
       onMouseLeave={(e) => {
-        if (!isSelected()) {
+        if (selected() !== user.id) {
           e.currentTarget.style.borderColor = colors.border
           e.currentTarget.style.transform = 'translateY(0)'
         }
       }}
     >
-      <div
-        style={{
-          width: '48px',
-          height: '48px',
-          'border-radius': '50%',
-          background: colors.primary,
-          color: '#fff',
-          display: 'flex',
-          'align-items': 'center',
-          'justify-content': 'center',
-          'font-weight': '700',
-          'font-size': '16px',
-          'margin-bottom': '8px',
-        }}
-      >
-        {props.user.avatar}
-      </div>
-      <p
-        style={{
-          'font-weight': '600',
-          'font-size': '16px',
-          color: colors.text,
-          margin: '0',
-        }}
-      >
-        {props.user.name}
-      </p>
-      <p
-        style={{
-          'font-size': '13px',
-          color: colors.muted,
-          margin: '2px 0 0',
-        }}
-      >
-        {props.user.role}
-      </p>
+      <div style={styles.avatar}>{user.avatar}</div>
+      <p style={styles.userName}>{user.name}</p>
+      <p style={styles.userRole}>{user.role}</p>
     </div>
   )
 }
 
-function SearchResultsView() {
-  const results = useSignal(searchResults)
-  const query = useSignal(searchQuery)
-  const loading = useSignal(isSearching)
+function SearchResults() {
+  const results = usePulse(SearchDone, [] as User[])
+  const query = usePulse(SearchQueryChanged, '')
+  const loading = usePulse(SearchLoading, false)
+
+  if (loading() && results().length === 0) {
+    return <div style={styles.loadingOverlay}>Searching...</div>
+  }
+
+  if (query().length > 0 && results().length === 0 && !loading()) {
+    return <div style={styles.empty}>No users found for "{query}"</div>
+  }
+
+  if (results().length === 0) {
+    return (
+      <div style={styles.empty}>
+        Type in the search box to find users
+      </div>
+    )
+  }
 
   return (
-    <Show
-      when={!(loading() && results().length === 0)}
-      fallback={
-        <div
-          style={{
-            display: 'flex',
-            'align-items': 'center',
-            'justify-content': 'center',
-            padding: '40px',
-            color: colors.muted,
-          }}
-        >
-          Searching...
-        </div>
-      }
-    >
-      <Show
-        when={!(query().length > 0 && results().length === 0 && !loading())}
-        fallback={
-          <div
-            style={{
-              'text-align': 'center',
-              padding: '40px',
-              color: colors.muted,
-            }}
-          >
-            No users found for "{query()}"
-          </div>
-        }
-      >
-        <Show
-          when={results().length > 0}
-          fallback={
-            <div
-              style={{
-                'text-align': 'center',
-                padding: '40px',
-                color: colors.muted,
-              }}
-            >
-              Type in the search box to find users
-            </div>
-          }
-        >
-          <div
-            style={{
-              display: 'grid',
-              'grid-template-columns': '1fr 1fr',
-              gap: '16px',
-            }}
-          >
-            <For each={results()}>
-              {(user) => <UserCard user={user} />}
-            </For>
-          </div>
-        </Show>
-      </Show>
-    </Show>
+    <div style={styles.grid}>
+      {results().map((user) => (
+        <UserCard user={user} />
+      ))}
+    </div>
   )
 }
 
 function UserDetailsPanel() {
-  const details = useSignal(userDetails)
-  const loading = useSignal(isLoadingDetails)
-  const selected = useSignal(selectedUserId)
+  const details = usePulse(UserDetailsDone, null as UserDetails | null)
+  const loading = usePulse(UserDetailsLoading, false)
+  const selected = usePulse(UserSelected, null as string | null)
 
-  return (
-    <Show when={selected()}>
-      <Show
-        when={!loading()}
-        fallback={
-          <div
-            style={{
-              'margin-top': '24px',
-              padding: '24px',
-              background: colors.card,
-              'border-radius': '12px',
-              border: `2px solid ${colors.border}`,
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                'align-items': 'center',
-                'justify-content': 'center',
-                padding: '40px',
-                color: colors.muted,
-              }}
-            >
-              Loading user details...
-            </div>
-          </div>
-        }
-      >
-        <Show when={details()}>
-          {(d) => (
-            <div
-              style={{
-                'margin-top': '24px',
-                padding: '24px',
-                background: colors.card,
-                'border-radius': '12px',
-                border: `2px solid ${colors.border}`,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  'align-items': 'center',
-                  gap: '16px',
-                  'margin-bottom': '16px',
-                }}
-              >
-                <div
-                  style={{
-                    width: '64px',
-                    height: '64px',
-                    'border-radius': '50%',
-                    background: colors.primary,
-                    color: '#fff',
-                    display: 'flex',
-                    'align-items': 'center',
-                    'justify-content': 'center',
-                    'font-weight': '700',
-                    'font-size': '22px',
-                    'flex-shrink': '0',
-                  }}
-                >
-                  {d().avatar}
-                </div>
-                <div>
-                  <h3
-                    style={{
-                      margin: '0',
-                      'font-size': '22px',
-                      color: colors.text,
-                    }}
-                  >
-                    {d().name}
-                  </h3>
-                  <p
-                    style={{
-                      margin: '4px 0 0',
-                      color: colors.muted,
-                      'font-size': '14px',
-                    }}
-                  >
-                    {d().email}
-                  </p>
-                </div>
-              </div>
-              <DetailField label="Role" value={d().role} />
-              <DetailField label="Bio" value={d().bio} />
-              <DetailField label="Location" value={d().location} />
-              <DetailField label="Joined" value={d().joinDate} />
-              <div style={{ 'margin-bottom': '12px' }}>
-                <div
-                  style={{
-                    'font-size': '12px',
-                    'font-weight': '600',
-                    'text-transform': 'uppercase',
-                    color: colors.muted,
-                    'letter-spacing': '0.5px',
-                  }}
-                >
-                  Projects
-                </div>
-                <div>
-                  <For each={d().projects}>
-                    {(p) => (
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '4px 10px',
-                          background: colors.primaryLight,
-                          color: colors.primary,
-                          'border-radius': '12px',
-                          'font-size': '12px',
-                          'font-weight': '600',
-                          'margin-right': '6px',
-                          'margin-top': '4px',
-                        }}
-                      >
-                        {p}
-                      </span>
-                    )}
-                  </For>
-                </div>
-              </div>
-            </div>
-          )}
-        </Show>
-      </Show>
-    </Show>
-  )
-}
+  if (!selected()) return null
 
-function DetailField(props: { label: string; value: string }) {
-  return (
-    <div style={{ 'margin-bottom': '12px' }}>
-      <div
-        style={{
-          'font-size': '12px',
-          'font-weight': '600',
-          'text-transform': 'uppercase',
-          color: colors.muted,
-          'letter-spacing': '0.5px',
-        }}
-      >
-        {props.label}
+  if (loading()) {
+    return (
+      <div style={styles.detailsPanel}>
+        <div style={styles.loadingOverlay}>Loading user details...</div>
       </div>
-      <div
-        style={{
-          'font-size': '15px',
-          color: colors.text,
-          'margin-top': '2px',
-        }}
-      >
-        {props.value}
+    )
+  }
+
+  if (!details()) return null
+
+  return (
+    <div style={styles.detailsPanel}>
+      <div style={styles.detailsHeader}>
+        <div style={styles.detailsAvatar}>{details().avatar}</div>
+        <div>
+          <h3 style={{ margin: 0, 'font-size': 22, color: colors.text }}>
+            {details().name}
+          </h3>
+          <p style={{ margin: '4px 0 0', color: colors.muted, 'font-size': 14 }}>
+            {details().email}
+          </p>
+        </div>
+      </div>
+      <div style={styles.detailField}>
+        <div style={styles.detailLabel}>Role</div>
+        <div style={styles.detailValue}>{details().role}</div>
+      </div>
+      <div style={styles.detailField}>
+        <div style={styles.detailLabel}>Bio</div>
+        <div style={styles.detailValue}>{details().bio}</div>
+      </div>
+      <div style={styles.detailField}>
+        <div style={styles.detailLabel}>Location</div>
+        <div style={styles.detailValue}>{details().location}</div>
+      </div>
+      <div style={styles.detailField}>
+        <div style={styles.detailLabel}>Joined</div>
+        <div style={styles.detailValue}>{details().joinDate}</div>
+      </div>
+      <div style={styles.detailField}>
+        <div style={styles.detailLabel}>Projects</div>
+        <div>
+          {details().projects.map((p) => (
+            <span style={styles.tag}>
+              {p}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
 function ErrorBanner() {
-  const err = useSignal(error)
-
-  return (
-    <Show when={err()}>
-      <div
-        style={{
-          padding: '16px',
-          background: '#fef2f2',
-          border: `1px solid ${colors.danger}`,
-          'border-radius': '8px',
-          color: colors.danger,
-          'font-size': '14px',
-          'margin-bottom': '16px',
-        }}
-      >
-        {err()}
-      </div>
-    </Show>
-  )
+  const err = usePulse(SearchError, null as string | null)
+  if (!err()) return null
+  return <div style={styles.errorBox}>{err}</div>
 }
 
 // ---------------------------------------------------------------------------
@@ -417,40 +352,17 @@ function ErrorBanner() {
 
 export default function App() {
   return (
-    <div
-      style={{
-        'max-width': '720px',
-        margin: '40px auto',
-        'font-family':
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        padding: '0 20px',
-      }}
-    >
-      <div style={{ 'text-align': 'center', 'margin-bottom': '32px' }}>
-        <h1
-          style={{
-            'font-size': '36px',
-            'font-weight': '700',
-            color: colors.text,
-            margin: '0',
-          }}
-        >
-          User Search
-        </h1>
-        <p
-          style={{
-            color: colors.muted,
-            'font-size': '14px',
-            'margin-top': '4px',
-          }}
-        >
-          Async search with debounce, cancellation, and details fetching via
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <h1 style={styles.title}>User Search</h1>
+        <p style={styles.subtitle}>
+          Async search with debounce, cancellation, and details() fetching via
           Pulse
         </p>
       </div>
       <ErrorBanner />
       <SearchBar />
-      <SearchResultsView />
+      <SearchResults />
       <UserDetailsPanel />
     </div>
   )

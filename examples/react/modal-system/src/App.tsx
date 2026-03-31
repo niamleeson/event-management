@@ -1,8 +1,8 @@
-import { useSignal, useEmit, useEvent } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import { useCallback, useEffect, useRef } from 'react'
 import {
-  modalStack,
-  activeModalId,
+  ModalStackChanged,
+  ActiveModalIdChanged,
   OpenModal,
   CloseModal,
   CloseAll,
@@ -260,8 +260,8 @@ function Modal({
 
 export default function App() {
   const emit = useEmit()
-  const stack = useSignal(modalStack)
-  const activeId = useSignal(activeModalId)
+  const stack = usePulse(ModalStackChanged, [] as ModalData[])
+  const activeId = usePulse(ActiveModalIdChanged, null as string | null)
 
   let modalCounter = useRef(0)
 

@@ -48,7 +48,7 @@ export interface FormData {
 // Field definitions per step
 // ---------------------------------------------------------------------------
 
-export const STEP_FIELDS: Record<StepId, string[]> = {
+const STEP_FIELDS: Record<StepId, string[]> = {
   0: ['firstName', 'lastName', 'email', 'phone'],
   1: ['street', 'city', 'state', 'zip'],
   2: [],
@@ -111,116 +111,25 @@ export const SubmitError = engine.event<string>('SubmitError')
 export const ShakeError = engine.event<void>('ShakeError')
 
 // ---------------------------------------------------------------------------
-// Pipes
+// State-changed events
 // ---------------------------------------------------------------------------
 
-// FieldUpdated -> FieldValidated (per-field validation)
-engine.pipe(FieldUpdated, FieldValidated, (update: FieldUpdate): FieldValidation => {
-  const result = validateField(update.field, update.value)
-  return {
-    step: update.step,
-    field: update.field,
-    valid: result.valid,
-    error: result.error,
-  }
-})
+export const CurrentStepChanged = engine.event<StepId>('CurrentStepChanged')
+export const StepDirectionChanged = engine.event<string>('StepDirectionChanged')
+export const FieldValuesChanged = engine.event<FormData>('FieldValuesChanged')
+export const FieldErrorsChanged = engine.event<Record<string, string | null>>('FieldErrorsChanged')
+export const StepValidChanged = engine.event<Record<number, boolean>>('StepValidChanged')
+export const IsSubmittingChanged = engine.event<boolean>('IsSubmittingChanged')
+export const SubmitResultChanged = engine.event<{ success: boolean } | null>('SubmitResultChanged')
+export const ShakeActiveChanged = engine.event<number>('ShakeActiveChanged')
 
 // ---------------------------------------------------------------------------
-// Step validation: check if all fields in current step are valid
+// State
 // ---------------------------------------------------------------------------
 
-engine.pipe(FieldValidated, StepValidated, (_validation: FieldValidation) => {
-  const step = _validation.step
-  const fields = STEP_FIELDS[step]
-  const allValid = fields.every((field) => {
-    const errors = fieldErrors.value
-    return errors[field] === null && fieldValues.value[field as keyof FormData]?.trim()
-  })
-  return { step, valid: allValid }
-})
+let currentStep: StepId = 0
+let stepDirection = 'next'
 
-// ---------------------------------------------------------------------------
-// Navigation: NextStep only advances if current step is valid
-// ---------------------------------------------------------------------------
-
-engine.on(NextStep, () => {
-  const step = currentStep.value
-  if (step >= 2) {
-    // On step 2, submit the form
-    engine.emit(FormSubmitted, fieldValues.value as FormData)
-    return
-  }
-
-  // Check step validity
-  const fields = STEP_FIELDS[step]
-  const allValid = fields.every((field) => {
-    const errors = fieldErrors.value
-    const val = fieldValues.value[field as keyof FormData]
-    return errors[field] === null && val?.trim()
-  })
-
-  if (allValid) {
-    engine.emit(StepChanged, { step: (step + 1) as StepId, direction: 'next' })
-  } else {
-    // Trigger validation for all fields on the step to show errors
-    for (const field of fields) {
-      const value = fieldValues.value[field as keyof FormData] ?? ''
-      engine.emit(FieldUpdated, { step, field, value })
-    }
-    engine.emit(ShakeError, undefined)
-  }
-})
-
-engine.pipeIf(PrevStep, StepChanged, () => {
-  const step = currentStep.value
-  return step > 0 ? { step: (step - 1) as StepId, direction: 'prev' as const } : null
-})
-
-// ---------------------------------------------------------------------------
-// Async: FormSubmitted -> SubmitDone (mock API)
-// ---------------------------------------------------------------------------
-
-engine.async(FormSubmitted, {
-  pending: SubmitPending,
-  done: SubmitDone,
-  error: SubmitError,
-  strategy: 'latest',
-  do: async (_data: FormData, { signal }) => {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, 1500)
-        signal.addEventListener('abort', () => {
-          clearTimeout(timer)
-          reject(new DOMException('Aborted', 'AbortError'))
-        })
-      })
-      return { success: true }
-    } catch (err: any) {
-      if (err?.name === 'AbortError') throw err
-      throw typeof err === 'string' ? err : (err?.message ?? 'Submission failed')
-    }
-  },
-})
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-// Current step
-export const currentStep = engine.signal<StepId>(
-  StepChanged,
-  0 as StepId,
-  (_prev, change) => change.step,
-)
-
-// Transition direction for animation
-export const stepDirection = engine.signal<'next' | 'prev'>(
-  StepChanged,
-  'next',
-  (_prev, change) => change.direction,
-)
-
-// Field values
 const initialFormData: FormData = {
   firstName: '',
   lastName: '',
@@ -232,57 +141,178 @@ const initialFormData: FormData = {
   zip: '',
 }
 
-export const fieldValues = engine.signal<FormData>(
-  FieldUpdated,
-  initialFormData,
-  (prev, update) => ({
-    ...prev,
-    [update.field]: update.value,
-  }),
-)
+let fieldValues: FormData = initialFormData
+let fieldErrors: Record<string, string | null> = {}
+let stepValid: Record<number, boolean> = { 0: false, 1: false, 2: true }
+let isSubmitting = false
+let submitResult: { success: boolean } | null = null
+let shakeActive = 0
+
+// ---------------------------------------------------------------------------
+// Pipes
+// ---------------------------------------------------------------------------
+
+// FieldUpdated -> FieldValidated (per-field validation)
+engine.on(FieldUpdated, (update) => {
+  const result = validateField(update.field, update.value)
+  engine.emit(FieldValidated, {
+    step: update.step,
+    field: update.field,
+    valid: result.valid,
+    error: result.error,
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Step validation: check if all fields in current step are valid
+// ---------------------------------------------------------------------------
+
+engine.on(FieldValidated, (validation) => {
+  const step = validation.step
+  const fields = STEP_FIELDS[step]
+  const allValid = fields.every((field) => {
+    return fieldErrors[field] === null && (fieldValues[field as keyof FormData] ?? '').trim()
+  })
+  engine.emit(StepValidated, { step, valid: allValid })
+})
+
+// ---------------------------------------------------------------------------
+// Navigation: NextStep only advances if current step is valid
+// ---------------------------------------------------------------------------
+
+engine.on(NextStep, () => {
+  const step = currentStep
+  if (step >= 2) {
+    // On step 2, submit the form
+    engine.emit(FormSubmitted, fieldValues as FormData)
+    return
+  }
+
+  // Check step validity
+  const fields = STEP_FIELDS[step]
+  const allValid = fields.every((field) => {
+    const val = fieldValues[field as keyof FormData]
+    return fieldErrors[field] === null && val?.trim()
+  })
+
+  if (allValid) {
+    engine.emit(StepChanged, { step: (step + 1) as StepId, direction: 'next' })
+  } else {
+    // Trigger validation for all fields on the step to show errors
+    for (const field of fields) {
+      const value = fieldValues[field as keyof FormData] ?? ''
+      engine.emit(FieldUpdated, { step, field, value })
+    }
+    engine.emit(ShakeError, undefined as unknown as void)
+  }
+})
+
+engine.on(PrevStep, () => {
+  const step = currentStep
+  if (step > 0) {
+    engine.emit(StepChanged, { step: (step - 1) as StepId, direction: 'prev' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Async: FormSubmitted -> SubmitDone (mock API)
+// ---------------------------------------------------------------------------
+
+{
+  let _aa: AbortController | null = null
+  engine.on(FormSubmitted, async (data: FormData) => {
+    if (_aa) _aa.abort()
+    _aa = new AbortController()
+    const signal = _aa.signal
+    engine.emit(SubmitPending, undefined as unknown as void)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 1500)
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(new DOMException('Aborted', 'AbortError'))
+        })
+      })
+      engine.emit(SubmitDone, { success: true })
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        engine.emit(SubmitError, typeof e === 'string' ? e : (e?.message ?? 'Submission failed'))
+      }
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// State reducers
+// ---------------------------------------------------------------------------
+
+// Current step
+engine.on(StepChanged, (change) => {
+  currentStep = change.step
+  engine.emit(CurrentStepChanged, currentStep)
+})
+
+// Transition direction for animation
+engine.on(StepChanged, (change) => {
+  stepDirection = change.direction
+  engine.emit(StepDirectionChanged, stepDirection)
+})
+
+// Field values
+engine.on(FieldUpdated, (update) => {
+  fieldValues = { ...fieldValues, [update.field]: update.value }
+  engine.emit(FieldValuesChanged, fieldValues)
+})
 
 // Field errors
-export const fieldErrors = engine.signal<Record<string, string | null>>(
-  FieldValidated,
-  {},
-  (prev, validation) => ({
-    ...prev,
-    [validation.field]: validation.error,
-  }),
-)
+engine.on(FieldValidated, (validation) => {
+  fieldErrors = { ...fieldErrors, [validation.field]: validation.error }
+  engine.emit(FieldErrorsChanged, fieldErrors)
+})
 
 // Step validity
-export const stepValid = engine.signal<Record<number, boolean>>(
-  StepValidated,
-  { 0: false, 1: false, 2: true },
-  (prev, validation) => ({
-    ...prev,
-    [validation.step]: validation.valid,
-  }),
-)
+engine.on(StepValidated, (validation) => {
+  stepValid = { ...stepValid, [validation.step]: validation.valid }
+  engine.emit(StepValidChanged, stepValid)
+})
 
 // Submitting state
-export const isSubmitting = engine.signal<boolean>(
-  SubmitPending,
-  false,
-  () => true,
-)
-engine.signalUpdate(isSubmitting, SubmitDone, () => false)
-engine.signalUpdate(isSubmitting, SubmitError, () => false)
+engine.on(SubmitPending, () => {
+  isSubmitting = true
+  engine.emit(IsSubmittingChanged, isSubmitting)
+})
+engine.on(SubmitDone, () => {
+  isSubmitting = false
+  engine.emit(IsSubmittingChanged, isSubmitting)
+})
+engine.on(SubmitError, () => {
+  isSubmitting = false
+  engine.emit(IsSubmittingChanged, isSubmitting)
+})
 
 // Submit success state
-export const submitResult = engine.signal<{ success: boolean } | null>(
-  SubmitDone,
-  null,
-  (_prev, result) => result,
-)
+engine.on(SubmitDone, (result) => {
+  submitResult = result
+  engine.emit(SubmitResultChanged, submitResult)
+})
 
 // Shake trigger
-export const shakeActive = engine.signal<number>(
-  ShakeError,
-  0,
-  (prev) => prev + 1,
-)
+engine.on(ShakeError, () => {
+  shakeActive = shakeActive + 1
+  engine.emit(ShakeActiveChanged, shakeActive)
+})
 
-// Start frame loop for animations
-engine.startFrameLoop()
+// ---------------------------------------------------------------------------
+// Initial values
+// ---------------------------------------------------------------------------
+
+export function getCurrentStep() { return currentStep }
+export function getStepDirection() { return stepDirection }
+export function getFieldValues() { return fieldValues }
+export function getFieldErrors() { return fieldErrors }
+export function getStepValid() { return stepValid }
+export function getIsSubmitting() { return isSubmitting }
+export function getSubmitResult() { return submitResult }
+export function getShakeActive() { return shakeActive }
+
+export { STEP_FIELDS }

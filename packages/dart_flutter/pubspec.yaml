@@ -1,0 +1,13 @@
+name: pulse_flutter
+description: Flutter adapter for Pulse event engine
+version: 0.1.0
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  pulse:
+    path: ../dart
+  flutter_hooks:
+    version: ^0.20.0

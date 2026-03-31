@@ -1,21 +1,24 @@
-import { For, Show, createMemo } from 'solid-js'
-import { useSignal, useEmit } from '@pulse/solid'
+import { For, Show } from 'solid-js'
+import { usePulse, useEmit } from '@pulse/solid'
 import {
-  todoList,
-  activeFilter,
-  currentText,
-  validationError,
   TodoAdded,
   TodoRemoved,
   TodoToggled,
   TodoTextChanged,
   FilterChanged,
+  TodosChanged,
+  FilteredTodosChanged,
+  RemainingCountChanged,
+  CurrentTextChanged,
+  ActiveFilterChanged,
+  ValidationResultEvent,
   type Todo,
   type Filter,
+  type ValidationResult,
 } from './engine'
 
 // ---------------------------------------------------------------------------
-// Styles (inline, matching React version exactly)
+// Styles
 // ---------------------------------------------------------------------------
 
 const styles = {
@@ -153,8 +156,8 @@ function todoTextStyle(completed: boolean) {
 
 function TodoInput() {
   const emit = useEmit()
-  const text = useSignal(currentText)
-  const validation = useSignal(validationError)
+  const text = usePulse(CurrentTextChanged, '')
+  const validation = usePulse(ValidationResultEvent, { valid: false, error: null } as ValidationResult)
 
   const handleAdd = () => {
     if (!validation().valid) return
@@ -196,7 +199,7 @@ function TodoInput() {
 
 function FilterBar() {
   const emit = useEmit()
-  const filter = useSignal(activeFilter)
+  const filter = usePulse(ActiveFilterChanged, 'all' as Filter)
   const filters: Filter[] = ['all', 'active', 'completed']
 
   return (
@@ -240,18 +243,9 @@ function TodoItem(props: { todo: Todo }) {
 }
 
 function TodoListView() {
-  const todos = useSignal(todoList)
-  const filter = useSignal(activeFilter)
-
-  const filtered = createMemo(() => {
-    const f = filter()
-    const list = todos()
-    if (f === 'active') return list.filter((t) => !t.completed)
-    if (f === 'completed') return list.filter((t) => t.completed)
-    return list
-  })
-
-  const remaining = createMemo(() => todos().filter((t) => !t.completed).length)
+  const todos = usePulse(TodosChanged, [] as Todo[])
+  const filtered = usePulse(FilteredTodosChanged, [] as Todo[])
+  const remaining = usePulse(RemainingCountChanged, 0)
 
   return (
     <div>
@@ -286,7 +280,7 @@ export default function App() {
       <div style={styles.header}>
         <h1 style={styles.title}>Pulse Todos</h1>
         <p style={styles.subtitle}>
-          All state managed through Pulse events and signals
+          All state managed through Pulse events and on/emit
         </p>
       </div>
       <TodoInput />

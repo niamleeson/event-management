@@ -33,59 +33,67 @@ export const TodoToggled = engine.event<string>('TodoToggled')
 export const TodoTextChanged = engine.event<string>('TodoTextChanged')
 export const ValidationResultEvent = engine.event<ValidationResult>('ValidationResult')
 export const FilterChanged = engine.event<Filter>('FilterChanged')
+export const TodoListChanged = engine.event<Todo[]>('TodoListChanged')
+export const ActiveFilterChanged = engine.event<Filter>('ActiveFilterChanged')
+export const CurrentTextChanged = engine.event<string>('CurrentTextChanged')
+export const ValidationChanged = engine.event<ValidationResult>('ValidationChanged')
 
 // ---------------------------------------------------------------------------
-// Pipes
+// State
+// ---------------------------------------------------------------------------
+
+let todos: Todo[] = []
+let activeFilter: Filter = 'all'
+let currentText = ''
+let validation: ValidationResult = { valid: false, error: null }
+
+// ---------------------------------------------------------------------------
+// Rules: on/emit only
 // ---------------------------------------------------------------------------
 
 // Validate text input: non-empty and minimum length of 3
-engine.pipe(TodoTextChanged, ValidationResultEvent, (text: string): ValidationResult => {
+engine.on(TodoTextChanged, (text: string) => {
+  currentText = text
+  engine.emit(CurrentTextChanged, text)
+
+  let result: ValidationResult
   if (text.trim().length === 0) {
-    return { valid: false, error: null } // empty is not an error, just not valid
+    result = { valid: false, error: null }
+  } else if (text.trim().length < 3) {
+    result = { valid: false, error: 'Todo must be at least 3 characters' }
+  } else {
+    result = { valid: true, error: null }
   }
-  if (text.trim().length < 3) {
-    return { valid: false, error: 'Todo must be at least 3 characters' }
-  }
-  return { valid: true, error: null }
+  validation = result
+  engine.emit(ValidationResultEvent, result)
+  engine.emit(ValidationChanged, result)
+})
+
+engine.on(TodoAdded, (todo: Todo) => {
+  todos = [...todos, todo]
+  engine.emit(TodoListChanged, todos)
+})
+
+engine.on(TodoRemoved, (id: string) => {
+  todos = todos.filter((t) => t.id !== id)
+  engine.emit(TodoListChanged, todos)
+})
+
+engine.on(TodoToggled, (id: string) => {
+  todos = todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+  engine.emit(TodoListChanged, todos)
+})
+
+engine.on(FilterChanged, (filter: Filter) => {
+  activeFilter = filter
+  engine.emit(ActiveFilterChanged, filter)
 })
 
 // ---------------------------------------------------------------------------
-// Signals
+// Getters for initial values
 // ---------------------------------------------------------------------------
 
-// The todo list, reduced from add/remove/toggle events
-export const todoList = engine.signal<Todo[]>(TodoAdded, [], (prev, todo) => [
-  ...prev,
-  todo,
-])
-
-// Also update todoList on remove
-engine.signalUpdate(todoList, TodoRemoved, (prev, id) =>
-  prev.filter((t) => t.id !== id),
-)
-
-// Also update todoList on toggle
-engine.signalUpdate(todoList, TodoToggled, (prev, id) =>
-  prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-)
-
-// Active filter
-export const activeFilter = engine.signal<Filter>(
-  FilterChanged,
-  'all',
-  (_prev, filter) => filter,
-)
-
-// Current input text
-export const currentText = engine.signal<string>(
-  TodoTextChanged,
-  '',
-  (_prev, text) => text,
-)
-
-// Validation state
-export const validationError = engine.signal<ValidationResult>(
-  ValidationResultEvent,
-  { valid: false, error: null },
-  (_prev, result) => result,
-)
+export function getTodos() { return todos }
+export function getActiveFilter() { return activeFilter }
+export function getCurrentText() { return currentText }
+export function getValidation() { return validation }

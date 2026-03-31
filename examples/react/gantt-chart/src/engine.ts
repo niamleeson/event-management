@@ -1,4 +1,4 @@
-import { createEngine, type Signal, createSignal } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -95,64 +95,57 @@ export const TaskUpdated = engine.event<Task>('TaskUpdated')
 export const DependencyAdded = engine.event<Dependency>('DependencyAdded')
 export const ViewChanged = engine.event<ViewRange>('ViewChanged')
 export const ZoomChanged = engine.event<ZoomLevel>('ZoomChanged')
-export const TasksRecomputed = engine.event<Task[]>('TasksRecomputed')
-export const DragSnap = engine.event<void>('DragSnap')
-export const DragSnapDone = engine.event<void>('DragSnapDone')
+
+// State-changed events for React subscriptions
+export const TasksChanged = engine.event<Task[]>('TasksChanged')
+export const ViewStateChanged = engine.event<ViewRange>('ViewStateChanged')
+export const ZoomStateChanged = engine.event<ZoomLevel>('ZoomStateChanged')
+export const DragStateChanged = engine.event<DragState>('DragStateChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const tasks: Signal<Task[]> = engine.signal<Task[]>(
-  TasksRecomputed,
-  initialTasks,
-  (_prev, next) => next,
-)
+let tasks: Task[] = initialTasks
+let view: ViewRange = { start: -2, end: 50 }
+let zoom: ZoomLevel = 'day'
+let dragState: DragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
 
-engine.signalUpdate(tasks, TaskCreated, (prev, task) => [...prev, task])
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
 
-export const view: Signal<ViewRange> = engine.signal<ViewRange>(
-  ViewChanged,
-  { start: -2, end: 50 },
-  (_prev, range) => range,
-)
+engine.on(ViewChanged, (range) => {
+  view = range
+  engine.emit(ViewStateChanged, view)
+})
 
-export const zoom: Signal<ZoomLevel> = engine.signal<ZoomLevel>(
-  ZoomChanged,
-  'day',
-  (_prev, level) => level,
-)
+engine.on(ZoomChanged, (level) => {
+  zoom = level
+  engine.emit(ZoomStateChanged, zoom)
+})
 
-export const dragState: Signal<DragState> = engine.signal<DragState>(
-  TaskDragStart,
-  { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 },
-  (prev, payload) => {
-    const task = tasks.value.find(t => t.id === payload.id)
-    if (!task) return prev
-    return {
-      taskId: payload.id,
-      type: payload.type,
-      startX: 0,
-      originalStart: task.start,
-      originalDuration: task.duration,
-    }
-  },
-)
+engine.on(TaskDragStart, (payload) => {
+  const task = tasks.find(t => t.id === payload.id)
+  if (!task) return
+  dragState = {
+    taskId: payload.id,
+    type: payload.type,
+    startX: 0,
+    originalStart: task.start,
+    originalDuration: task.duration,
+  }
+  engine.emit(DragStateChanged, dragState)
+})
 
-engine.signalUpdate(dragState, TaskDragEnd, () => ({
-  taskId: null,
-  type: null,
-  startX: 0,
-  originalStart: 0,
-  originalDuration: 0,
-}))
+engine.on(TaskDragEnd, () => {
+  dragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+  engine.emit(DragStateChanged, dragState)
+})
 
-// Spring signal for snap animation
-export const snapTarget = createSignal<number>(0)
-
-export const snapSpring = engine.spring(snapTarget, {
-  stiffness: 300,
-  damping: 30,
+engine.on(TaskCreated, (task) => {
+  tasks = [...tasks, task]
+  engine.emit(TasksChanged, tasks)
 })
 
 // ---------------------------------------------------------------------------
@@ -195,55 +188,41 @@ function cascadeDependencies(taskList: Task[], movedTaskId: string): Task[] {
 // ---------------------------------------------------------------------------
 
 engine.on(TaskDragMove, (payload) => {
-  const state = dragState.value
-  if (!state.taskId || state.taskId !== payload.id) return
+  if (!dragState.taskId || dragState.taskId !== payload.id) return
 
-  const currentTasks = tasks.value
-  const task = currentTasks.find(t => t.id === payload.id)
+  const task = tasks.find(t => t.id === payload.id)
   if (!task) return
 
   // Convert dx (pixels) to days based on zoom
-  const zoomLevel = zoom.value
-  const dayWidth = zoomLevel === 'day' ? 40 : zoomLevel === 'week' ? 20 : 8
+  const dayWidth = zoom === 'day' ? 40 : zoom === 'week' ? 20 : 8
   const dayDelta = Math.round(payload.dx / dayWidth)
 
   let updated: Task
-  if (state.type === 'move') {
-    const newStart = Math.max(0, state.originalStart + dayDelta)
+  if (dragState.type === 'move') {
+    const newStart = Math.max(0, dragState.originalStart + dayDelta)
     updated = { ...task, start: newStart }
   } else {
     // Resize
-    const newDuration = Math.max(1, state.originalDuration + dayDelta)
+    const newDuration = Math.max(1, dragState.originalDuration + dayDelta)
     updated = { ...task, duration: newDuration }
   }
 
   // Update the single task
-  let newTasks = currentTasks.map(t => t.id === payload.id ? updated : t)
+  let newTasks = tasks.map(t => t.id === payload.id ? updated : t)
 
   // Cascade dependencies
   newTasks = cascadeDependencies(newTasks, payload.id)
 
-  engine.emit(TasksRecomputed, newTasks)
-})
-
-engine.on(TaskDragEnd, (payload) => {
-  // Snap to grid
-  const currentTasks = tasks.value
-  const task = currentTasks.find(t => t.id === payload.id)
-  if (task) {
-    snapTarget.set(task.start)
-    engine.emit(DragSnap, undefined)
-  }
+  tasks = newTasks
+  engine.emit(TasksChanged, tasks)
 })
 
 engine.on(TaskUpdated, (updated) => {
-  let newTasks = tasks.value.map(t => t.id === updated.id ? updated : t)
+  let newTasks = tasks.map(t => t.id === updated.id ? updated : t)
   newTasks = cascadeDependencies(newTasks, updated.id)
-  engine.emit(TasksRecomputed, newTasks)
+  tasks = newTasks
+  engine.emit(TasksChanged, tasks)
 })
-
-// Start frame loop for springs
-engine.startFrameLoop()
 
 // ---------------------------------------------------------------------------
 // Exports

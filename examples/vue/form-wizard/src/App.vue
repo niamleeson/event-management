@@ -1,15 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { providePulse, useSignal, useEmit } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
   engine,
-  currentStep,
-  stepDirection,
-  fieldValues,
-  fieldErrors,
-  isSubmitting,
-  submitResult,
-  shakeActive,
   FieldUpdated,
   NextStep,
   PrevStep,
@@ -17,18 +10,32 @@ import {
   STEP_LABELS,
   type StepId,
   type FormData,
+  CurrentStepChanged,
+  StepDirectionChanged,
+  FieldValuesChanged,
+  FieldErrorsChanged,
+  IsSubmittingChanged,
+  SubmitResultChanged,
+  ShakeActiveChanged,
+  getCurrentStep,
+  getStepDirection,
+  getFieldValues,
+  getFieldErrors,
+  getIsSubmitting,
+  getSubmitResult,
+  getShakeActive,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const step = useSignal(currentStep)
-const direction = useSignal(stepDirection)
-const values = useSignal(fieldValues)
-const errors = useSignal(fieldErrors)
-const submitting = useSignal(isSubmitting)
-const result = useSignal(submitResult)
-const shake = useSignal(shakeActive)
+const step = usePulse(CurrentStepChanged, getCurrentStep())
+const direction = usePulse(StepDirectionChanged, getStepDirection())
+const values = usePulse(FieldValuesChanged, getFieldValues())
+const errors = usePulse(FieldErrorsChanged, getFieldErrors())
+const submitting = usePulse(IsSubmittingChanged, getIsSubmitting())
+const result = usePulse(SubmitResultChanged, getSubmitResult())
+const shake = usePulse(ShakeActiveChanged, getShakeActive())
 
 const colors = {
   bg: '#f8fafc',

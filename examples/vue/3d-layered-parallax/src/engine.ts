@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, SpringValue, TweenValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Layer data                                                        */
 /* ------------------------------------------------------------------ */
@@ -29,45 +25,163 @@ export const DayNightChanged = engine.event<boolean>('DayNightChanged')
 /*  Camera tilt signals + springs (mouse-driven)                      */
 /* ------------------------------------------------------------------ */
 
-export const tiltXTarget: Signal<number> = engine.signal(MouseMoved, 0, (_prev, { y }) => (y - 0.5) * 15)
-export const tiltYTarget: Signal<number> = engine.signal(MouseMoved, 0, (_prev, { x }) => (x - 0.5) * 15)
+export let tiltXTarget = 0
+export const TiltXTargetChanged = engine.event('TiltXTargetChanged')
+engine.on(MouseMoved, (v: any) => { tiltXTarget = ((_prev, { y }) => (y - 0.5) * 15)(tiltXTarget, v); engine.emit(TiltXTargetChanged, tiltXTarget) })
+export let tiltYTarget = 0
+export const TiltYTargetChanged = engine.event('TiltYTargetChanged')
+engine.on(MouseMoved, (v: any) => { tiltYTarget = ((_prev, { x }) => (x - 0.5) * 15)(tiltYTarget, v); engine.emit(TiltYTargetChanged, tiltYTarget) })
 
-export const tiltXSpring: SpringValue = engine.spring(tiltXTarget, { stiffness: 60, damping: 14 })
-export const tiltYSpring: SpringValue = engine.spring(tiltYTarget, { stiffness: 60, damping: 14 })
+export let tiltXSpring = { value: 0, velocity: 0, settled: true }
+export const TiltXSpringVal = engine.event<number>('TiltXSpringVal')
+{
+  const _sc = { stiffness: 60, damping: 14 }
+  let _sv = 0, _sa = false
+  function _ss() {
+    if (_sa) return; _sa = true
+    let _sl = performance.now()
+    function _st(now: number) {
+      if (!_sa) return
+      const dt = Math.min((now - _sl) / 1000, 0.064); _sl = now
+      const tgt = tiltXTarget
+      const tgtVal = typeof tgt === 'number' ? tgt : (tgt?.value ?? 0)
+      const dx = tiltXSpring.value - tgtVal
+      const sf = -(_sc.stiffness ?? 170) * dx
+      const df = -(_sc.damping ?? 26) * _sv
+      _sv += (sf + df) * dt
+      tiltXSpring.value += _sv * dt
+      tiltXSpring.velocity = _sv
+      engine.emit(TiltXSpringVal, tiltXSpring.value)
+      const rt = _sc.restThreshold ?? 0.01
+      if (Math.abs(dx) < rt && Math.abs(_sv) < rt) {
+        tiltXSpring.value = tgtVal; _sv = 0; _sa = false; tiltXSpring.settled = true
+        engine.emit(TiltXSpringVal, tiltXSpring.value)
+        if (_sc.done) engine.emit(_sc.done, undefined)
+        return
+      }
+      tiltXSpring.settled = false
+      requestAnimationFrame(_st)
+    }
+    requestAnimationFrame(_st)
+  }
+  engine.on(TiltXTargetChanged, () => _ss())
+}
+export let tiltYSpring = { value: 0, velocity: 0, settled: true }
+export const TiltYSpringVal = engine.event<number>('TiltYSpringVal')
+{
+  const _sc = { stiffness: 60, damping: 14 }
+  let _sv = 0, _sa = false
+  function _ss() {
+    if (_sa) return; _sa = true
+    let _sl = performance.now()
+    function _st(now: number) {
+      if (!_sa) return
+      const dt = Math.min((now - _sl) / 1000, 0.064); _sl = now
+      const tgt = tiltYTarget
+      const tgtVal = typeof tgt === 'number' ? tgt : (tgt?.value ?? 0)
+      const dx = tiltYSpring.value - tgtVal
+      const sf = -(_sc.stiffness ?? 170) * dx
+      const df = -(_sc.damping ?? 26) * _sv
+      _sv += (sf + df) * dt
+      tiltYSpring.value += _sv * dt
+      tiltYSpring.velocity = _sv
+      engine.emit(TiltYSpringVal, tiltYSpring.value)
+      const rt = _sc.restThreshold ?? 0.01
+      if (Math.abs(dx) < rt && Math.abs(_sv) < rt) {
+        tiltYSpring.value = tgtVal; _sv = 0; _sa = false; tiltYSpring.settled = true
+        engine.emit(TiltYSpringVal, tiltYSpring.value)
+        if (_sc.done) engine.emit(_sc.done, undefined)
+        return
+      }
+      tiltYSpring.settled = false
+      requestAnimationFrame(_st)
+    }
+    requestAnimationFrame(_st)
+  }
+  engine.on(TiltYTargetChanged, () => _ss())
+}
 
 /* ------------------------------------------------------------------ */
 /*  Day/Night toggle                                                  */
 /* ------------------------------------------------------------------ */
 
-export const isNight: Signal<boolean> = engine.signal(ToggleDayNight, true, (prev) => !prev)
+export let isNight = true
+export const IsNightChanged = engine.event('IsNightChanged')
+engine.on(ToggleDayNight, (v: any) => { isNight = ((prev) => !prev)(isNight, v); engine.emit(IsNightChanged, isNight) })
 
 // Tween for day/night transition (0=day, 1=night)
 const DayNightTweenStart = engine.event('DayNightTweenStart')
-engine.pipe(ToggleDayNight, DayNightTweenStart, () => undefined)
+engine.on(ToggleDayNight, (v: any) => { engine.emit(DayNightTweenStart, (() => undefined)(v)) })
 
-export const nightAmount = engine.tween({
+export let nightAmount = { value: 0, active: false }
+export const NightAmountVal = engine.event<number>('NightAmountVal')
+{
+  const _tc = {
   start: DayNightTweenStart,
   from: () => nightAmount.value,
-  to: () => isNight.value ? 1 : 0,
+  to: () => isNight ? 1 : 0,
   duration: 1200,
   easing: (t: number) => t * t * (3 - 2 * t),
-})
+}
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; nightAmount.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!nightAmount.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      nightAmount.value = f + (t - f) * _te(p)
+      engine.emit(NightAmountVal, nightAmount.value)
+      if (p >= 1) { nightAmount.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { nightAmount.active = false })) }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Entrance stagger tweens                                           */
 /* ------------------------------------------------------------------ */
 
-export const layerEntrance: TweenValue[] = []
+export const layerEntrance: any[] = []
 
 for (let i = 0; i < LAYERS.length; i++) {
   const enterStart = engine.event(`LayerEnter_${i}`)
-  const tw = engine.tween({
+  let tw = { value: 0, active: false }
+const TwVal = engine.event<number>('TwVal')
+{
+  const _tc = {
     start: enterStart,
     from: 0,
     to: 1,
     duration: 800,
     easing: (t: number) => 1 - Math.pow(1 - t, 3),
+  }
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; tw.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!tw.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      tw.value = f + (t - f) * _te(p)
+      engine.emit(TwVal, tw.value)
+      if (p >= 1) { tw.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
   })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { tw.active = false })) }
+}
   layerEntrance.push(tw)
 
   // Stagger entrance after SceneEnter

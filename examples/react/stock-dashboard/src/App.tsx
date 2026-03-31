@@ -1,14 +1,13 @@
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import { useCallback } from 'react'
 import {
-  prices,
-  alerts,
-  watchlist,
-  timeframe,
-  isLive,
-  selectedStock,
+  PricesChanged,
+  AlertsChanged,
+  WatchlistChanged,
+  TimeframeStateChanged,
+  IsLiveChanged,
+  SelectedStockChanged,
   SYMBOLS,
-  PriceUpdate,
   AlertDismissed,
   WatchlistAdd,
   WatchlistRemove,
@@ -17,7 +16,7 @@ import {
   TickerResumed,
   StockSelected,
 } from './engine'
-import type { StockState, Timeframe } from './engine'
+import type { StockState, Timeframe, AlertData } from './engine'
 
 // ---------------------------------------------------------------------------
 // Sparkline SVG
@@ -187,12 +186,12 @@ function StockRow({
 
 export default function App() {
   const emit = useEmit()
-  const priceData = useSignal(prices)
-  const alertList = useSignal(alerts)
-  const watched = useSignal(watchlist)
-  const tf = useSignal(timeframe)
-  const live = useSignal(isLive)
-  const selected = useSignal(selectedStock)
+  const priceData = usePulse(PricesChanged, new Map<string, StockState>())
+  const alertList = usePulse(AlertsChanged, [] as AlertData[])
+  const watched = usePulse(WatchlistChanged, ['AAPL', 'GOOGL', 'NVDA', 'TSLA'])
+  const tf = usePulse(TimeframeStateChanged, '1m' as Timeframe)
+  const live = usePulse(IsLiveChanged, true)
+  const selected = usePulse(SelectedStockChanged, 'AAPL')
 
   const selectedStockData = priceData.get(selected)
   const selectedColor =
@@ -480,7 +479,7 @@ export default function App() {
                   padding: '0 4px',
                 }}
               >
-                \u2715
+                {'\u2715'}
               </button>
             </div>
           ))}

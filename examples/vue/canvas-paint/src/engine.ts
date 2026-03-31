@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -51,32 +47,39 @@ export const StrokesChanged = engine.event('StrokesChanged')
 /*  Signals                                                           */
 /* ------------------------------------------------------------------ */
 
-export const currentTool: Signal<Tool> = engine.signal(ToolChanged, 'brush' as Tool, (_prev, tool) => tool)
-export const currentColor: Signal<string> = engine.signal(ColorChanged, '#ff6b6b', (_prev, color) => color)
-export const brushSize: Signal<number> = engine.signal(SizeChanged, 4, (_prev, size) => size)
+export let currentTool = 'brush' as Tool
+export const CurrentToolChanged = engine.event('CurrentToolChanged')
+engine.on(ToolChanged, (v: any) => { currentTool = ((_prev, tool) => tool)(currentTool, v); engine.emit(CurrentToolChanged, currentTool) })
+export let currentColor = '#ff6b6b'
+export const CurrentColorChanged = engine.event('CurrentColorChanged')
+engine.on(ColorChanged, (v: any) => { currentColor = ((_prev, color) => color)(currentColor, v); engine.emit(CurrentColorChanged, currentColor) })
+export let brushSize = 4
+export const BrushSizeChanged = engine.event('BrushSizeChanged')
+engine.on(SizeChanged, (v: any) => { brushSize = ((_prev, size) => size)(brushSize, v); engine.emit(BrushSizeChanged, brushSize) })
 
 let nextLayerId = 2
-export const layers: Signal<Layer[]> = engine.signal(
-  LayerAdded,
-  [
+export let layers = [
     { id: 0, name: 'Background', visible: true, strokes: [] },
     { id: 1, name: 'Layer 1', visible: true, strokes: [] },
-  ],
-  (prev) => [...prev, { id: nextLayerId++, name: `Layer ${nextLayerId - 1}`, visible: true, strokes: [] }],
-)
+  ]
+export const LayersChanged = engine.event('LayersChanged')
+engine.on(LayerAdded, (v: any) => { layers = ((prev) => [...prev, { id: nextLayerId++, name: `Layer ${nextLayerId - 1}`, visible: true, strokes: [] }])(layers, v); engine.emit(LayersChanged, layers) })
 
-engine.signalUpdate(layers, LayerToggled, (prev, id) =>
-  prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l)
-)
+engine.on(LayerToggled, (v: any) => { layers = ((prev, id) =>
+  prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l))(layers, v); engine.emit(LayersChanged, layers) })
 
-export const activeLayer: Signal<number> = engine.signal(LayerSelected, 1, (_prev, id) => id)
+export let activeLayer = 1
+export const ActiveLayerChanged = engine.event('ActiveLayerChanged')
+engine.on(LayerSelected, (v: any) => { activeLayer = ((_prev, id) => id)(activeLayer, v); engine.emit(ActiveLayerChanged, activeLayer) })
 
 /* ------------------------------------------------------------------ */
 /*  Drawing state                                                     */
 /* ------------------------------------------------------------------ */
 
-export const isDrawing: Signal<boolean> = engine.signal(StrokeStart, false, () => true)
-engine.signalUpdate(isDrawing, StrokeEnd, () => false)
+export let isDrawing = false
+export const IsDrawingChanged = engine.event('IsDrawingChanged')
+engine.on(StrokeStart, (v: any) => { isDrawing = (() => true)(isDrawing, v); engine.emit(IsDrawingChanged, isDrawing) })
+engine.on(StrokeEnd, (v: any) => { isDrawing = (() => false)(isDrawing, v); engine.emit(IsDrawingChanged, isDrawing) })
 
 let currentStroke: Stroke | null = null
 const undoStack: Stroke[] = []
@@ -84,11 +87,11 @@ const redoStack: Stroke[] = []
 
 engine.on(StrokeStart, (point) => {
   currentStroke = {
-    tool: currentTool.value,
-    color: currentTool.value === 'eraser' ? '#ffffff' : currentColor.value,
-    size: brushSize.value,
+    tool: currentTool,
+    color: currentTool === 'eraser' ? '#ffffff' : currentColor,
+    size: brushSize,
     points: [point],
-    layer: activeLayer.value,
+    layer: activeLayer,
   }
 })
 
@@ -105,8 +108,8 @@ engine.on(StrokeEnd, () => {
   }
 
   // Add stroke to active layer
-  const layerList = layers.value
-  const layerIdx = layerList.findIndex(l => l.id === activeLayer.value)
+  const layerList = layers
+  const layerIdx = layerList.findIndex(l => l.id === activeLayer)
   if (layerIdx >= 0) {
     const updated = layerList.map((l, i) => {
       if (i === layerIdx) return { ...l, strokes: [...l.strokes, currentStroke!] }
@@ -140,15 +143,15 @@ engine.on(RedoStroke, () => {
 /*  Export for canvas rendering                                       */
 /* ------------------------------------------------------------------ */
 
-export function getCurrentStroke(): Stroke | null {
+function getCurrentStroke(): Stroke | null {
   return currentStroke
 }
 
-export function getUndoStack(): Stroke[] {
+function getUndoStack(): Stroke[] {
   return undoStack
 }
 
-export function getRedoStack(): Stroke[] {
+function getRedoStack(): Stroke[] {
   return redoStack
 }
 
@@ -169,3 +172,6 @@ export const TOOLS: { tool: Tool; icon: string; label: string }[] = [
   { tool: 'circle', icon: '\u25CB', label: 'Circle' },
   { tool: 'line', icon: '\u2571', label: 'Line' },
 ]
+
+
+export { getCurrentStroke, getUndoStack, getRedoStack }

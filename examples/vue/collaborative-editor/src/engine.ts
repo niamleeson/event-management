@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, SpringValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -49,70 +45,77 @@ export const EditRecorded = engine.event<Edit>('EditRecorded')
 export const BotTick = engine.event('BotTick')
 
 /* ------------------------------------------------------------------ */
-/*  Signals                                                           */
+/*  State-changed events                                              */
+/* ------------------------------------------------------------------ */
+
+export const DocumentChanged = engine.event<string>('DocumentChanged')
+export const CursorsChanged = engine.event<Map<string, CursorPos>>('CursorsChanged')
+export const EditHistoryChanged = engine.event<Edit[]>('EditHistoryChanged')
+export const CursorXChanged = engine.event<Record<string, number>>('CursorXChanged')
+
+/* ------------------------------------------------------------------ */
+/*  State                                                             */
 /* ------------------------------------------------------------------ */
 
 let editId = 0
+let document = ''
+let cursors = new Map<string, CursorPos>()
+let editHistory: Edit[] = []
+let cursorXPositions: Record<string, number> = {}
 
-export const document: Signal<string> = engine.signal(UserTyped, '', (prev, { text, position }) => {
-  return prev.slice(0, position) + text + prev.slice(position)
+// Document state
+engine.on(UserTyped, ({ text, position }) => {
+  document = document.slice(0, position) + text + document.slice(position)
+  engine.emit(DocumentChanged, document)
 })
-engine.signalUpdate(document, UserDeleted, (prev, { position, count }) => {
-  return prev.slice(0, Math.max(0, position - count)) + prev.slice(position)
+engine.on(UserDeleted, ({ position, count }) => {
+  document = document.slice(0, Math.max(0, position - count)) + document.slice(position)
+  engine.emit(DocumentChanged, document)
 })
 
-export const cursors: Signal<Map<string, CursorPos>> = engine.signal(
-  CursorMoved,
-  new Map<string, CursorPos>(),
-  (prev, pos) => {
-    const next = new Map(prev)
-    next.set(pos.user, pos)
-    return next
-  },
-)
+// Cursors state
+engine.on(CursorMoved, (pos) => {
+  const next = new Map(cursors)
+  next.set(pos.user, pos)
+  cursors = next
+  engine.emit(CursorsChanged, cursors)
 
-export const editHistory: Signal<Edit[]> = engine.signal(
-  EditRecorded,
-  [] as Edit[],
-  (prev, edit) => [...prev.slice(-49), edit],
-)
+  // Update cursor X positions (used for visual indicators)
+  cursorXPositions = { ...cursorXPositions, [pos.user]: pos.position * 8 }
+  engine.emit(CursorXChanged, cursorXPositions)
+})
 
-/* ------------------------------------------------------------------ */
-/*  Pipes: record edits                                               */
-/* ------------------------------------------------------------------ */
-
-engine.pipe(UserTyped, EditRecorded, ({ user, text, position }) => ({
-  id: editId++,
-  user,
-  position,
-  text,
-  type: 'insert' as const,
-  timestamp: Date.now(),
-}))
-
-engine.pipe(UserDeleted, EditRecorded, ({ user, position, count }) => ({
-  id: editId++,
-  user,
-  position,
-  text: `[deleted ${count}]`,
-  type: 'delete' as const,
-  timestamp: Date.now(),
-}))
+// Edit history state
+engine.on(EditRecorded, (edit) => {
+  editHistory = [...editHistory.slice(-49), edit]
+  engine.emit(EditHistoryChanged, editHistory)
+})
 
 /* ------------------------------------------------------------------ */
-/*  Cursor position springs                                           */
+/*  Record edits                                                      */
 /* ------------------------------------------------------------------ */
 
-export const cursorXTargets: Record<string, Signal<number>> = {}
-export const cursorXSprings: Record<string, SpringValue> = {}
+engine.on(UserTyped, ({ user, text, position }) => {
+  engine.emit(EditRecorded, {
+    id: editId++,
+    user,
+    position,
+    text,
+    type: 'insert' as const,
+    timestamp: Date.now(),
+  })
+})
 
-for (const user of USERS) {
-  const target = engine.signal(CursorMoved, 0 as number, (prev, pos) =>
-    pos.user === user.name ? pos.position * 8 : prev
-  )
-  cursorXTargets[user.name] = target
-  cursorXSprings[user.name] = engine.spring(target, { stiffness: 200, damping: 22 })
-}
+engine.on(UserDeleted, ({ user, position, count }) => {
+  engine.emit(EditRecorded, {
+    id: editId++,
+    user,
+    position,
+    text: `[deleted ${count}]`,
+    type: 'delete' as const,
+    timestamp: Date.now(),
+  })
+})
 
 /* ------------------------------------------------------------------ */
 /*  Bot auto-typing                                                   */
@@ -124,7 +127,7 @@ engine.on(BotTick, () => {
   const bots = ['Alice', 'Bob']
   const bot = bots[Math.floor(Math.random() * bots.length)]
   const word = BOT_WORDS[Math.floor(Math.random() * BOT_WORDS.length)]
-  const pos = Math.min(botPositions[bot], document.value.length)
+  const pos = Math.min(botPositions[bot], document.length)
 
   engine.emit(UserTyped, { user: bot, text: word, position: pos })
   botPositions[bot] = pos + word.length
@@ -137,3 +140,12 @@ engine.on(BotTick, () => {
 setInterval(() => {
   engine.emit(BotTick, undefined)
 }, 2000 + Math.random() * 2000)
+
+/* ------------------------------------------------------------------ */
+/*  Initial values                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getDocument() { return document }
+export function getCursors() { return cursors }
+export function getEditHistory() { return editHistory }
+export function getCursorXPositions() { return cursorXPositions }

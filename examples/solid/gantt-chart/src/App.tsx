@@ -1,326 +1,544 @@
-import { For, Show, onMount, onCleanup } from 'solid-js'
-import { useSignal, useEmit } from '@pulse/solid'
-import type { Signal } from '@pulse/core'
-import { engine } from './engine'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  TaskDragStart,
+  TaskDragMove,
+  TaskDragEnd,
+  ZoomChanged,
+  ViewChanged,
+  formatDate,
+  dayToDate,
+  type Task,
+  type ZoomLevel,
+  type ViewRange,
+} from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-interface Task {
-  id: number
-  name: string
-  start: number  // day offset
-  duration: number
-  color: string
-  deps: number[] // task IDs this depends on
+const TASK_ROW_HEIGHT = 44
+const HEADER_HEIGHT = 60
+const SIDEBAR_WIDTH = 240
+
+function getDayWidth(z: ZoomLevel): number {
+  switch (z) {
+    case 'day': return 40
+    case 'week': return 20
+    case 'month': return 8
+  }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                         */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
-const DAY_WIDTH = 40
-const ROW_HEIGHT = 44
-const TOTAL_DAYS = 30
-const HEADER_HEIGHT = 36
+const styles = {
+  container: {
+    height: '100vh',
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    background: '#f8f9fa',
+    overflow: 'hidden',
+  },
+  topBar: {
+    background: '#fff',
+    'border-bottom': '1px solid #e0e0e0',
+    padding: '10px 20px',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'space-between',
+    'box-shadow': '0 1px 3px rgba(0,0,0,0.05)',
+    'z-index': 20,
+  },
+  title: {
+    'font-size': 18,
+    'font-weight': 700,
+    color: '#1a1a2e',
+  },
+  zoomControls: {
+    display: 'flex',
+    gap: 4,
+  },
+  zoomBtn: (active: boolean) => ({
+    padding: '6px 14px',
+    'font-size': 12,
+    'font-weight': 600,
+    border: '1px solid #d0d0d0',
+    'border-radius': 6,
+    background: active ? '#4361ee' : '#fff',
+    color: active ? '#fff' : '#333',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  }),
+  legend: {
+    display: 'flex',
+    gap: 12,
+    'font-size': 12,
+    'align-items': 'center',
+  },
+  legendItem: (color: string) => ({
+    display: 'flex',
+    'align-items': 'center',
+    gap: 4,
+    color: '#666',
+  }),
+  legendDot: (color: string) => ({
+    width: 10,
+    height: 10,
+    'border-radius': 3,
+    background: color,
+  }),
+  body: {
+    flex: 1,
+    display: 'flex',
+    overflow: 'hidden',
+  },
+  sidebar: {
+    width: SIDEBAR_WIDTH,
+    background: '#fff',
+    'border-right': '1px solid #e0e0e0',
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    'flex-shrink': 0,
+    'z-index': 10,
+  },
+  sidebarHeader: {
+    height: HEADER_HEIGHT,
+    padding: '0 16px',
+    display: 'flex',
+    'align-items': 'center',
+    'border-bottom': '1px solid #e0e0e0',
+    'font-weight': 700,
+    'font-size': 13,
+    color: '#666',
+    background: '#fafafa',
+  },
+  sidebarRow: (isActive: boolean) => ({
+    height: TASK_ROW_HEIGHT,
+    padding: '0 16px',
+    display: 'flex',
+    'align-items': 'center',
+    gap: 8,
+    'border-bottom': '1px solid #f0f0f0',
+    background: isActive ? '#f0f4ff' : '#fff',
+    'font-size': 13,
+    cursor: 'default',
+  }),
+  taskDot: (color: string) => ({
+    width: 8,
+    height: 8,
+    'border-radius': 2,
+    background: color,
+    'flex-shrink': 0,
+  }),
+  taskLabel: {
+    flex: 1,
+    overflow: 'hidden' as const,
+    'text-overflow': 'ellipsis' as const,
+    'white-space': 'nowrap' as const,
+    'font-size': 13,
+    color: '#333',
+  },
+  taskDates: {
+    'font-size': 11,
+    color: '#999',
+    'white-space': 'nowrap' as const,
+  },
+  chart: {
+    flex: 1,
+    overflow: 'auto' as const,
+    position: 'relative' as const,
+  },
+  timeHeader: {
+    position: 'sticky' as const,
+    top: 0,
+    height: HEADER_HEIGHT,
+    background: '#fafafa',
+    'border-bottom': '1px solid #e0e0e0',
+    'z-index': 5,
+    display: 'flex',
+  },
+  timeCell: (width: number, isWeekend: boolean) => ({
+    width,
+    'min-width': width,
+    height: '100%',
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    'align-items': 'center',
+    'justify-content': 'center',
+    'border-right': '1px solid #eee',
+    'font-size': 11,
+    color: isWeekend ? '#bbb' : '#888',
+    background: isWeekend ? '#f5f5f5' : 'transparent',
+  }),
+  gridArea: {
+    position: 'relative' as const,
+  },
+  gridLine: (left: number, isWeekend: boolean) => ({
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    left,
+    width: 1,
+    background: isWeekend ? '#f0f0f0' : '#f8f8f8',
+  }),
+  todayLine: (left: number) => ({
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    left,
+    width: 2,
+    background: '#e63946',
+    'z-index': 8,
+  }),
+  todayLabel: {
+    position: 'absolute' as const,
+    top: -HEADER_HEIGHT + 4,
+    left: -14,
+    'font-size': 10,
+    'font-weight': 700,
+    color: '#e63946',
+    background: '#fff',
+    padding: '1px 4px',
+    'border-radius': 3,
+    border: '1px solid #e63946',
+  },
+  taskBar: (left: number, width: number, top: number, color: string, isDragging: boolean) => ({
+    position: 'absolute' as const,
+    left,
+    width: Math.max(width, 8),
+    top: top + 8,
+    height: TASK_ROW_HEIGHT - 16,
+    background: color,
+    'border-radius': 4,
+    cursor: isDragging ? 'grabbing' : 'grab',
+    display: 'flex',
+    'align-items': 'center',
+    'padding-left': 8,
+    'font-size': 11,
+    'font-weight': 600,
+    color: '#fff',
+    'box-shadow': isDragging ? '0 4px 12px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.15)',
+    transition: isDragging ? 'none' : 'box-shadow 0.2s',
+    'z-index': isDragging ? 9 : 1,
+    overflow: 'hidden' as const,
+    'white-space': 'nowrap' as const,
+    'user-select': 'none' as const,
+  }),
+  resizeHandle: {
+    position: 'absolute' as const,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 8,
+    cursor: 'ew-resize',
+    background: 'rgba(255,255,255,0.3)',
+    'border-radius': '0 4px 4px 0',
+  },
+  depLine: {
+    stroke: '#999',
+    strokeWidth: 1.5,
+    fill: 'none',
+    markerEnd: 'url(#arrowhead)',
+  },
+}
 
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
+const globalStyle = `
+body { margin: 0; overflow: hidden; }
+`
 
-const MoveTask = engine.event<{ id: number; newStart: number }>('MoveTask')
-const ResizeTask = engine.event<{ id: number; newDuration: number }>('ResizeTask')
-const SelectTask = engine.event<number>('SelectTask')
-const ZoomChanged = engine.event<number>('ZoomChanged')
+// ---------------------------------------------------------------------------
+// Components
+// ---------------------------------------------------------------------------
 
-/* ------------------------------------------------------------------ */
-/*  Initial data                                                      */
-/* ------------------------------------------------------------------ */
+function TopBar() {
+  const emit = useEmit()
+  const currentZoom = usePulse(zoom)
 
-const INITIAL_TASKS: Task[] = [
-  { id: 1, name: 'Research', start: 0, duration: 4, color: '#6c5ce7', deps: [] },
-  { id: 2, name: 'Design', start: 3, duration: 5, color: '#0984e3', deps: [1] },
-  { id: 3, name: 'Frontend', start: 7, duration: 8, color: '#00b894', deps: [2] },
-  { id: 4, name: 'Backend', start: 7, duration: 7, color: '#e17055', deps: [2] },
-  { id: 5, name: 'API Integration', start: 14, duration: 4, color: '#d63031', deps: [3, 4] },
-  { id: 6, name: 'Testing', start: 17, duration: 5, color: '#fdcb6e', deps: [5] },
-  { id: 7, name: 'Bug Fixes', start: 21, duration: 3, color: '#a29bfe', deps: [6] },
-  { id: 8, name: 'Documentation', start: 14, duration: 6, color: '#00cec9', deps: [3] },
-  { id: 9, name: 'Deployment', start: 24, duration: 2, color: '#ff6b6b', deps: [7, 8] },
-  { id: 10, name: 'Launch', start: 26, duration: 1, color: '#54a0ff', deps: [9] },
-]
-
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-const tasks = engine.signal<Task[]>(MoveTask, INITIAL_TASKS, (prev, { id, newStart }) =>
-  prev.map(t => t.id === id ? { ...t, start: Math.max(0, newStart) } : t)
-)
-engine.signalUpdate(tasks, ResizeTask, (prev, { id, newDuration }) =>
-  prev.map(t => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : t)
-)
-
-// Auto-shift dependents when a task moves
-engine.on(MoveTask, ({ id, newStart }) => {
-  const allTasks = tasks.value
-  const movedTask = allTasks.find(t => t.id === id)
-  if (!movedTask) return
-
-  const dependents = allTasks.filter(t => t.deps.includes(id))
-  for (const dep of dependents) {
-    const requiredStart = newStart + movedTask.duration
-    if (dep.start < requiredStart) {
-      engine.emit(MoveTask, { id: dep.id, newStart: requiredStart })
-    }
-  }
-})
-
-const selectedTask = engine.signal<number>(SelectTask, -1, (_prev, id) => id)
-const zoom = engine.signal<number>(ZoomChanged, 1, (_prev, z) => Math.max(0.5, Math.min(2, z)))
-
-/* ------------------------------------------------------------------ */
-/*  Today line                                                        */
-/* ------------------------------------------------------------------ */
-
-const TODAY = 12 // Simulate day 12
-
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
-
-function DependencyArrows() {
-  const allTasks = useSignal(tasks)
-  const z = useSignal(zoom)
-  const dw = () => DAY_WIDTH * z()
+  const zoomLevels: ZoomLevel[] = ['day', 'week', 'month']
+  const categories = Object.entries(categoryColors)
 
   return (
-    <svg style={{
-      position: 'absolute', top: `${HEADER_HEIGHT}px`, left: '0',
-      width: `${TOTAL_DAYS * dw()}px`, height: `${allTasks().length * ROW_HEIGHT}px`,
-      'pointer-events': 'none',
-    }}>
-      <For each={allTasks()}>
-        {(task, ti) => (
-          <For each={task.deps}>
-            {(depId) => {
-              const depIdx = () => allTasks().findIndex(t => t.id === depId)
-              const dep = () => allTasks()[depIdx()]
-              if (!dep()) return null
-              const x1 = () => (dep()!.start + dep()!.duration) * dw()
-              const y1 = () => depIdx() * ROW_HEIGHT + ROW_HEIGHT / 2
-              const x2 = () => task.start * dw()
-              const y2 = () => ti() * ROW_HEIGHT + ROW_HEIGHT / 2
-              const midX = () => (x1() + x2()) / 2
-              return (
-                <path
-                  d={`M ${x1()} ${y1()} C ${midX()} ${y1()}, ${midX()} ${y2()}, ${x2()} ${y2()}`}
-                  fill="none"
-                  stroke="rgba(255,255,255,0.15)"
-                  stroke-width="1.5"
-                  marker-end="url(#arrowhead)"
-                />
-              )
-            }}
-          </For>
-        )}
-      </For>
+    <div style={styles.topBar}>
+      <div style={styles.title}>Pulse Gantt Chart</div>
+      <div style={styles.legend}>
+        {categories.map(([name, color]) => (
+          <div style={styles.legendItem(color)}>
+            <div style={styles.legendDot(color)} />
+            {name}
+          </div>
+        ))}
+      </div>
+      <div style={styles.zoomControls}>
+        {zoomLevels.map(z => (
+          <button
+            style={styles.zoomBtn(currentZoom === z)}
+            onClick={() => emit(ZoomChanged, z)}
+          >
+            {z.charAt(0).toUpperCase() + z.slice(1)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Sidebar() {
+  const allTasks = usePulse(tasks)
+  const drag = usePulse(dragState)
+
+  return (
+    <div style={styles.sidebar}>
+      <div style={styles.sidebarHeader}>Task</div>
+      {allTasks.map(task => (
+        <div
+          style={styles.sidebarRow(drag.taskId === task.id)}
+        >
+          <div style={styles.taskDot(task.color)} />
+          <div style={styles.taskLabel} title={task.title}>{task.title}</div>
+          <div style={styles.taskDates}>
+            {formatDate(task.start)} - {formatDate(task.start + task.duration)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DependencyArrows({ taskList, dayWidth, viewStart }: {
+  taskList: Task[]
+  dayWidth: number
+  viewStart: number
+}) {
+  const taskMap = new Map(taskList.map(t => [t.id, t]))
+  const taskIndexMap = new Map(taskList.map((t, i) => [t.id, i]))
+
+  const lines: any[] = []
+
+  taskList.forEach((task, _toIdx) => {
+    task.dependencies.forEach(depId => {
+      const depTask = taskMap.get(depId)
+      if (!depTask) return
+
+      const fromIdx = taskIndexMap.get(depId)!
+      const toIdx = taskIndexMap.get(task.id)!
+
+      const fromX = (depTask.start + depTask.duration - viewStart) * dayWidth
+      const fromY = fromIdx * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT / 2
+      const toX = (task.start - viewStart) * dayWidth
+      const toY = toIdx * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT / 2
+
+      const midX = fromX + (toX - fromX) / 2
+
+      lines.push(
+        <path
+          d={`M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`}
+          style={styles.depLine}
+        />
+      )
+    })
+  })
+
+  return (
+    <svg
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: taskList.length * TASK_ROW_HEIGHT,
+        'pointer-events': 'none',
+        'z-index': 2,
+      }}
+    >
       <defs>
-        <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="rgba(255,255,255,0.3)" />
+        <marker
+          id="arrowhead"
+          markerWidth="8"
+          markerHeight="6"
+          refX="8"
+          refY="3"
+          orient="auto"
+        >
+          <polygon points="0 0, 8 3, 0 6" fill="#999" />
         </marker>
       </defs>
+      {lines}
     </svg>
   )
 }
 
-function TaskBar(props: { task: Task; index: number }) {
+function ChartBody() {
   const emit = useEmit()
-  const sel = useSignal(selectedTask)
-  const z = useSignal(zoom)
-  const dw = () => DAY_WIDTH * z()
-  const isSel = () => sel() === props.task.id
+  const allTasks = usePulse(tasks)
+  const currentView = usePulse(view)
+  const currentZoom = usePulse(zoom)
+  const drag = usePulse(dragState)
+  const snapVal = usePulse(snapSpring)
+
+  const dayWidth = getDayWidth(currentZoom)
+  const totalDays = currentView.end - currentView.start
+  const totalWidth = totalDays * dayWidth
 
   let dragStartX = 0
-  let origStart = 0
-  let resizing = false
 
-  const onBarPointerDown = (e: PointerEvent) => {
-    if (resizing) return
-    dragStartX = e.clientX
-    origStart = props.task.start
-    emit(SelectTask, props.task.id)
-    const move = (ev: PointerEvent) => {
-      const dx = ev.clientX - dragStartX
-      const dayDelta = Math.round(dx / dw())
-      if (dayDelta !== 0) {
-        emit(MoveTask, { id: props.task.id, newStart: origStart + dayDelta })
-      }
-    }
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
-
-  const onResizePointerDown = (e: PointerEvent) => {
+  const handleMouseDown = (taskId: string, type: 'move' | 'resize', e: MouseEvent) => {
+    e.preventDefault()
     e.stopPropagation()
-    resizing = true
     dragStartX = e.clientX
-    const origDuration = props.task.duration
-    const move = (ev: PointerEvent) => {
-      const dx = ev.clientX - dragStartX
-      const dayDelta = Math.round(dx / dw())
-      emit(ResizeTask, { id: props.task.id, newDuration: origDuration + dayDelta })
-    }
-    const up = () => { resizing = false; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    emit(TaskDragStart, { id: taskId, type })
   }
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!drag.taskId) return
+    const dx = e.clientX - dragStartX
+    emit(TaskDragMove, { id: drag.taskId, dx })
+  }
+
+  const handleMouseUp = () => {
+    if (drag.taskId) {
+      emit(TaskDragEnd, { id: drag.taskId })
+    }
+  }
+
+  // Time header cells
+  const headerCells: any[] = []
+  const gridLines: any[] = []
+  for (let d = 0; d < totalDays; d++) {
+    const day = currentView.start + d
+    const date = dayToDate(day)
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6
+    const left = d * dayWidth
+
+    if (currentZoom === 'day') {
+      headerCells.push(
+        <div style={styles.timeCell(dayWidth, isWeekend)}>
+          <span style={{ 'font-size': 10, color: '#bbb' }}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()]}
+          </span>
+          <span>{date.getDate()}</span>
+        </div>
+      )
+    } else if (currentZoom === 'week' && date.getDay() === 1) {
+      headerCells.push(
+        <div style={styles.timeCell(dayWidth * 7, false)}>
+          <span>{formatDate(day)}</span>
+        </div>
+      )
+    } else if (currentZoom === 'month' && date.getDate() === 1) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      headerCells.push(
+        <div style={styles.timeCell(dayWidth * 30, false)}>
+          <span>{months[date.getMonth()]} {date.getFullYear()}</span>
+        </div>
+      )
+    }
+
+    gridLines.push(
+      <div style={styles.gridLine(left, isWeekend)} />
+    )
+  }
+
+  // Today marker
+  const today = new Date()
+  const todayOffset = Math.floor((today.getTime() - dayToDate(currentView.start).getTime()) / (1000 * 60 * 60 * 24))
+  const todayLeft = todayOffset * dayWidth
+
+  // Task bars
+  const taskBars = allTasks.map((task, i) => {
+    const left = (task.start - currentView.start) * dayWidth
+    const width = task.duration * dayWidth
+    const top = i * TASK_ROW_HEIGHT
+    const isDragging = drag.taskId === task.id
+
+    return (
+      <div
+        style={styles.taskBar(left, width, top, task.color, isDragging)}
+        onMouseDown={(e) => handleMouseDown(task.id, 'move', e)}
+      >
+        <span style={{ overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
+          {task.title}
+        </span>
+        <div
+          style={styles.resizeHandle}
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            handleMouseDown(task.id, 'resize', e)
+          }}
+        />
+      </div>
+    )
+  })
+
+  const gridHeight = allTasks.length * TASK_ROW_HEIGHT
 
   return (
     <div
-      onPointerDown={onBarPointerDown}
-      style={{
-        position: 'absolute',
-        left: `${props.task.start * dw()}px`,
-        top: `${props.index * ROW_HEIGHT + 8}px`,
-        width: `${props.task.duration * dw() - 4}px`,
-        height: `${ROW_HEIGHT - 16}px`,
-        background: `linear-gradient(135deg, ${props.task.color}cc, ${props.task.color}88)`,
-        'border-radius': '6px',
-        cursor: 'grab',
-        display: 'flex',
-        'align-items': 'center',
-        padding: '0 8px',
-        'font-size': '12px',
-        color: '#fff',
-        'font-weight': '500',
-        'white-space': 'nowrap',
-        overflow: 'hidden',
-        border: isSel() ? `2px solid ${props.task.color}` : '1px solid rgba(255,255,255,0.1)',
-        'box-shadow': isSel() ? `0 0 12px ${props.task.color}44` : '0 2px 6px rgba(0,0,0,0.2)',
-        'user-select': 'none',
-      }}
+      style={styles.chart}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
     >
-      {props.task.name}
-      {/* Resize handle */}
-      <div
-        onPointerDown={onResizePointerDown}
-        style={{
-          position: 'absolute', right: '0', top: '0', bottom: '0',
-          width: '8px', cursor: 'ew-resize', background: 'rgba(255,255,255,0.2)',
-          'border-radius': '0 6px 6px 0',
-        }}
-      />
+      {/* Time header */}
+      <div style={{ ...styles.timeHeader, width: totalWidth }}>
+        {headerCells}
+      </div>
+
+      {/* Grid area */}
+      <div style={{ ...styles.gridArea, width: totalWidth, height: gridHeight }}>
+        {gridLines}
+
+        {/* Today line */}
+        {todayLeft > 0 && todayLeft < totalWidth && (
+          <div style={styles.todayLine(todayLeft)}>
+            <div style={styles.todayLabel}>Today</div>
+          </div>
+        )}
+
+        {/* Dependency arrows */}
+        <DependencyArrows
+          taskList={allTasks}
+          dayWidth={dayWidth}
+          viewStart={currentView.start}
+        />
+
+        {/* Task bars */}
+        {taskBars}
+
+        {/* Row lines */}
+        {allTasks.map((_, i) => (
+          <div
+            style={{
+              position: 'absolute',
+              top: (i + 1) * TASK_ROW_HEIGHT,
+              left: 0,
+              right: 0,
+              height: 1,
+              background: '#f0f0f0',
+            }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
 
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
 export default function App() {
-  const emit = useEmit()
-  const allTasks = useSignal(tasks)
-  const z = useSignal(zoom)
-  const sel = useSignal(selectedTask)
-  const dw = () => DAY_WIDTH * z()
-
   return (
-    <div style={{
-      height: '100vh', display: 'flex', 'flex-direction': 'column',
-      'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    }}>
-      {/* Header */}
-      <div style={{ background: '#fff', padding: '12px 24px', 'border-bottom': '1px solid #e0e0e0', display: 'flex', 'align-items': 'center', gap: '16px' }}>
-        <h1 style={{ 'font-size': '20px', 'font-weight': '700', color: '#333', margin: '0' }}>Gantt Chart</h1>
-        <div style={{ display: 'flex', gap: '8px', 'margin-left': 'auto' }}>
-          <button onClick={() => emit(ZoomChanged, z() - 0.25)} style={{ padding: '4px 12px', 'border-radius': '4px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}>-</button>
-          <span style={{ 'font-size': '13px', color: '#666', 'line-height': '28px' }}>{Math.round(z() * 100)}%</span>
-          <button onClick={() => emit(ZoomChanged, z() + 0.25)} style={{ padding: '4px 12px', 'border-radius': '4px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}>+</button>
+    <>
+      <style>{globalStyle}</style>
+      <div style={styles.container}>
+        <TopBar />
+        <div style={styles.body}>
+          <Sidebar />
+          <ChartBody />
         </div>
       </div>
-
-      <div style={{ flex: '1', display: 'flex', overflow: 'hidden' }}>
-        {/* Task list */}
-        <div style={{ width: '200px', background: '#fafafa', 'border-right': '1px solid #e0e0e0', 'flex-shrink': '0' }}>
-          <div style={{ height: `${HEADER_HEIGHT}px`, 'border-bottom': '1px solid #e0e0e0', padding: '8px 16px', 'font-size': '12px', 'font-weight': '600', color: '#888' }}>
-            Task Name
-          </div>
-          <For each={allTasks()}>
-            {(task) => (
-              <div
-                onClick={() => emit(SelectTask, task.id)}
-                style={{
-                  height: `${ROW_HEIGHT}px`, padding: '0 16px',
-                  display: 'flex', 'align-items': 'center', gap: '8px',
-                  'border-bottom': '1px solid #f0f0f0', cursor: 'pointer',
-                  background: sel() === task.id ? '#e8f0fe' : 'transparent',
-                  'font-size': '13px', color: '#333',
-                }}
-              >
-                <div style={{ width: '8px', height: '8px', 'border-radius': '50%', background: task.color }} />
-                {task.name}
-              </div>
-            )}
-          </For>
-        </div>
-
-        {/* Chart area */}
-        <div style={{ flex: '1', overflow: 'auto', position: 'relative', background: '#fafafa' }}>
-          {/* Day headers */}
-          <div style={{ display: 'flex', height: `${HEADER_HEIGHT}px`, 'border-bottom': '1px solid #e0e0e0', position: 'sticky', top: '0', background: '#fafafa', 'z-index': '5' }}>
-            <For each={Array.from({ length: TOTAL_DAYS }, (_, i) => i)}>
-              {(day) => (
-                <div style={{
-                  width: `${dw()}px`, 'min-width': `${dw()}px`, 'text-align': 'center',
-                  'font-size': '11px', color: day === TODAY ? '#d63031' : '#888',
-                  'font-weight': day === TODAY ? '700' : '400',
-                  'line-height': `${HEADER_HEIGHT}px`,
-                  'border-right': '1px solid #f0f0f0',
-                }}>
-                  Day {day + 1}
-                </div>
-              )}
-            </For>
-          </div>
-
-          {/* Grid lines + tasks */}
-          <div style={{ position: 'relative', 'min-height': `${allTasks().length * ROW_HEIGHT}px` }}>
-            {/* Vertical grid lines */}
-            <For each={Array.from({ length: TOTAL_DAYS }, (_, i) => i)}>
-              {(day) => (
-                <div style={{
-                  position: 'absolute', left: `${day * dw()}px`, top: '0', bottom: '0',
-                  width: '1px', background: '#f0f0f0',
-                }} />
-              )}
-            </For>
-
-            {/* Horizontal grid lines */}
-            <For each={allTasks()}>
-              {(_, i) => (
-                <div style={{
-                  position: 'absolute', left: '0', right: '0',
-                  top: `${(i() + 1) * ROW_HEIGHT}px`, height: '1px', background: '#f0f0f0',
-                }} />
-              )}
-            </For>
-
-            {/* Today line */}
-            <div style={{
-              position: 'absolute', left: `${TODAY * dw()}px`, top: '0', bottom: '0',
-              width: '2px', background: '#d63031', 'z-index': '3', opacity: '0.6',
-            }} />
-
-            {/* Dependency arrows */}
-            <DependencyArrows />
-
-            {/* Task bars */}
-            <For each={allTasks()}>
-              {(task, i) => <TaskBar task={task} index={i()} />}
-            </For>
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   )
 }

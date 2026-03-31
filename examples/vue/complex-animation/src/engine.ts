@@ -1,4 +1,4 @@
-import { createEngine, type EventType, type TweenValue, type SpringValue } from '@pulse/core'
+import { createEngine, type EventType } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -68,52 +68,156 @@ engine.on(PageLoaded, () => {
 // Per-card tweens: opacity and translateY for entrance
 // ---------------------------------------------------------------------------
 
-export const cardOpacity: TweenValue[] = []
-export const cardTranslateY: TweenValue[] = []
-export const cardHoverScale: TweenValue[] = []
-export const cardHoverShadow: SpringValue[] = []
+export const cardOpacity: any[] = []
+export const cardTranslateY: any[] = []
+export const cardHoverScale: any[] = []
+export const cardHoverShadow: any[] = []
 
 for (let i = 0; i < CARD_COUNT; i++) {
   // Entrance opacity: 0 -> 1
-  const opacity = engine.tween({
+  let opacity = { value: 0, active: false }
+const OpacityVal = engine.event<number>('OpacityVal')
+{
+  const _tc = {
     start: CardEnter[i],
     done: CardEntered[i],
     from: 0,
     to: 1,
     duration: 500,
     easing: (t: number) => 1 - Math.pow(1 - t, 3), // easeOutCubic
+  }
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; opacity.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!opacity.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      opacity.value = f + (t - f) * _te(p)
+      engine.emit(OpacityVal, opacity.value)
+      if (p >= 1) { opacity.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
   })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { opacity.active = false })) }
+}
   cardOpacity.push(opacity)
 
   // Entrance translateY: 40px -> 0px
-  const translateY = engine.tween({
+  let translateY = { value: 0, active: false }
+const TranslateYVal = engine.event<number>('TranslateYVal')
+{
+  const _tc = {
     start: CardEnter[i],
     from: 40,
     to: 0,
     duration: 500,
     easing: (t: number) => 1 - Math.pow(1 - t, 3),
+  }
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; translateY.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!translateY.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      translateY.value = f + (t - f) * _te(p)
+      engine.emit(TranslateYVal, translateY.value)
+      if (p >= 1) { translateY.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
   })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { translateY.active = false })) }
+}
   cardTranslateY.push(translateY)
 
   // Hover scale: driven by hover/unhover events
-  const scale = engine.tween({
+  let scale = { value: 0, active: false }
+const ScaleVal = engine.event<number>('ScaleVal')
+{
+  const _tc = {
     start: HoverCard[i],
     cancel: UnhoverCard[i],
     from: 1,
     to: 1.05,
     duration: 200,
     easing: (t: number) => t * (2 - t), // easeOutQuad
+  }
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; scale.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!scale.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      scale.value = f + (t - f) * _te(p)
+      engine.emit(ScaleVal, scale.value)
+      if (p >= 1) { scale.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
   })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { scale.active = false })) }
+}
   cardHoverScale.push(scale)
 
   // Hover shadow: spring-driven for smooth tracking
-  const hoverSignal = engine.signal<number>(HoverCard[i], 0, () => 20)
-  engine.signalUpdate(hoverSignal, UnhoverCard[i], () => 0)
-  const shadow = engine.spring(hoverSignal, {
+  let hoverSignal = 0
+const HoverSignalChanged = engine.event('HoverSignalChanged')
+engine.on(HoverCard[i], (v: any) => { hoverSignal = (() => 20)(hoverSignal, v); engine.emit(HoverSignalChanged, hoverSignal) })
+  engine.on(UnhoverCard[i], (v: any) => { hoverSignal = (() => 0)(hoverSignal, v); engine.emit(HoverSignalChanged, hoverSignal) })
+  let shadow = { value: 0, velocity: 0, settled: true }
+const ShadowVal = engine.event<number>('ShadowVal')
+{
+  const _sc = {
     stiffness: 300,
     damping: 20,
     restThreshold: 0.1,
-  })
+  }
+  let _sv = 0, _sa = false
+  function _ss() {
+    if (_sa) return; _sa = true
+    let _sl = performance.now()
+    function _st(now: number) {
+      if (!_sa) return
+      const dt = Math.min((now - _sl) / 1000, 0.064); _sl = now
+      const tgt = hoverSignal
+      const tgtVal = typeof tgt === 'number' ? tgt : (tgt?.value ?? 0)
+      const dx = shadow.value - tgtVal
+      const sf = -(_sc.stiffness ?? 170) * dx
+      const df = -(_sc.damping ?? 26) * _sv
+      _sv += (sf + df) * dt
+      shadow.value += _sv * dt
+      shadow.velocity = _sv
+      engine.emit(ShadowVal, shadow.value)
+      const rt = _sc.restThreshold ?? 0.01
+      if (Math.abs(dx) < rt && Math.abs(_sv) < rt) {
+        shadow.value = tgtVal; _sv = 0; _sa = false; shadow.settled = true
+        engine.emit(ShadowVal, shadow.value)
+        if (_sc.done) engine.emit(_sc.done, undefined)
+        return
+      }
+      shadow.settled = false
+      requestAnimationFrame(_st)
+    }
+    requestAnimationFrame(_st)
+  }
+  engine.on(HoverSignalChanged, () => _ss())
+}
   cardHoverShadow.push(shadow)
 }
 
@@ -122,47 +226,94 @@ for (let i = 0; i < CARD_COUNT; i++) {
 // Fires when every card has completed its entrance animation
 // ---------------------------------------------------------------------------
 
-engine.join(
-  CardEntered,
-  AllCardsEntered,
-  {
+{
+  const _ji = CardEntered
+  const _jr = new Set<number>()
+  const _jc = {
     do: () => undefined,
-  },
-)
+  }
+  _ji.forEach((e: any, i: number) => engine.on(e, () => {
+    _jr.add(i)
+    if (_jr.size === _ji.length) { _jr.clear(); engine.emit(AllCardsEntered, _jc.do()) }
+  }))
+}
 
 // After all cards enter, trigger welcome fade
-engine.pipe(AllCardsEntered, WelcomeFadeStart, () => undefined)
+engine.on(AllCardsEntered, (v: any) => { engine.emit(WelcomeFadeStart, (() => undefined)(v)) })
 
 // ---------------------------------------------------------------------------
 // Welcome message tween
 // ---------------------------------------------------------------------------
 
-export const welcomeOpacity = engine.tween({
+export let welcomeOpacity = { value: 0, active: false }
+export const WelcomeOpacityVal = engine.event<number>('WelcomeOpacityVal')
+{
+  const _tc = {
   start: WelcomeFadeStart,
   done: WelcomeFadeDone,
   from: 0,
   to: 1,
   duration: 800,
   easing: (t: number) => t * t * (3 - 2 * t), // smoothstep
-})
+}
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; welcomeOpacity.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!welcomeOpacity.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      welcomeOpacity.value = f + (t - f) * _te(p)
+      engine.emit(WelcomeOpacityVal, welcomeOpacity.value)
+      if (p >= 1) { welcomeOpacity.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { welcomeOpacity.active = false })) }
+}
 
-export const welcomeTranslateY = engine.tween({
+export let welcomeTranslateY = { value: 0, active: false }
+export const WelcomeTranslateYVal = engine.event<number>('WelcomeTranslateYVal')
+{
+  const _tc = {
   start: WelcomeFadeStart,
   from: 20,
   to: 0,
   duration: 800,
   easing: (t: number) => 1 - Math.pow(1 - t, 3),
-})
+}
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; welcomeTranslateY.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!welcomeTranslateY.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      welcomeTranslateY.value = f + (t - f) * _te(p)
+      engine.emit(WelcomeTranslateYVal, welcomeTranslateY.value)
+      if (p >= 1) { welcomeTranslateY.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { welcomeTranslateY.active = false })) }
+}
 
 // ---------------------------------------------------------------------------
 // Signals to track state
 // ---------------------------------------------------------------------------
 
-export const allEntered = engine.signal<boolean>(
-  AllCardsEntered,
-  false,
-  () => true,
-)
+export let allEntered = false
+export const AllEnteredChanged = engine.event('AllEnteredChanged')
+engine.on(AllCardsEntered, (v: any) => { allEntered = (() => true)(allEntered, v); engine.emit(AllEnteredChanged, allEntered) })
 
 // Start the frame loop for animations
-engine.startFrameLoop()

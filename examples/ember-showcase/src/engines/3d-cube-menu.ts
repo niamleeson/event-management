@@ -1,4 +1,4 @@
-import { createEngine, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -30,14 +30,13 @@ export const FACES: CubeFace[] = [
   { id: 5, label: 'Files', icon: '\u{1F4C1}', color: '#f4a261' },
 ]
 
-// Face index -> rotation: 0=front, 1=right, 2=back, 3=left, 4=top, 5=bottom
 export const FACE_ROTATIONS: { rotateX: number; rotateY: number }[] = [
-  { rotateX: 0, rotateY: 0 },     // front
-  { rotateX: 0, rotateY: -90 },   // right
-  { rotateX: 0, rotateY: -180 },  // back
-  { rotateX: 0, rotateY: 90 },    // left
-  { rotateX: -90, rotateY: 0 },   // top
-  { rotateX: 90, rotateY: 0 },    // bottom
+  { rotateX: 0, rotateY: 0 },
+  { rotateX: 0, rotateY: -90 },
+  { rotateX: 0, rotateY: -180 },
+  { rotateX: 0, rotateY: 90 },
+  { rotateX: -90, rotateY: 0 },
+  { rotateX: 90, rotateY: 0 },
 ]
 
 // ---------------------------------------------------------------------------
@@ -48,90 +47,75 @@ export const SelectFace = engine.event<number>('SelectFace')
 export const DragStart = engine.event<{ x: number; y: number }>('DragStart')
 export const DragMove = engine.event<{ x: number; y: number }>('DragMove')
 export const DragEnd = engine.event<void>('DragEnd')
-export const SnapToFace = engine.event<number>('SnapToFace')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const selectedFace = engine.signal<number>(
-  SelectFace, 0, (_prev, face) => face,
-)
+let _selectedFace = 0
+let _isDragging = false
+let _targetRotationX = 0
+let _targetRotationY = 0
+let _springRotationX = 0
+let _springRotationY = 0
+let _springVelocityX = 0
+let _springVelocityY = 0
+let _glowIntensity = 20
 
-export const isDragging = engine.signal<boolean>(
-  DragStart, false, () => true,
-)
-engine.signalUpdate(isDragging, DragEnd, () => false)
-
-// Track raw rotation from drag
-export const rawRotationX = engine.signal<number>(
-  DragMove, 0, (prev, _) => prev,
-)
-export const rawRotationY = engine.signal<number>(
-  DragMove, 0, (prev, _) => prev,
-)
-
-// Target rotation for snapping
-export const targetRotationX = engine.signal<number>(
-  SnapToFace, 0, (_prev, face) => FACE_ROTATIONS[face].rotateX,
-)
-export const targetRotationY = engine.signal<number>(
-  SnapToFace, 0, (_prev, face) => FACE_ROTATIONS[face].rotateY,
-)
-
-// Also update when selecting a face directly
-engine.signalUpdate(targetRotationX, SelectFace, (_prev, face) => FACE_ROTATIONS[face].rotateX)
-engine.signalUpdate(targetRotationY, SelectFace, (_prev, face) => FACE_ROTATIONS[face].rotateY)
+export function getSelectedFace(): number { return _selectedFace }
+export function getIsDragging(): boolean { return _isDragging }
+export function getSpringRotationX(): number { return _springRotationX }
+export function getSpringRotationY(): number { return _springRotationY }
+export function getGlowIntensity(): number { return _glowIntensity }
 
 // ---------------------------------------------------------------------------
-// Springs — smooth rotation
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const springRotationX: SpringValue = engine.spring(targetRotationX, {
-  stiffness: 180,
-  damping: 22,
-  restThreshold: 0.5,
+engine.on(SelectFace, (face: number) => {
+  _selectedFace = face
+  _targetRotationX = FACE_ROTATIONS[face].rotateX
+  _targetRotationY = FACE_ROTATIONS[face].rotateY
+  _glowIntensity = 20
 })
 
-export const springRotationY: SpringValue = engine.spring(targetRotationY, {
-  stiffness: 180,
-  damping: 22,
-  restThreshold: 0.5,
+engine.on(DragStart, () => {
+  _isDragging = true
 })
-
-// Glow intensity spring for selected face
-export const glowIntensity = engine.signal<number>(
-  SelectFace, 20, () => 20,
-)
-export const springGlow: SpringValue = engine.spring(glowIntensity, {
-  stiffness: 200,
-  damping: 15,
-})
-
-// ---------------------------------------------------------------------------
-// Snap logic: on DragEnd, snap to nearest 90-degree face
-// ---------------------------------------------------------------------------
 
 engine.on(DragEnd, () => {
-  // Find nearest face based on current spring rotation
-  const curX = springRotationX.value
-  const curY = springRotationY.value
-
+  _isDragging = false
+  // Snap to nearest face
   let bestFace = 0
   let bestDist = Infinity
   for (let i = 0; i < FACES.length; i++) {
     const r = FACE_ROTATIONS[i]
-    const dx = curX - r.rotateX
-    const dy = curY - r.rotateY
+    const dx = _springRotationX - r.rotateX
+    const dy = _springRotationY - r.rotateY
     const dist = dx * dx + dy * dy
     if (dist < bestDist) {
       bestDist = dist
       bestFace = i
     }
   }
-
   engine.emit(SelectFace, bestFace)
 })
 
-// Start frame loop
-engine.startFrameLoop()
+// ---------------------------------------------------------------------------
+// Frame update (called from page via rAF)
+// ---------------------------------------------------------------------------
+
+export function updateFrame(_dt: number): void {
+  // Spring physics for rotation
+  const stiffness = 180
+  const damping = 22
+  const dtSec = Math.min(_dt / 1000, 0.05) // cap at 50ms
+
+  const forceX = ((_targetRotationX - _springRotationX) * stiffness - _springVelocityX * damping) * dtSec
+  const forceY = ((_targetRotationY - _springRotationY) * stiffness - _springVelocityY * damping) * dtSec
+
+  _springVelocityX += forceX
+  _springVelocityY += forceY
+  _springRotationX += _springVelocityX * dtSec
+  _springRotationY += _springVelocityY * dtSec
+}

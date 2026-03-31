@@ -1,7 +1,6 @@
 import { useRef, useCallback } from 'react'
-import { useEmit, useSignal, useSpring } from '@pulse/react'
-import type { Signal, SpringValue } from '@pulse/core'
-import { engine } from './engine'
+import { usePulse, useEmit } from '@pulse/react'
+import { engine, Frame } from './engine'
 
 /* ------------------------------------------------------------------ */
 /*  Face data                                                         */
@@ -25,108 +24,74 @@ const DragMove = engine.event<{ dx: number; dy: number }>('DragMove')
 const DragEnd = engine.event('DragEnd')
 const FaceSelected = engine.event<number>('FaceSelected')
 const SnapToFace = engine.event<number>('SnapToFace')
-const SnapDone = engine.event('SnapDone')
+
+const CubeStateChanged = engine.event<{ rotX: number; rotY: number; selected: number }>('CubeStateChanged')
 
 /* ------------------------------------------------------------------ */
-/*  Rotation signals + springs                                        */
+/*  State                                                             */
 /* ------------------------------------------------------------------ */
 
-// Target rotation signals (driven by drag + snap)
-const rotationXTarget: Signal<number> = engine.signal(DragMove, 0, (prev, { dy }) => prev + dy * 0.4)
-const rotationYTarget: Signal<number> = engine.signal(DragMove, 0, (prev, { dx }) => prev + dx * 0.4)
+let rotXTarget = 0, rotYTarget = 0
+let rotXSpring = 0, rotYSpring = 0
+let rotXVel = 0, rotYVel = 0
+let selected = -1
 
-// Snap overrides: when SnapToFace fires, set targets to nearest 90deg face
-engine.signalUpdate(rotationXTarget, SnapToFace, (_prev, face) => {
-  const snaps: Record<number, number> = { 4: -90, 5: 90 } // top, bottom
-  return snaps[face] ?? 0
+engine.on(DragMove, ({ dx, dy }) => {
+  rotXTarget += dy * 0.4
+  rotYTarget += dx * 0.4
 })
-engine.signalUpdate(rotationYTarget, SnapToFace, (prev, face) => {
-  // Canonical angles for each face
+
+engine.on(SnapToFace, (face) => {
+  const snapsX: Record<number, number> = { 4: -90, 5: 90 }
+  rotXTarget = snapsX[face] ?? 0
+
   const canonical: Record<number, number> = { 0: 0, 1: -90, 2: -180, 3: -270 }
   const base = canonical[face] ?? 0
-  // Find the closest equivalent angle to the current rotation
-  // Equivalent angles: base + 360*n for any integer n
-  const offset = Math.round((prev - base) / 360) * 360
-  return base + offset
+  const offset = Math.round((rotYTarget - base) / 360) * 360
+  rotYTarget = base + offset
 })
 
-// Springs smooth the rotation
-const rotXSpring: SpringValue = engine.spring(rotationXTarget, { stiffness: 120, damping: 20 })
-const rotYSpring: SpringValue = engine.spring(rotationYTarget, { stiffness: 120, damping: 20 })
-
-// Selected face signal
-const selectedFace: Signal<number> = engine.signal(FaceSelected, -1, (_prev, idx) => idx)
-
-/* ------------------------------------------------------------------ */
-/*  Snap logic: on drag end, snap to nearest 90deg face               */
-/* ------------------------------------------------------------------ */
-
 engine.on(DragEnd, () => {
-  // Find closest face from current rotation
-  const ry = rotYSpring.value
-  const rx = rotXSpring.value
-
-  // Check if more vertical than horizontal
-  if (rx < -45) {
-    engine.emit(SnapToFace, 4) // top
-    return
-  }
-  if (rx > 45) {
-    engine.emit(SnapToFace, 5) // bottom
-    return
-  }
-
-  // Horizontal snap to nearest 90deg
-  const normalized = ((ry % 360) + 360) % 360
+  const rx = rotXSpring
+  if (rx < -45) { engine.emit(SnapToFace, 4); return }
+  if (rx > 45) { engine.emit(SnapToFace, 5); return }
+  const normalized = ((rotYSpring % 360) + 360) % 360
   const faceIndex = Math.round(normalized / 90) % 4
   engine.emit(SnapToFace, faceIndex)
+})
+
+engine.on(FaceSelected, (idx) => { selected = idx })
+
+engine.on(Frame, () => {
+  const stiff = 0.06, damp = 0.7
+  rotXVel += (rotXTarget - rotXSpring) * stiff
+  rotXVel *= damp
+  rotXSpring += rotXVel
+  rotYVel += (rotYTarget - rotYSpring) * stiff
+  rotYVel *= damp
+  rotYSpring += rotYVel
+  engine.emit(CubeStateChanged, { rotX: rotXSpring, rotY: rotYSpring, selected })
 })
 
 /* ------------------------------------------------------------------ */
 /*  Cube face component                                               */
 /* ------------------------------------------------------------------ */
 
-function CubeFace({
-  index,
-  transform,
-  selected,
-}: {
-  index: number
-  transform: string
-  selected: boolean
-}) {
+function CubeFace({ index, transform, selected }: { index: number; transform: string; selected: boolean }) {
   const emit = useEmit()
   const face = FACES[index]
 
   return (
-    <div
-      onClick={(e) => {
-        e.stopPropagation()
-        emit(FaceSelected, index)
-      }}
+    <div onClick={(e) => { e.stopPropagation(); emit(FaceSelected, index) }}
       style={{
-        position: 'absolute',
-        width: 300,
-        height: 300,
-        transform,
-        backfaceVisibility: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: selected
-          ? `linear-gradient(145deg, ${face.color}ee, ${face.color}aa)`
-          : `linear-gradient(145deg, ${face.color}88, ${face.color}44)`,
+        position: 'absolute', width: 300, height: 300, transform, backfaceVisibility: 'hidden',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: selected ? `linear-gradient(145deg, ${face.color}ee, ${face.color}aa)` : `linear-gradient(145deg, ${face.color}88, ${face.color}44)`,
         border: selected ? `2px solid ${face.color}` : '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 4,
-        cursor: 'pointer',
-        boxShadow: selected
-          ? `0 0 30px ${face.color}66, inset 0 0 30px ${face.color}22`
-          : '0 4px 20px rgba(0,0,0,0.3)',
-        transition: 'background 0.3s, box-shadow 0.3s',
-        gap: 12,
-      }}
-    >
+        borderRadius: 4, cursor: 'pointer',
+        boxShadow: selected ? `0 0 30px ${face.color}66, inset 0 0 30px ${face.color}22` : '0 4px 20px rgba(0,0,0,0.3)',
+        transition: 'background 0.3s, box-shadow 0.3s', gap: 12,
+      }}>
       <div style={{ fontSize: 48 }}>{face.icon}</div>
       <div style={{ color: '#fff', fontSize: 22, fontWeight: 700, letterSpacing: 1 }}>{face.label}</div>
       <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>{face.desc}</div>
@@ -140,21 +105,19 @@ function CubeFace({
 
 export default function App() {
   const emit = useEmit()
-  const rotX = useSpring(rotXSpring)
-  const rotY = useSpring(rotYSpring)
-  const selected = useSignal(selectedFace)
-  const dragging = useRef(false)
+  const state = usePulse(CubeStateChanged, { rotX: 0, rotY: 0, selected: -1 })
+  const dragRef = useRef(false)
   const lastPos = useRef({ x: 0, y: 0 })
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    dragging.current = true
+    dragRef.current = true
     lastPos.current = { x: e.clientX, y: e.clientY }
     emit(DragStart, undefined)
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }, [emit])
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return
+    if (!dragRef.current) return
     const dx = e.clientX - lastPos.current.x
     const dy = e.clientY - lastPos.current.y
     lastPos.current = { x: e.clientX, y: e.clientY }
@@ -162,76 +125,35 @@ export default function App() {
   }, [emit])
 
   const onPointerUp = useCallback(() => {
-    if (!dragging.current) return
-    dragging.current = false
+    if (!dragRef.current) return
+    dragRef.current = false
     emit(DragEnd, undefined)
   }, [emit])
 
-  // Lighting overlay: subtle gradient that shifts with rotation
-  const lightAngle = ((rotY % 360) + 360) % 360
+  const lightAngle = ((state.rotY % 360) + 360) % 360
   const lightX = 50 + Math.sin(lightAngle * Math.PI / 180) * 30
-  const lightY = 50 - Math.sin(rotX * Math.PI / 180) * 30
+  const lightY = 50 - Math.sin(state.rotX * Math.PI / 180) * 30
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 40, userSelect: 'none' }}>
-      <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 300, letterSpacing: 2 }}>
-        3D Cube Menu
-      </h1>
+      <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 300, letterSpacing: 2 }}>3D Cube Menu</h1>
 
-      <div
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        style={{
-          perspective: 800,
-          width: 300,
-          height: 300,
-          cursor: dragging.current ? 'grabbing' : 'grab',
-        }}
-      >
-        <div
-          style={{
-            width: 300,
-            height: 300,
-            position: 'relative',
-            transformStyle: 'preserve-3d',
-            transform: `rotateX(${-rotX}deg) rotateY(${-rotY}deg)`,
-          }}
-        >
-          {/* Lighting overlay */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: -150,
-              borderRadius: '50%',
-              background: `radial-gradient(circle at ${lightX}% ${lightY}%, rgba(255,255,255,0.05) 0%, transparent 60%)`,
-              pointerEvents: 'none',
-              transformStyle: 'preserve-3d',
-            }}
-          />
-
-          {/* Front */}
-          <CubeFace index={0} selected={selected === 0} transform="translateZ(150px)" />
-          {/* Right */}
-          <CubeFace index={1} selected={selected === 1} transform="rotateY(90deg) translateZ(150px)" />
-          {/* Back */}
-          <CubeFace index={2} selected={selected === 2} transform="rotateY(180deg) translateZ(150px)" />
-          {/* Left */}
-          <CubeFace index={3} selected={selected === 3} transform="rotateY(-90deg) translateZ(150px)" />
-          {/* Top */}
-          <CubeFace index={4} selected={selected === 4} transform="rotateX(90deg) translateZ(150px)" />
-          {/* Bottom */}
-          <CubeFace index={5} selected={selected === 5} transform="rotateX(-90deg) translateZ(150px)" />
+      <div onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+        style={{ perspective: 800, width: 300, height: 300, cursor: dragRef.current ? 'grabbing' : 'grab' }}>
+        <div style={{ width: 300, height: 300, position: 'relative', transformStyle: 'preserve-3d', transform: `rotateX(${-state.rotX}deg) rotateY(${-state.rotY}deg)` }}>
+          <div style={{ position: 'absolute', inset: -150, borderRadius: '50%', background: `radial-gradient(circle at ${lightX}% ${lightY}%, rgba(255,255,255,0.05) 0%, transparent 60%)`, pointerEvents: 'none', transformStyle: 'preserve-3d' }} />
+          <CubeFace index={0} selected={state.selected === 0} transform="translateZ(150px)" />
+          <CubeFace index={1} selected={state.selected === 1} transform="rotateY(90deg) translateZ(150px)" />
+          <CubeFace index={2} selected={state.selected === 2} transform="rotateY(180deg) translateZ(150px)" />
+          <CubeFace index={3} selected={state.selected === 3} transform="rotateY(-90deg) translateZ(150px)" />
+          <CubeFace index={4} selected={state.selected === 4} transform="rotateX(90deg) translateZ(150px)" />
+          <CubeFace index={5} selected={state.selected === 5} transform="rotateX(-90deg) translateZ(150px)" />
         </div>
       </div>
 
       <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>
         Drag to rotate {'\u00B7'} Click a face to select
-        {selected >= 0 && (
-          <span style={{ color: FACES[selected].color, marginLeft: 12 }}>
-            Selected: {FACES[selected].label}
-          </span>
-        )}
+        {state.selected >= 0 && <span style={{ color: FACES[state.selected].color, marginLeft: 12 }}>Selected: {FACES[state.selected].label}</span>}
       </p>
     </div>
   )

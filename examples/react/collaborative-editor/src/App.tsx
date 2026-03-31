@@ -1,14 +1,13 @@
 import { useRef, useCallback } from 'react'
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  document as docSignal,
-  cursors,
-  activeUsers,
-  editHistory,
-  hasConflict,
+  DocumentChanged,
+  CursorsChanged,
+  ActiveUsersChanged,
+  EditHistoryChanged,
+  HasConflictChanged,
   LocalEdit,
   CursorMoved,
-  cursorSpringTargets,
   allUsers,
   type EditHistoryEntry,
 } from './engine'
@@ -220,7 +219,7 @@ function timeAgo(ts: number): string {
 // ---------------------------------------------------------------------------
 
 function PresenceIndicators() {
-  const users = useSignal(activeUsers)
+  const users = usePulse(ActiveUsersChanged, allUsers)
 
   return (
     <div style={styles.presenceRow}>
@@ -239,7 +238,7 @@ function PresenceIndicators() {
 }
 
 function ConflictBanner() {
-  const conflict = useSignal(hasConflict)
+  const conflict = usePulse(HasConflictChanged, false)
 
   if (!conflict) return null
 
@@ -252,8 +251,8 @@ function ConflictBanner() {
 
 function Editor() {
   const emit = useEmit()
-  const doc = useSignal(docSignal)
-  const cursorMap = useSignal(cursors)
+  const doc = usePulse(DocumentChanged, "")
+  const cursorMap = usePulse(CursorsChanged, new Map<string, number>())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
@@ -281,7 +280,6 @@ function Editor() {
     if (textareaRef.current) {
       const pos = textareaRef.current.selectionStart
       emit(CursorMoved, { user: 'local', pos })
-      const target = cursorSpringTargets.get('local')
       if (target) target.set(pos)
     }
   }, [emit])
@@ -323,8 +321,8 @@ function Editor() {
 }
 
 function HistoryPanel() {
-  const history = useSignal(editHistory)
-  const doc = useSignal(docSignal)
+  const history = usePulse(EditHistoryChanged, [] as EditHistoryEntry[])
+  const doc = usePulse(DocumentChanged, "")
 
   return (
     <div style={styles.sidebar}>

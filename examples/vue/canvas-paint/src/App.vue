@@ -1,24 +1,49 @@
 <script setup lang="ts">
 import { ref as vueRef, onMounted, onUnmounted } from 'vue'
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, PALETTE, TOOLS,
-  ToolChanged, ColorChanged, SizeChanged, StrokeStart, StrokeMove, StrokeEnd,
-  UndoStroke, RedoStroke, LayerSelected, LayerToggled, LayerAdded,
-  currentTool, currentColor, brushSize, layers, activeLayer, isDrawing,
-  getCurrentStroke, getUndoStack, getRedoStack, StrokesChanged,
+  engine,
+  PALETTE,
+  TOOLS,
+  ToolChanged,
+  ColorChanged,
+  SizeChanged,
+  StrokeStart,
+  StrokeMove,
+  StrokeEnd,
+  UndoStroke,
+  RedoStroke,
+  LayerSelected,
+  LayerToggled,
+  LayerAdded,
+  currentTool,
+  currentColor,
+  brushSize,
+  layers,
+  activeLayer,
+  isDrawing,
+  getCurrentStroke,
+  getUndoStack,
+  getRedoStack,
+  StrokesChanged,
+  CurrentToolChanged,
+  CurrentColorChanged,
+  BrushSizeChanged,
+  LayersChanged,
+  ActiveLayerChanged,
+  IsDrawingChanged,
 } from './engine'
 import type { Tool, Stroke, Point } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const tool = useSignal(currentTool)
-const color = useSignal(currentColor)
-const size = useSignal(brushSize)
-const layerList = useSignal(layers)
-const active = useSignal(activeLayer)
-const drawing = useSignal(isDrawing)
+const tool = usePulse(CurrentToolChanged, currentTool)
+const color = usePulse(CurrentColorChanged, currentColor)
+const size = usePulse(BrushSizeChanged, brushSize)
+const layerList = usePulse(LayersChanged, layers)
+const active = usePulse(ActiveLayerChanged, activeLayer)
+const drawing = usePulse(IsDrawingChanged, isDrawing)
 
 const canvasRef = vueRef<HTMLCanvasElement | null>(null)
 

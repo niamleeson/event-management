@@ -1,22 +1,22 @@
-import { useSignal, useEmit, useEvent } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  currentTrack,
-  isPlaying,
-  progress,
-  volume,
-  shuffle,
-  repeat,
+  CurrentTrackChanged,
+  IsPlayingChanged,
+  ProgressChanged,
+  VolumeSet,
+  ShuffleChanged,
+  RepeatChanged,
   playlist,
-  visualizerBars,
+  VisualizerChanged,
   Play,
   Pause,
   NextTrack,
   PrevTrack,
   Seek,
-  VolumeChanged,
+  VolumeSet,
   ShuffleToggle,
   RepeatToggle,
-  TrackChanged,
+
   type Track,
 } from './engine'
 
@@ -257,9 +257,9 @@ body { margin: 0; overflow: hidden; }
 
 function Sidebar() {
   const emit = useEmit()
-  const pl = useSignal(playlist)
-  const current = useSignal(currentTrack)
-  const playing = useSignal(isPlaying)
+  const pl = samplePlaylist
+  const current = usePulse(CurrentTrackChanged, samplePlaylist[0])
+  const playing = usePulse(IsPlayingChanged, false)
 
   const handleSelect = (track: Track) => {
     emit(TrackChanged, track)
@@ -291,9 +291,9 @@ function Sidebar() {
 }
 
 function AlbumArt() {
-  const track = useSignal(currentTrack)
-  const playing = useSignal(isPlaying)
-  const prog = useSignal(progress)
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
+  const playing = usePulse(IsPlayingChanged, false)
+  const prog = usePulse(ProgressChanged, 0)
 
   // Vinyl rotation: full rotations based on progress
   const rotation = playing ? (prog * track.duration * 3) % 360 : 0
@@ -306,9 +306,9 @@ function AlbumArt() {
 }
 
 function Visualizer() {
-  const bars = useSignal(visualizerBars)
-  const track = useSignal(currentTrack)
-  const playing = useSignal(isPlaying)
+  const bars = usePulse(VisualizerChanged, Array(32).fill(0) as number[])
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
+  const playing = usePulse(IsPlayingChanged, false)
 
   return (
     <div style={styles.visualizer}>
@@ -323,7 +323,7 @@ function Visualizer() {
 }
 
 function NowPlaying() {
-  const track = useSignal(currentTrack)
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
 
   return (
     <div style={styles.nowPlaying}>
@@ -340,8 +340,8 @@ function NowPlaying() {
 
 function ProgressBar() {
   const emit = useEmit()
-  const prog = useSignal(progress)
-  const track = useSignal(currentTrack)
+  const prog = usePulse(ProgressChanged, 0)
+  const track = usePulse(CurrentTrackChanged, samplePlaylist[0])
 
   const elapsed = prog * track.duration
   const remaining = track.duration - elapsed
@@ -367,15 +367,15 @@ function ProgressBar() {
 
 function Controls() {
   const emit = useEmit()
-  const playing = useSignal(isPlaying)
-  const shuf = useSignal(shuffle)
-  const rep = useSignal(repeat)
-  const vol = useSignal(volume)
+  const playing = usePulse(IsPlayingChanged, false)
+  const shuf = usePulse(ShuffleChanged, false)
+  const rep = usePulse(RepeatChanged, false)
+  const vol = usePulse(VolumeChanged, 0.75)
 
   const handleVolumeClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const pct = (e.clientX - rect.left) / rect.width
-    emit(VolumeChanged, Math.max(0, Math.min(1, pct)))
+    emit(VolumeSet, Math.max(0, Math.min(1, pct)))
   }
 
   return (

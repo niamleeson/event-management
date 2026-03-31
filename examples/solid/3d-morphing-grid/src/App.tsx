@@ -1,239 +1,135 @@
-import { For } from 'solid-js'
-import { useEmit, useSignal, useTween } from '@pulse/solid'
-import type { Signal, TweenValue, EventType } from '@pulse/core'
-import { engine } from './engine'
+import { usePulse, useEmit } from '@pulse/solid'
+import { engine, Frame } from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Shape definitions                                                 */
-/* ------------------------------------------------------------------ */
-
-type ShapeMode = 'flat' | 'sphere' | 'wave' | 'spiral'
-const MODES: ShapeMode[] = ['flat', 'sphere', 'wave', 'spiral']
 const GRID = 4
-const TOTAL = GRID * GRID
+const CELL_COUNT = GRID * GRID
+type Shape = 'flat' | 'sphere' | 'wave' | 'spiral'
+const SHAPES: Shape[] = ['flat', 'sphere', 'wave', 'spiral']
 
-function getTargetPosition(mode: ShapeMode, row: number, col: number, time: number): { x: number; y: number; z: number } {
-  const cx = (col - (GRID - 1) / 2) * 80
-  const cy = (row - (GRID - 1) / 2) * 80
-
-  switch (mode) {
-    case 'flat':
-      return { x: cx, y: cy, z: 0 }
-    case 'sphere': {
-      const theta = (col / (GRID - 1)) * Math.PI
-      const phi = (row / (GRID - 1)) * Math.PI
-      const r = 150
-      return {
-        x: r * Math.sin(phi) * Math.cos(theta),
-        y: r * Math.cos(phi),
-        z: r * Math.sin(phi) * Math.sin(theta) - r / 2,
-      }
-    }
-    case 'wave':
-      return { x: cx, y: cy, z: Math.sin((col + row) * 0.8 + time * 0.002) * 80 }
-    case 'spiral': {
-      const idx = row * GRID + col
-      const angle = idx * 0.5
-      const r2 = 40 + idx * 12
-      return {
-        x: Math.cos(angle) * r2,
-        y: Math.sin(angle) * r2,
-        z: idx * 8 - TOTAL * 4,
-      }
-    }
+function getShapeTargets(shape: Shape, row: number, col: number) {
+  const cx = (GRID - 1) / 2, cy = (GRID - 1) / 2
+  const dx = col - cx, dy = row - cy
+  const dist = Math.sqrt(dx * dx + dy * dy), angle = Math.atan2(dy, dx)
+  const maxDist = Math.sqrt(cx * cx + cy * cy), normDist = dist / maxDist
+  switch (shape) {
+    case 'flat': return { rotX: 0, rotY: 0, tz: 0, scale: 1, radius: 8 }
+    case 'sphere': { const c = Math.cos(normDist * Math.PI * 0.5); return { rotX: dy * 15, rotY: -dx * 15, tz: c * 120, scale: 0.9 + c * 0.2, radius: 50 } }
+    case 'wave': { const w = Math.sin((col / GRID) * Math.PI * 2 + (row / GRID) * Math.PI); return { rotX: w * 20, rotY: 0, tz: w * 80, scale: 0.85 + Math.abs(w) * 0.3, radius: 8 } }
+    case 'spiral': { const sa = angle + normDist * Math.PI * 2; return { rotX: Math.sin(sa) * 30, rotY: Math.cos(sa) * 30, tz: normDist * 100, scale: 1 - normDist * 0.3, radius: 50 * normDist } }
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
+/* Events */
+const MorphTrigger = engine.event<Shape>('MorphTrigger')
+const AutoCycleToggle = engine.event('AutoCycleToggle')
+const GridStateChanged = engine.event<{ cells: Array<{ rotX: number; rotY: number; tz: number; scale: number; radius: number }>; shape: Shape; isAuto: boolean }>('GridStateChanged')
 
-const SetShape = engine.event<ShapeMode>('SetShape')
-const ShapeChanged = engine.event<ShapeMode>('ShapeChanged')
-const CycleDone = engine.event('CycleDone')
-const CycleStart = engine.event('CycleStart')
+/* State */
+const cells = Array.from({ length: CELL_COUNT }, () => ({ rotX: 0, rotY: 0, tz: 0, scale: 1, radius: 8 }))
+const targets = Array.from({ length: CELL_COUNT }, () => ({ rotX: 0, rotY: 0, tz: 0, scale: 1, radius: 8 }))
+const vels = Array.from({ length: CELL_COUNT }, () => ({ rotX: 0, rotY: 0, tz: 0, scale: 0, radius: 0 }))
+const morphStarted = Array(CELL_COUNT).fill(false) as boolean[]
+let currentShape: Shape = 'flat'
+let autoCycling = false
+let autoCycleTimer: ReturnType<typeof setTimeout> | null = null
+let allSettled = false
 
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
+function cellDist(i: number) {
+  const r = Math.floor(i / GRID), c = i % GRID, cx = (GRID - 1) / 2, cy = (GRID - 1) / 2
+  return Math.sqrt((c - cx) ** 2 + (r - cy) ** 2)
+}
+const maxDist = cellDist(0)
 
-const currentShape: Signal<ShapeMode> = engine.signal(SetShape, 'flat' as ShapeMode, (_prev, mode) => mode)
+engine.on(MorphTrigger, (shape) => {
+  currentShape = shape
+  allSettled = false
+  for (let i = 0; i < CELL_COUNT; i++) {
+    const row = Math.floor(i / GRID), col = i % GRID
+    targets[i] = getShapeTargets(shape, row, col)
+    morphStarted[i] = false
+    const delay = (cellDist(i) / maxDist) * 300
+    setTimeout(() => { morphStarted[i] = true }, delay)
+  }
+})
 
-// Per-cell morph tweens (staggered)
-const cellMorphStarts: EventType[] = []
-const cellMorphTweens: TweenValue[] = []
+engine.on(AutoCycleToggle, () => {
+  autoCycling = !autoCycling
+  if (!autoCycling && autoCycleTimer) { clearTimeout(autoCycleTimer); autoCycleTimer = null }
+  if (autoCycling) advanceAutoCycle()
+})
 
-for (let i = 0; i < TOTAL; i++) {
-  const start = engine.event(`CellMorph_${i}`)
-  cellMorphStarts.push(start)
-
-  const done = i === TOTAL - 1 ? ShapeChanged : cellMorphStarts[i + 1]
-  cellMorphTweens.push(engine.tween({
-    start,
-    done,
-    from: 0,
-    to: 1,
-    duration: 300,
-    easing: 'easeOutBack',
-  }))
+function advanceAutoCycle() {
+  const idx = SHAPES.indexOf(currentShape)
+  engine.emit(MorphTrigger, SHAPES[(idx + 1) % SHAPES.length])
 }
 
-// When SetShape fires, kick off the stagger
-engine.on(SetShape, () => {
-  engine.emit(cellMorphStarts[0], undefined)
+engine.on(Frame, () => {
+  let anyMoving = false
+  for (let i = 0; i < CELL_COUNT; i++) {
+    if (!morphStarted[i]) continue
+    const stiff = 0.06, damp = 0.72
+    for (const k of ['rotX', 'rotY', 'tz', 'scale', 'radius'] as const) {
+      const diff = targets[i][k] - cells[i][k]
+      vels[i][k] += diff * stiff
+      vels[i][k] *= damp
+      cells[i][k] += vels[i][k]
+      if (Math.abs(diff) > 0.01 || Math.abs(vels[i][k]) > 0.01) anyMoving = true
+    }
+  }
+  if (!anyMoving && !allSettled) {
+    allSettled = true
+    if (autoCycling) { autoCycleTimer = setTimeout(advanceAutoCycle, 3000) }
+  }
+  engine.emit(GridStateChanged, { cells: cells.map(c => ({ ...c })), shape: currentShape, isAuto: autoCycling })
 })
 
-// Auto-cycle: join ShapeChanged + CycleStart -> next shape
-let cycleIndex = 0
-const autoCycleTween = engine.tween({
-  start: CycleStart,
-  done: CycleDone,
-  from: 0,
-  to: 1,
-  duration: 2500,
-  easing: 'linear',
-})
-
-engine.on(CycleDone, () => {
-  cycleIndex = (cycleIndex + 1) % MODES.length
-  engine.emit(SetShape, MODES[cycleIndex])
-})
-
-engine.on(ShapeChanged, () => {
-  engine.emit(CycleStart, undefined)
-})
-
-// Start the cycle
-setTimeout(() => {
-  engine.emit(SetShape, 'sphere')
-}, 500)
-
-/* ------------------------------------------------------------------ */
-/*  Cell colors                                                       */
-/* ------------------------------------------------------------------ */
-
-const CELL_COLORS = [
-  '#6c5ce7', '#00b894', '#e17055', '#0984e3',
-  '#d63031', '#fdcb6e', '#a29bfe', '#00cec9',
-  '#ff6b6b', '#54a0ff', '#5f27cd', '#01a3a4',
-  '#f368e0', '#ff9f43', '#00d2d3', '#c44569',
-]
-
-/* ------------------------------------------------------------------ */
-/*  App                                                               */
-/* ------------------------------------------------------------------ */
+function Cell({ index, data }: { index: number; data: { rotX: number; rotY: number; tz: number; scale: number; radius: number } }) {
+  const row = Math.floor(index / GRID), col = index % GRID
+  const hue1 = (row / GRID) * 120 + (col / GRID) * 60 + 200, hue2 = hue1 + 40
+  return (
+    <div style={{
+      width: 80, height: 80,
+      transform: `rotateX(${data.rotX}deg) rotateY(${data.rotY}deg) translateZ(${data.tz}px) scale(${data.scale})`,
+      'border-radius': `${data.radius}%`,
+      background: `linear-gradient(135deg, hsl(${hue1}, 70%, 50%), hsl(${hue2}, 80%, 40%))`,
+      'box-shadow': `0 ${4 + data.tz * 0.1}px ${16 + Math.abs(data.tz) * 0.2}px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)`,
+      border: '1px solid rgba(255,255,255,0.1)',
+    }} />
+  )
+}
 
 export default function App() {
   const emit = useEmit()
-  const shape = useSignal(currentShape)
-  const morphValues = cellMorphTweens.map(tw => useTween(tw))
-
-  // Track positions: we store the "from" and "to" positions per cell
-  const prevPositions: { x: number; y: number; z: number }[] = Array.from({ length: TOTAL }, () => ({ x: 0, y: 0, z: 0 }))
-  const targetPositions: { x: number; y: number; z: number }[] = Array.from({ length: TOTAL }, () => ({ x: 0, y: 0, z: 0 }))
-
-  // Update targets when shape changes
-  let currentTime = 0
-  engine.on(engine.frame, ({ time }) => { currentTime = time })
-
-  engine.on(SetShape, (mode) => {
-    for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        const idx = r * GRID + c
-        prevPositions[idx] = { ...targetPositions[idx] }
-        targetPositions[idx] = getTargetPosition(mode, r, c, currentTime)
-      }
-    }
+  const state = usePulse(GridStateChanged, {
+    cells: Array.from({ length: CELL_COUNT }, () => ({ rotX: 0, rotY: 0, tz: 0, scale: 1, radius: 8 })),
+    shape: 'flat' as Shape, isAuto: false,
   })
 
-  // Initialize flat positions
-  for (let r = 0; r < GRID; r++) {
-    for (let c = 0; c < GRID; c++) {
-      const idx = r * GRID + c
-      const pos = getTargetPosition('flat', r, c, 0)
-      prevPositions[idx] = pos
-      targetPositions[idx] = pos
-    }
-  }
+  const triggerShape = (s: Shape) => emit(MorphTrigger, s)
 
   return (
-    <div style={{ display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '32px', 'user-select': 'none' }}>
-      <h1 style={{ color: '#fff', 'font-size': '28px', 'font-weight': '300', 'letter-spacing': '2px' }}>
-        3D Morphing Grid
-      </h1>
-
-      {/* Shape buttons */}
-      <div style={{ display: 'flex', gap: '12px' }}>
-        <For each={MODES}>
-          {(mode) => (
-            <button
-              onClick={() => { cycleIndex = MODES.indexOf(mode); engine.emit(SetShape, mode) }}
-              style={{
-                background: shape() === mode ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
-                border: shape() === mode ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.15)',
-                color: '#fff',
-                padding: '8px 20px',
-                'border-radius': '20px',
-                cursor: 'pointer',
-                'font-size': '13px',
-                'text-transform': 'capitalize',
-                'letter-spacing': '1px',
-              }}
-            >
-              {mode}
-            </button>
-          )}
-        </For>
-      </div>
-
-      {/* 3D viewport */}
-      <div style={{ perspective: '1000px', width: '500px', height: '500px', position: 'relative' }}>
-        <div style={{
-          width: '100%', height: '100%',
-          'transform-style': 'preserve-3d',
-          transform: 'rotateX(-15deg) rotateY(20deg)',
-          position: 'relative',
-        }}>
-          <For each={Array.from({ length: TOTAL }, (_, i) => i)}>
-            {(idx) => {
-              const t = () => morphValues[idx]()
-              const x = () => prevPositions[idx].x + (targetPositions[idx].x - prevPositions[idx].x) * t()
-              const y = () => prevPositions[idx].y + (targetPositions[idx].y - prevPositions[idx].y) * t()
-              const z = () => prevPositions[idx].z + (targetPositions[idx].z - prevPositions[idx].z) * t()
-              const color = CELL_COLORS[idx % CELL_COLORS.length]
-
-              return (
-                <div style={{
-                  position: 'absolute',
-                  left: '50%',
-                  top: '50%',
-                  width: '60px',
-                  height: '60px',
-                  'margin-left': '-30px',
-                  'margin-top': '-30px',
-                  transform: `translate3d(${x()}px, ${y()}px, ${z()}px)`,
-                  background: `linear-gradient(145deg, ${color}cc, ${color}66)`,
-                  'border-radius': '12px',
-                  'box-shadow': `0 4px 16px ${color}44`,
-                  border: `1px solid ${color}88`,
-                  display: 'flex',
-                  'align-items': 'center',
-                  'justify-content': 'center',
-                  color: '#fff',
-                  'font-size': '14px',
-                  'font-weight': '600',
-                }}>
-                  {idx + 1}
-                </div>
-              )
-            }}
-          </For>
+    <div style={{ display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: 40 }}>
+      <h1 style={{ color: '#fff', 'font-size': 28, 'font-weight': 300, 'letter-spacing': 2 }}>3D Morphing Grid</h1>
+      <div style={{ perspective: 1500, display: 'flex', 'justify-content': 'center', 'align-items': 'center' }}>
+        <div style={{ display: 'grid', 'grid-template-columns': `repeat(${GRID}, 80px)`, gap: 16, 'transform-style': 'preserve-3d', transform: 'rotateX(15deg) rotateY(-10deg)' }}>
+          {state().cells.map((c, i) => <Cell index={i} data={c} />)}
         </div>
       </div>
-
-      <p style={{ color: 'rgba(255,255,255,0.4)', 'font-size': '13px' }}>
-        Auto-cycling shapes &middot; Click buttons to override &middot; Current: {shape()}
-      </p>
+      <div style={{ display: 'flex', gap: 12, 'flex-wrap': 'wrap', 'justify-content': 'center' }}>
+        {SHAPES.map((s) => (
+          <button onClick={() => triggerShape(s)} style={{
+            background: state.shape === s ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)',
+            border: state.shape === s ? '1px solid rgba(255,255,255,0.4)' : '1px solid rgba(255,255,255,0.15)',
+            color: '#fff', padding: '10px 24px', 'border-radius': 8, cursor: 'pointer', 'font-size': 14, 'letter-spacing': 1, 'text-transform': 'capitalize', transition: 'all 0.2s',
+          }}>{s}</button>
+        ))}
+        <button onClick={() => emit(AutoCycleToggle, undefined)} style={{
+          background: state.isAuto ? 'rgba(100,200,255,0.2)' : 'rgba(255,255,255,0.05)',
+          border: state.isAuto ? '1px solid rgba(100,200,255,0.4)' : '1px solid rgba(255,255,255,0.15)',
+          color: '#fff', padding: '10px 24px', 'border-radius': 8, cursor: 'pointer', 'font-size': 14, 'letter-spacing': 1,
+        }}>{state().isAuto ? '\u23F8 Stop Auto' : '\u25B6 Auto Cycle'}</button>
+      </div>
+      <p style={{ color: 'rgba(255,255,255,0.4)', 'font-size': 13 }}>Current: <span style={{ color: 'rgba(255,255,255,0.7)' }}>{state().shape}</span></p>
     </div>
   )
 }

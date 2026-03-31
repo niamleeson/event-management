@@ -5,32 +5,26 @@ import {
   PageLoaded,
   HoverCard,
   UnhoverCard,
-  cardOpacity,
-  cardTranslateY,
-  cardHoverScale,
-  cardHoverShadow,
-  welcomeOpacity,
-  welcomeTranslateY,
-  allEntered,
+  getCardOpacity,
+  getCardTranslateY,
+  getCardHoverScale,
+  getCardShadow,
+  getWelcomeOpacity,
+  getWelcomeTranslateY,
+  updateFrame,
 } from '../engines/complex-animation'
-
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
 
 export function mount(container: HTMLElement): () => void {
   ;(window as any).__pulseEngine = engine
 
-  const unsubs: (() => void)[] = []
+  let rafId = 0
 
-  // Build the static DOM structure
   const wrapper = document.createElement('div')
   wrapper.style.cssText = 'min-height: 100vh; background: #f8f9fa; padding: 60px 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;'
 
   const inner = document.createElement('div')
   inner.style.cssText = 'max-width: 900px; margin: 0 auto;'
 
-  // Header
   const headerDiv = document.createElement('div')
   headerDiv.style.cssText = 'text-align: center; margin-bottom: 48px;'
   const h1 = document.createElement('h1')
@@ -38,12 +32,11 @@ export function mount(container: HTMLElement): () => void {
   h1.textContent = 'Staggered Card Entrance'
   const sub = document.createElement('p')
   sub.style.cssText = 'color: #6c757d; font-size: 16px; margin-top: 8px; max-width: 500px; margin-left: auto; margin-right: auto;'
-  sub.textContent = 'Cards cascade in with staggered tweens. Hover for spring-driven shadows. A join rule fires after all cards enter.'
+  sub.textContent = 'Cards cascade in with staggered animations. Hover for smooth shadows. A join fires after all cards enter.'
   headerDiv.appendChild(h1)
   headerDiv.appendChild(sub)
   inner.appendChild(headerDiv)
 
-  // Card grid
   const grid = document.createElement('div')
   grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;'
 
@@ -70,7 +63,6 @@ export function mount(container: HTMLElement): () => void {
     cardEl.appendChild(titleEl)
     cardEl.appendChild(descEl)
 
-    // Hover events
     cardEl.addEventListener('mouseenter', () => engine.emit(HoverCard[i], i))
     cardEl.addEventListener('mouseleave', () => engine.emit(UnhoverCard[i], i))
 
@@ -80,7 +72,6 @@ export function mount(container: HTMLElement): () => void {
 
   inner.appendChild(grid)
 
-  // Welcome message (hidden initially)
   const welcomeEl = document.createElement('div')
   welcomeEl.style.cssText = 'opacity: 0; text-align: center; margin-top: 48px; padding: 32px 24px; background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%); border-radius: 16px; color: #fff;'
 
@@ -99,28 +90,30 @@ export function mount(container: HTMLElement): () => void {
   wrapper.appendChild(inner)
   container.appendChild(wrapper)
 
-  // Use engine.on(engine.frame) to update all animated values each frame
-  unsubs.push(engine.on(engine.frame, () => {
+  function frame(now: number) {
+    updateFrame(now)
+
     for (let i = 0; i < CARD_COUNT; i++) {
       const el = cardElements[i]
-      const opacity = cardOpacity[i].value
-      const translateY = cardTranslateY[i].value
-      const scale = cardHoverScale[i].value
-      const shadowSize = cardHoverShadow[i].value
+      const opacity = getCardOpacity(i)
+      const translateY = getCardTranslateY(i)
+      const scale = getCardHoverScale(i)
+      const shadowSize = getCardShadow(i)
 
       el.style.opacity = String(opacity)
       el.style.transform = `translateY(${translateY}px) scale(${scale})`
       el.style.boxShadow = `0 ${2 + shadowSize * 0.5}px ${8 + shadowSize}px rgba(0,0,0,${0.06 + shadowSize * 0.008})`
     }
 
-    // Update welcome message
-    const wOpacity = welcomeOpacity.value
-    const wTranslateY = welcomeTranslateY.value
+    const wOpacity = getWelcomeOpacity()
+    const wTranslateY = getWelcomeTranslateY()
     welcomeEl.style.opacity = String(wOpacity)
     welcomeEl.style.transform = `translateY(${wTranslateY}px)`
-  }))
 
-  // Fire PageLoaded after a small delay to ensure everything is mounted
+    rafId = requestAnimationFrame(frame)
+  }
+  rafId = requestAnimationFrame(frame)
+
   const loadTimer = setTimeout(() => {
     engine.emit(PageLoaded, undefined)
   }, 300)
@@ -128,7 +121,7 @@ export function mount(container: HTMLElement): () => void {
   return () => {
     ;(window as any).__pulseEngine = null
     engine.destroy()
+    cancelAnimationFrame(rafId)
     clearTimeout(loadTimer)
-    unsubs.forEach((u) => u())
   }
 }

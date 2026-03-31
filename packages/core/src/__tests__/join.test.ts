@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { Engine } from '../engine.js'
 
-describe('Join patterns', () => {
+describe('Join patterns (on([...]))', () => {
   let engine: Engine
 
   beforeEach(() => {
@@ -11,13 +11,11 @@ describe('Join patterns', () => {
   it('should fire join only when all inputs are ready', () => {
     const a = engine.event<number>('a')
     const b = engine.event<string>('b')
-    const out = engine.event<string>('out')
     const results: string[] = []
 
-    engine.join([a, b], out, {
-      do: (numVal, strVal) => `${numVal}-${strVal}`,
+    engine.on([a, b], (numVal: number, strVal: string) => {
+      results.push(`${numVal}-${strVal}`)
     })
-    engine.on(out, (v) => results.push(v))
 
     // Only emit a — join should not fire
     engine.emit(a, 42)
@@ -31,13 +29,11 @@ describe('Join patterns', () => {
   it('should consume one event from each input type per join', () => {
     const a = engine.event<number>('a')
     const b = engine.event<number>('b')
-    const out = engine.event<number>('out')
     const results: number[] = []
 
-    engine.join([a, b], out, {
-      do: (av, bv) => av + bv,
+    engine.on([a, b], (av: number, bv: number) => {
+      results.push(av + bv)
     })
-    engine.on(out, (v) => results.push(v))
 
     engine.emit(a, 1)
     engine.emit(a, 2)
@@ -46,71 +42,35 @@ describe('Join patterns', () => {
     expect(results).toContain(11)
   })
 
-  it('should support guard on join — passing guard', () => {
-    const a = engine.event<number>('a')
-    const b = engine.event<number>('b')
-    const out = engine.event<number>('out')
-    const results: number[] = []
-
-    engine.join([a, b], out, {
-      guard: (av, bv) => av + bv > 10,
-      do: (av, bv) => av + bv,
-    })
-    engine.on(out, (v) => results.push(v))
-
-    // Emit pair that passes guard
-    engine.emit(a, 8)
-    engine.emit(b, 5)
-    expect(results).toEqual([13])
-  })
-
-  it('should support guard on join — failing guard blocks join', () => {
-    const a = engine.event<number>('a')
-    const b = engine.event<number>('b')
-    const out = engine.event<number>('out')
-    const results: number[] = []
-
-    engine.join([a, b], out, {
-      guard: (av, bv) => av + bv > 100,
-      do: (av, bv) => av + bv,
-    })
-    engine.on(out, (v) => results.push(v))
-
-    engine.emit(a, 2)
-    engine.emit(b, 3)
-    // Guard fails: 2+3=5, not > 100
-    expect(results).toEqual([])
-  })
-
-  it('should handle join in a diamond DAG', () => {
+  it('should handle join in a diamond DAG via nested emits', () => {
     const src = engine.event<number>('src')
     const left = engine.event<number>('left')
     const right = engine.event<number>('right')
-    const merged = engine.event<number>('merged')
     const results: number[] = []
 
-    engine.pipe(src, left, (x) => x * 2)
-    engine.pipe(src, right, (x) => x * 3)
-    engine.join([left, right], merged, {
-      do: (l, r) => l + r,
+    engine.on(src, (x) => engine.emit(left, x * 2))
+    engine.on(src, (x) => engine.emit(right, x * 3))
+    engine.on([left, right], (l: number, r: number) => {
+      results.push(l + r)
     })
-    engine.on(merged, (v) => results.push(v))
 
     engine.emit(src, 10)
     expect(results).toEqual([50]) // 10*2 + 10*3
   })
 
-  it('should handle join with cascading output', () => {
+  it('should handle join with cascading output via emit', () => {
     const a = engine.event<number>('a')
     const b = engine.event<number>('b')
     const joined = engine.event<number>('joined')
     const final = engine.event<string>('final')
     const results: string[] = []
 
-    engine.join([a, b], joined, {
-      do: (av, bv) => av + bv,
+    engine.on([a, b], (av: number, bv: number) => {
+      engine.emit(joined, av + bv)
     })
-    engine.pipe(joined, final, (v) => `result:${v}`)
+    engine.on(joined, (v) => {
+      engine.emit(final, `result:${v}`)
+    })
     engine.on(final, (v) => results.push(v))
 
     engine.emit(a, 3)
@@ -122,13 +82,11 @@ describe('Join patterns', () => {
     const a = engine.event<number>('a')
     const b = engine.event<number>('b')
     const c = engine.event<number>('c')
-    const out = engine.event<number>('out')
     const results: number[] = []
 
-    engine.join([a, b, c], out, {
-      do: (av, bv, cv) => av + bv + cv,
+    engine.on([a, b, c], (av: number, bv: number, cv: number) => {
+      results.push(av + bv + cv)
     })
-    engine.on(out, (v) => results.push(v))
 
     engine.emit(a, 1)
     engine.emit(b, 2)
@@ -136,5 +94,44 @@ describe('Join patterns', () => {
 
     engine.emit(c, 3)
     expect(results).toEqual([6])
+  })
+
+  it('should handle multiple join firings as events accumulate', () => {
+    const a = engine.event<number>('a')
+    const b = engine.event<number>('b')
+    const results: number[] = []
+
+    engine.on([a, b], (av: number, bv: number) => {
+      results.push(av + bv)
+    })
+
+    engine.emit(a, 1)
+    engine.emit(b, 10)
+    expect(results).toEqual([11])
+
+    engine.emit(a, 2)
+    engine.emit(b, 20)
+    expect(results).toEqual([11, 22])
+  })
+
+  it('should unsubscribe join handler', () => {
+    const a = engine.event<number>('a')
+    const b = engine.event<number>('b')
+    const results: number[] = []
+
+    const unsub = engine.on([a, b], (av: number, bv: number) => {
+      results.push(av + bv)
+    })
+
+    engine.emit(a, 1)
+    engine.emit(b, 10)
+    expect(results).toEqual([11])
+
+    unsub()
+
+    engine.emit(a, 2)
+    engine.emit(b, 20)
+    // Should not fire again
+    expect(results).toEqual([11])
   })
 })

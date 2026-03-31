@@ -1,10 +1,10 @@
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import { useCallback, useEffect, useRef } from 'react'
 import {
-  items,
-  dragState,
-  enteringIds,
-  exitingIds,
+  ItemsChanged,
+  DragStateChanged,
+  EnteringIdsChanged,
+  ExitingIdsChanged,
   DragStart,
   DragMove,
   DragEnd,
@@ -12,6 +12,8 @@ import {
   ShuffleAll,
   AddItem,
   RemoveItem,
+  type GridItem,
+  type DragState,
 } from './engine'
 
 // ---------------------------------------------------------------------------
@@ -142,8 +144,8 @@ function GridCard({
 // ---------------------------------------------------------------------------
 
 function DragGhost() {
-  const ds = useSignal(dragState)
-  const itemList = useSignal(items)
+  const ds = usePulse(DragStateChanged, { active: false, dragIndex: -1, overIndex: -1, startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0 } as DragState)
+  const itemList = usePulse(ItemsChanged, [] as GridItem[])
 
   if (!ds.active || ds.dragIndex < 0 || ds.dragIndex >= itemList.length) return null
 
@@ -190,10 +192,10 @@ function DragGhost() {
 
 export default function App() {
   const emit = useEmit()
-  const itemList = useSignal(items)
-  const ds = useSignal(dragState)
-  const entering = useSignal(enteringIds)
-  const exiting = useSignal(exitingIds)
+  const itemList = usePulse(ItemsChanged, [] as GridItem[])
+  const ds = usePulse(DragStateChanged, { active: false, dragIndex: -1, overIndex: -1, startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0 } as DragState)
+  const entering = usePulse(EnteringIdsChanged, new Set<string>())
+  const exiting = usePulse(ExitingIdsChanged, new Set<string>())
 
   // Global mouse move/up handlers for drag
   useEffect(() => {

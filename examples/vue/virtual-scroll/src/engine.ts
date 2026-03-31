@@ -1,6 +1,4 @@
 import { createEngine } from '@pulse/core'
-import type { Signal } from '@pulse/core'
-
 export const engine = createEngine()
 
 /* ------------------------------------------------------------------ */
@@ -55,36 +53,40 @@ export const FetchPending = engine.event<number>('FetchPending')
 /*  Signals                                                           */
 /* ------------------------------------------------------------------ */
 
-export const scrollTop: Signal<number> = engine.signal(ScrollTo, 0, (_prev, val) => val)
+export let scrollTop = 0
+export const ScrollTopChanged = engine.event('ScrollTopChanged')
+engine.on(ScrollTo, (v: any) => { scrollTop = ((_prev, val) => val)(scrollTop, v); engine.emit(ScrollTopChanged, scrollTop) })
 
-export const searchQuery: Signal<string> = engine.signal(SearchChanged, '', (_prev, q) => q)
+export let searchQuery = ''
+export const SearchQueryChanged = engine.event('SearchQueryChanged')
+engine.on(SearchChanged, (v: any) => { searchQuery = ((_prev, q) => q)(searchQuery, v); engine.emit(SearchQueryChanged, searchQuery) })
 
-export const loadedPages: Signal<Map<number, Item[]>> = engine.signal(
-  PageLoaded,
-  new Map<number, Item[]>(),
-  (prev, { page, items }) => {
+export let loadedPages = new Map<number, Item[]>()
+const LoadedPagesChanged = engine.event('LoadedPagesChanged')
+engine.on(PageLoaded, (v: any) => { loadedPages = ((prev: Map<number, Item[]>, { page, items }: { page: number; items: Item[] }) => {
     const next = new Map(prev)
     next.set(page, items)
     return next
-  },
-)
+  })(loadedPages, v); engine.emit(LoadedPagesChanged, loadedPages) })
 
-export const loadingPages: Signal<Set<number>> = engine.signal(FetchPending, new Set<number>(), (prev, page) => {
+let loadingPages = new Set<number>()
+const LoadingPagesChanged = engine.event('LoadingPagesChanged')
+engine.on(FetchPending, (v: any) => { loadingPages = ((prev, page) => {
   const next = new Set(prev)
   next.add(page)
   return next
-})
-engine.signalUpdate(loadingPages, PageLoaded, (prev, { page }) => {
+})(loadingPages, v); engine.emit(LoadingPagesChanged, loadingPages) })
+engine.on(PageLoaded, (v: any) => { loadingPages = ((prev, { page }) => {
   const next = new Set(prev)
   next.delete(page)
   return next
-})
+})(loadingPages, v); engine.emit(LoadingPagesChanged, loadingPages) })
 
 /* ------------------------------------------------------------------ */
 /*  Async page fetching                                               */
 /* ------------------------------------------------------------------ */
 
-engine.async<number, { page: number; items: Item[] }>(FetchPage, {
+{ const _ac = {
   pending: FetchPending,
   done: PageLoaded,
   strategy: 'all',
@@ -98,7 +100,16 @@ engine.async<number, { page: number; items: Item[] }>(FetchPage, {
     }
     return { page, items }
   },
-})
+}
+  let _aa: AbortController | null = null
+  engine.on(FetchPage, async (p: any) => {
+    if (_ac.strategy === 'latest' && _aa) _aa.abort()
+    _aa = new AbortController()
+    if (_ac.pending) engine.emit(_ac.pending, p)
+    try { const r = await _ac.do(p, { signal: _aa.signal, progress: () => {} }); if (_ac.done) engine.emit(_ac.done, r) }
+    catch (e: any) { if (e?.name !== 'AbortError' && _ac.error) engine.emit(_ac.error, e) }
+  })
+}
 
 /* ------------------------------------------------------------------ */
 /*  Prefetch logic: when scroll changes, prefetch nearby pages        */
@@ -110,7 +121,7 @@ engine.on(ScrollTo, (top) => {
 
   // Prefetch current and next 2 pages
   for (let p = Math.max(0, startPage - 1); p <= startPage + 2; p++) {
-    if (!loadedPages.value.has(p) && !loadingPages.value.has(p)) {
+    if (!loadedPages.has(p) && !loadingPages.has(p)) {
       engine.emit(FetchPage, p)
     }
   }
@@ -118,3 +129,8 @@ engine.on(ScrollTo, (top) => {
 
 // Load first page immediately
 engine.emit(FetchPage, 0)
+
+
+export { loadingPages }
+
+export { LoadingPagesChanged, LoadedPagesChanged }

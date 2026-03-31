@@ -1,4 +1,4 @@
-import { createEngine, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -42,48 +42,44 @@ export const SelectItem = engine.event<number>('SelectItem')
 export const RotateLeft = engine.event<void>('RotateLeft')
 export const RotateRight = engine.event<void>('RotateRight')
 export const ToggleAutoRotate = engine.event<void>('ToggleAutoRotate')
-export const DragRotate = engine.event<number>('DragRotate')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const selectedIndex = engine.signal<number>(
-  SelectItem, 0, (_prev, idx) => idx % ITEM_COUNT,
-)
+let _selectedIndex = 0
+let _autoRotate = true
+let _targetAngle = 0
 
-engine.signalUpdate(selectedIndex, RotateLeft, (prev) => (prev - 1 + ITEM_COUNT) % ITEM_COUNT)
-engine.signalUpdate(selectedIndex, RotateRight, (prev) => (prev + 1) % ITEM_COUNT)
+// Spring physics for angle
+let _springAngle = 0
+let _springVelocity = 0
 
-export const autoRotate = engine.signal<boolean>(
-  ToggleAutoRotate, true, (prev) => !prev,
-)
-
-// Angle signal: each item is 360/ITEM_COUNT degrees apart
-// Target angle = selectedIndex * (360 / ITEM_COUNT)
-export const targetAngle = engine.signal<number>(
-  SelectItem, 0, (_prev, idx) => idx * (360 / ITEM_COUNT),
-)
-engine.signalUpdate(targetAngle, RotateLeft, (prev) => prev - (360 / ITEM_COUNT))
-engine.signalUpdate(targetAngle, RotateRight, (prev) => prev + (360 / ITEM_COUNT))
+export function getSelectedIndex(): number { return _selectedIndex }
+export function getAutoRotate(): boolean { return _autoRotate }
+export function getSpringAngle(): number { return _springAngle }
 
 // ---------------------------------------------------------------------------
-// Springs
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const springAngle: SpringValue = engine.spring(targetAngle, {
-  stiffness: 120,
-  damping: 20,
-  restThreshold: 0.5,
+engine.on(SelectItem, (idx: number) => {
+  _selectedIndex = idx % ITEM_COUNT
+  _targetAngle = _selectedIndex * (360 / ITEM_COUNT)
 })
 
-// Scale spring for selected item
-export const selectedScale = engine.signal<number>(
-  SelectItem, 120, () => 120,
-)
-export const springScale: SpringValue = engine.spring(selectedScale, {
-  stiffness: 200,
-  damping: 18,
+engine.on(RotateLeft, () => {
+  _selectedIndex = (_selectedIndex - 1 + ITEM_COUNT) % ITEM_COUNT
+  _targetAngle -= (360 / ITEM_COUNT)
+})
+
+engine.on(RotateRight, () => {
+  _selectedIndex = (_selectedIndex + 1) % ITEM_COUNT
+  _targetAngle += (360 / ITEM_COUNT)
+})
+
+engine.on(ToggleAutoRotate, () => {
+  _autoRotate = !_autoRotate
 })
 
 // ---------------------------------------------------------------------------
@@ -95,7 +91,7 @@ let autoTimer: ReturnType<typeof setInterval> | null = null
 export function startAutoRotate() {
   if (autoTimer) return
   autoTimer = setInterval(() => {
-    if (autoRotate.value) {
+    if (_autoRotate) {
       engine.emit(RotateRight, undefined)
     }
   }, 3000)
@@ -108,5 +104,16 @@ export function stopAutoRotate() {
   }
 }
 
-// Start frame loop
-engine.startFrameLoop()
+// ---------------------------------------------------------------------------
+// Frame update
+// ---------------------------------------------------------------------------
+
+export function updateFrame(dt: number): void {
+  const stiffness = 120
+  const damping = 20
+  const dtSec = Math.min(dt / 1000, 0.05)
+
+  const force = ((_targetAngle - _springAngle) * stiffness - _springVelocity * damping) * dtSec
+  _springVelocity += force
+  _springAngle += _springVelocity * dtSec
+}

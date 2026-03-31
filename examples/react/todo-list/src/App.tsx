@@ -1,19 +1,19 @@
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  engine,
-  todoList,
-  activeFilter,
-  currentText,
-  validationError,
-  remainingCount,
-  filteredTodos,
   TodoAdded,
   TodoRemoved,
   TodoToggled,
   TodoTextChanged,
   FilterChanged,
+  TodosChanged,
+  FilteredTodosChanged,
+  RemainingCountChanged,
+  CurrentTextChanged,
+  ActiveFilterChanged,
+  ValidationResultEvent,
   type Todo,
   type Filter,
+  type ValidationResult,
 } from './engine'
 
 // ---------------------------------------------------------------------------
@@ -147,8 +147,8 @@ const styles = {
 
 function TodoInput() {
   const emit = useEmit()
-  const text = useSignal(currentText)
-  const validation = useSignal(validationError)
+  const text = usePulse(CurrentTextChanged, '')
+  const validation = usePulse(ValidationResultEvent, { valid: false, error: null } as ValidationResult)
 
   const handleAdd = () => {
     if (!validation.valid) return
@@ -190,7 +190,7 @@ function TodoInput() {
 
 function FilterBar() {
   const emit = useEmit()
-  const filter = useSignal(activeFilter)
+  const filter = usePulse(ActiveFilterChanged, 'all' as Filter)
   const filters: Filter[] = ['all', 'active', 'completed']
 
   return (
@@ -226,16 +226,16 @@ function TodoItem({ todo }: { todo: Todo }) {
         onMouseEnter={(e) => (e.currentTarget.style.color = '#e63946')}
         onMouseLeave={(e) => (e.currentTarget.style.color = '#ccc')}
       >
-        ×
+        x
       </button>
     </div>
   )
 }
 
 function TodoList() {
-  const todos = useSignal(todoList)
-  const filtered = useSignal(filteredTodos)
-  const remaining = useSignal(remainingCount)
+  const todos = usePulse(TodosChanged, [] as Todo[])
+  const filtered = usePulse(FilteredTodosChanged, [] as Todo[])
+  const remaining = usePulse(RemainingCountChanged, 0)
 
   return (
     <div>
@@ -263,7 +263,7 @@ export default function App() {
       <div style={styles.header}>
         <h1 style={styles.title}>Pulse Todos</h1>
         <p style={styles.subtitle}>
-          All state managed through Pulse events and signals
+          All state managed through Pulse events and on/emit
         </p>
       </div>
       <TodoInput />

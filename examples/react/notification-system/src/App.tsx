@@ -1,8 +1,8 @@
-import { useSignal, useEmit, useEvent } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import { useRef, useCallback } from 'react'
 import {
-  notifications,
-  notificationCount,
+  NotificationsChanged,
+  NotificationCountChanged,
   NotifyInfo,
   NotifySuccess,
   NotifyWarning,
@@ -139,8 +139,8 @@ function NotificationItem({
 
 export default function App() {
   const emit = useEmit()
-  const allNotifications = useSignal(notifications)
-  const count = useSignal(notificationCount)
+  const allNotifications = usePulse(NotificationsChanged, [] as Notification[])
+  const count = usePulse(NotificationCountChanged, 0)
 
   const visibleNotifications = allNotifications.slice(0, MAX_VISIBLE)
   const queuedCount = Math.max(0, allNotifications.length - MAX_VISIBLE)

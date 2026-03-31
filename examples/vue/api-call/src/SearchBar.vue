@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { useSignal, useEmit } from '@pulse/vue'
-import { SearchInput, searchQuery, isSearching } from './engine'
+import { useEmit, usePulse } from '@pulse/vue'
+import {
+  SearchInput,
+  searchQuery,
+  isSearching,
+  SearchQueryChanged,
+  IsSearchingChanged,
+} from './engine'
 
 const emit = useEmit()
-const query = useSignal(searchQuery)
-const loading = useSignal(isSearching)
+const query = usePulse(SearchQueryChanged, searchQuery)
+const loading = usePulse(IsSearchingChanged, isSearching)
 </script>
 
 <template>

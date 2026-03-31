@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { providePulse, useSignal, useEmit } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
   engine,
-  feedRunning,
   FeedToggled,
   startFeed,
   stopFeed,
   METRICS,
+  FeedRunningChanged,
+  getFeedRunning,
 } from './engine'
 import MetricCards from './MetricCards.vue'
 import ChartPanel from './ChartPanel.vue'
@@ -16,7 +17,7 @@ import AlertPanel from './AlertPanel.vue'
 providePulse(engine)
 
 const emit = useEmit()
-const running = useSignal(feedRunning)
+const running = usePulse(FeedRunningChanged, getFeedRunning())
 
 onMounted(() => startFeed())
 onUnmounted(() => stopFeed())

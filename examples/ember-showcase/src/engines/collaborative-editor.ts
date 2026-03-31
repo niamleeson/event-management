@@ -1,4 +1,4 @@
-import { createEngine, type SpringValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -71,74 +71,87 @@ export const UserEdit = engine.event<EditOp>('UserEdit')
 export const CursorMoved = engine.event<CursorPosition>('CursorMoved')
 export const UserJoined = engine.event<User>('UserJoined')
 export const UserLeft = engine.event<string>('UserLeft')
-export const Undo = engine.event<void>('Undo')
-export const Redo = engine.event<void>('Redo')
+export const EditorChanged = engine.event<void>('EditorChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const lines = engine.signal<string[]>(
-  UserEdit, [...INITIAL_LINES],
-  (prev, op) => {
-    const next = [...prev]
-    if (op.type === 'insert') {
-      if (op.line >= next.length) {
-        next.push(op.text)
-      } else {
-        const line = next[op.line] || ''
-        next[op.line] = line.slice(0, op.col) + op.text + line.slice(op.col)
-      }
-    } else if (op.type === 'delete') {
-      if (op.line < next.length) {
-        const line = next[op.line] || ''
-        next[op.line] = line.slice(0, Math.max(0, op.col - 1)) + line.slice(op.col)
-      }
+let _lines: string[] = [...INITIAL_LINES]
+let _cursors: Record<string, CursorPosition> = {}
+let _activeUsers: User[] = [...USERS]
+let _editHistory: EditOp[] = []
+
+// Spring-like cursor positions for remote users
+const _cursorSpringX: Record<string, number> = {}
+const _cursorSpringY: Record<string, number> = {}
+const _cursorTargetX: Record<string, number> = {}
+const _cursorTargetY: Record<string, number> = {}
+
+export function getLines(): string[] { return _lines }
+export function getCursors(): Record<string, CursorPosition> { return _cursors }
+export function getActiveUsers(): User[] { return _activeUsers }
+export function getEditHistory(): EditOp[] { return _editHistory }
+export function getCursorSpringX(userId: string): number { return _cursorSpringX[userId] ?? 0 }
+export function getCursorSpringY(userId: string): number { return _cursorSpringY[userId] ?? 0 }
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(UserEdit, (op: EditOp) => {
+  const next = [..._lines]
+  if (op.type === 'insert') {
+    if (op.line >= next.length) {
+      next.push(op.text)
+    } else {
+      const line = next[op.line] || ''
+      next[op.line] = line.slice(0, op.col) + op.text + line.slice(op.col)
     }
-    return next
-  },
-)
+  } else if (op.type === 'delete') {
+    if (op.line < next.length) {
+      const line = next[op.line] || ''
+      next[op.line] = line.slice(0, Math.max(0, op.col - 1)) + line.slice(op.col)
+    }
+  }
+  _lines = next
+  _editHistory = [..._editHistory, op].slice(-100)
+  engine.emit(EditorChanged, undefined)
+})
 
-export const cursors = engine.signal<Record<string, CursorPosition>>(
-  CursorMoved, {},
-  (prev, cursor) => ({ ...prev, [cursor.userId]: cursor }),
-)
+engine.on(CursorMoved, (cursor: CursorPosition) => {
+  _cursors = { ..._cursors, [cursor.userId]: cursor }
+  if (cursor.userId !== 'user-1') {
+    _cursorTargetX[cursor.userId] = cursor.col * 8.4
+    _cursorTargetY[cursor.userId] = cursor.line * 22
+  }
+  engine.emit(EditorChanged, undefined)
+})
 
-export const activeUsers = engine.signal<User[]>(
-  UserJoined, [...USERS],
-  (prev, user) => [...prev, user],
-)
-engine.signalUpdate(activeUsers, UserLeft, (prev, id) =>
-  prev.filter((u) => u.id !== id),
-)
+engine.on(UserJoined, (user: User) => {
+  _activeUsers = [..._activeUsers, user]
+  engine.emit(EditorChanged, undefined)
+})
 
-export const editHistory = engine.signal<EditOp[]>(
-  UserEdit, [], (prev, op) => [...prev, op].slice(-100),
-)
-
-export const undoStack = engine.signal<EditOp[]>(
-  UserEdit, [], (prev, op) => [...prev, op].slice(-50),
-)
+engine.on(UserLeft, (id: string) => {
+  _activeUsers = _activeUsers.filter((u) => u.id !== id)
+  engine.emit(EditorChanged, undefined)
+})
 
 // ---------------------------------------------------------------------------
-// Springs — smooth cursor movement for remote users
+// Frame update (spring cursor animation)
 // ---------------------------------------------------------------------------
 
-export const cursorSprings: Record<string, { x: SpringValue; y: SpringValue }> = {}
+export function updateFrame(): void {
+  for (const user of USERS) {
+    if (user.id === 'user-1') continue
+    const tx = _cursorTargetX[user.id] ?? 0
+    const ty = _cursorTargetY[user.id] ?? 0
+    const cx = _cursorSpringX[user.id] ?? 0
+    const cy = _cursorSpringY[user.id] ?? 0
 
-for (const user of USERS) {
-  if (user.id === 'user-1') continue // Local user doesn't need spring
-
-  const targetX = engine.signal<number>(CursorMoved, 0,
-    (prev, c) => c.userId === user.id ? c.col * 8.4 : prev,
-  )
-  const targetY = engine.signal<number>(CursorMoved, 0,
-    (prev, c) => c.userId === user.id ? c.line * 22 : prev,
-  )
-
-  cursorSprings[user.id] = {
-    x: engine.spring(targetX, { stiffness: 200, damping: 22, restThreshold: 0.5 }),
-    y: engine.spring(targetY, { stiffness: 200, damping: 22, restThreshold: 0.5 }),
+    _cursorSpringX[user.id] = cx + (tx - cx) * 0.15
+    _cursorSpringY[user.id] = cy + (ty - cy) * 0.15
   }
 }
 
@@ -159,18 +172,16 @@ let simIndex = 0
 
 export function startSimulation() {
   if (simInterval) return
-  // Move cursors periodically
   simInterval = setInterval(() => {
     for (const user of USERS) {
       if (user.id === 'user-1') continue
-      const line = Math.floor(Math.random() * Math.min(16, lines.value.length))
+      const line = Math.floor(Math.random() * Math.min(16, _lines.length))
       const col = Math.floor(Math.random() * 30)
       engine.emit(CursorMoved, {
         userId: user.id, line, col, color: user.color, name: user.name,
       })
     }
 
-    // Occasionally emit an edit
     if (Math.random() > 0.6 && simIndex < SIM_EDITS.length) {
       const edit = SIM_EDITS[simIndex++]
       const user = USERS.find((u) => u.id === edit.user)!
@@ -199,6 +210,3 @@ export function stopSimulation() {
     simInterval = null
   }
 }
-
-// Start frame loop for springs
-engine.startFrameLoop()

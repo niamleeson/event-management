@@ -1,4 +1,4 @@
-import { createEngine, type TweenValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -60,58 +60,48 @@ export const MessageReceived = engine.event<Message>('MessageReceived')
 export const BotTypingStart = engine.event<string>('BotTypingStart')
 export const BotTypingEnd = engine.event<string>('BotTypingEnd')
 export const MarkAsRead = engine.event<string>('MarkAsRead')
-export const NewMessageAnim = engine.event<void>('NewMessageAnim')
-export const NewMessageAnimDone = engine.event<void>('NewMessageAnimDone')
+export const MessagesChanged = engine.event<void>('MessagesChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const messages = engine.signal<Message[]>(
-  MessageReceived, [], (prev, msg) => [...prev, msg],
-)
+let _messages: Message[] = []
+let _typingIndicators: Record<string, boolean> = {}
+let _unreadCount = 0
 
-engine.signalUpdate(messages, MarkAsRead, (prev, id) =>
-  prev.map((m) => m.id === id ? { ...m, read: true } : m),
-)
-
-export const typingIndicators = engine.signal<Record<string, boolean>>(
-  BotTypingStart, {}, (prev, sender) => ({ ...prev, [sender]: true }),
-)
-engine.signalUpdate(typingIndicators, BotTypingEnd, (prev, sender) => ({ ...prev, [sender]: false }))
-
-export const unreadCount = engine.signal<number>(
-  MessageReceived, 0, (prev) => prev + 1,
-)
-engine.signalUpdate(unreadCount, MarkAsRead, (prev) => Math.max(0, prev - 1))
+export function getMessages(): Message[] { return _messages }
+export function getTypingIndicators(): Record<string, boolean> { return _typingIndicators }
+export function getUnreadCount(): number { return _unreadCount }
 
 // ---------------------------------------------------------------------------
-// Tweens — message entrance animation
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const messageSlideIn: TweenValue = engine.tween({
-  start: NewMessageAnim,
-  done: NewMessageAnimDone,
-  from: 20,
-  to: 0,
-  duration: 300,
-  easing: (t: number) => 1 - Math.pow(1 - t, 3),
+engine.on(MessageReceived, (msg: Message) => {
+  _messages = [..._messages, msg]
+  if (!msg.read) _unreadCount++
+  engine.emit(MessagesChanged, undefined)
 })
 
-export const messageOpacity: TweenValue = engine.tween({
-  start: NewMessageAnim,
-  from: 0,
-  to: 1,
-  duration: 300,
-  easing: (t: number) => t,
+engine.on(MarkAsRead, (id: string) => {
+  _messages = _messages.map((m) => m.id === id ? { ...m, read: true } : m)
+  _unreadCount = Math.max(0, _unreadCount - 1)
+  engine.emit(MessagesChanged, undefined)
 })
 
-// ---------------------------------------------------------------------------
-// Bot logic — respond to user messages
-// ---------------------------------------------------------------------------
+engine.on(BotTypingStart, (sender: string) => {
+  _typingIndicators = { ..._typingIndicators, [sender]: true }
+  engine.emit(MessagesChanged, undefined)
+})
 
+engine.on(BotTypingEnd, (sender: string) => {
+  _typingIndicators = { ..._typingIndicators, [sender]: false }
+  engine.emit(MessagesChanged, undefined)
+})
+
+// Bot logic
 engine.on(SendMessage, ({ text }) => {
-  // Add user message
   const userMsg: Message = {
     id: `msg-${Date.now()}-user`,
     sender: 'You',
@@ -120,9 +110,7 @@ engine.on(SendMessage, ({ text }) => {
     read: true,
   }
   engine.emit(MessageReceived, userMsg)
-  engine.emit(NewMessageAnim, undefined)
 
-  // Random bot responds after typing delay
   const bot = BOTS[Math.floor(Math.random() * BOTS.length)]
   const responses = BOT_RESPONSES[bot.name]
   const response = responses[Math.floor(Math.random() * responses.length)]
@@ -140,9 +128,7 @@ engine.on(SendMessage, ({ text }) => {
       read: false,
     }
     engine.emit(MessageReceived, botMsg)
-    engine.emit(NewMessageAnim, undefined)
 
-    // Sometimes the other bot also responds
     if (Math.random() > 0.5) {
       const otherBot = BOTS.find((b) => b.name !== bot.name)!
       const otherResponses = BOT_RESPONSES[otherBot.name]
@@ -160,12 +146,8 @@ engine.on(SendMessage, ({ text }) => {
             read: false,
           }
           engine.emit(MessageReceived, otherMsg)
-          engine.emit(NewMessageAnim, undefined)
         }, 800 + Math.random() * 1500)
       }, 500)
     }
   }, delay)
 })
-
-// Start frame loop for tweens
-engine.startFrameLoop()

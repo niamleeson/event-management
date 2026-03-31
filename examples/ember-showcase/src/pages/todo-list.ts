@@ -1,14 +1,17 @@
 import {
   engine,
-  todoList,
-  activeFilter,
-  currentText,
-  validationError,
+  getTodos,
+  getFilter,
+  getCurrentText,
+  getValidation,
   TodoAdded,
   TodoRemoved,
   TodoToggled,
   TodoTextChanged,
   FilterChanged,
+  TodoListChanged,
+  ValidationResultEvent,
+  CurrentTextChanged,
   type Todo,
   type Filter,
 } from '../engines/todo-list'
@@ -18,7 +21,6 @@ export function mount(container: HTMLElement): () => void {
 
   const unsubs: (() => void)[] = []
 
-  // Build DOM once
   const wrapper = document.createElement('div')
   wrapper.style.cssText = 'max-width: 560px; margin: 40px auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 0 20px;'
   container.appendChild(wrapper)
@@ -31,7 +33,7 @@ export function mount(container: HTMLElement): () => void {
   h1.textContent = 'Pulse Todos'
   const subtitle = document.createElement('p')
   subtitle.style.cssText = 'color: #666; font-size: 14px; margin-top: 4px;'
-  subtitle.textContent = 'All state managed through Pulse events and signals'
+  subtitle.textContent = 'All state managed through Pulse events and on() handlers'
   header.appendChild(h1)
   header.appendChild(subtitle)
   wrapper.appendChild(header)
@@ -43,7 +45,7 @@ export function mount(container: HTMLElement): () => void {
   const input = document.createElement('input')
   input.style.cssText = 'flex: 1; padding: 12px 16px; font-size: 16px; border: 2px solid #e0e0e0; border-radius: 8px; outline: none; transition: border-color 0.2s;'
   input.placeholder = 'What needs to be done?'
-  input.value = currentText.value
+  input.value = getCurrentText()
   input.addEventListener('input', (e) => {
     engine.emit(TodoTextChanged, (e.target as HTMLInputElement).value)
   })
@@ -63,7 +65,7 @@ export function mount(container: HTMLElement): () => void {
   // Error text
   const errorText = document.createElement('div')
   errorText.style.cssText = 'color: #e63946; font-size: 13px; min-height: 20px; margin-bottom: 16px;'
-  errorText.textContent = validationError.value.error ?? '\u00A0'
+  errorText.textContent = getValidation().error ?? '\u00A0'
   wrapper.appendChild(errorText)
 
   // Filter bar
@@ -92,13 +94,13 @@ export function mount(container: HTMLElement): () => void {
   // --- Helper functions ---
 
   function updateAddBtn() {
-    const disabled = !validationError.value.valid
+    const disabled = !getValidation().valid
     addBtn.disabled = disabled
     addBtn.style.cssText = `padding: 12px 24px; font-size: 16px; font-weight: 600; border: none; border-radius: 8px; cursor: ${disabled ? 'not-allowed' : 'pointer'}; background: ${disabled ? '#ccc' : '#4361ee'}; color: #fff; transition: background 0.2s;`
   }
 
   function updateFilterButtons() {
-    const current = activeFilter.value
+    const current = getFilter()
     const filters: Filter[] = ['all', 'active', 'completed']
     filterButtons.forEach((btn, i) => {
       const active = current === filters[i]
@@ -108,8 +110,8 @@ export function mount(container: HTMLElement): () => void {
 
   function renderTodoList() {
     listContainer.innerHTML = ''
-    const todos = todoList.value
-    const filter = activeFilter.value
+    const todos = getTodos()
+    const filter = getFilter()
 
     const filtered = todos.filter((t: Todo) => {
       if (filter === 'active') return !t.completed
@@ -156,10 +158,10 @@ export function mount(container: HTMLElement): () => void {
   }
 
   function addTodo(): void {
-    if (!validationError.value.valid) return
+    if (!getValidation().valid) return
     const todo: Todo = {
       id: crypto.randomUUID(),
-      text: currentText.value.trim(),
+      text: getCurrentText().trim(),
       completed: false,
     }
     engine.emit(TodoAdded, todo)
@@ -167,21 +169,21 @@ export function mount(container: HTMLElement): () => void {
   }
 
   // Subscribe for updates
-  unsubs.push(currentText.subscribe((text) => {
+  unsubs.push(engine.on(CurrentTextChanged, (text) => {
     input.value = text
   }))
 
-  unsubs.push(validationError.subscribe(() => {
+  unsubs.push(engine.on(ValidationResultEvent, () => {
     updateAddBtn()
-    errorText.textContent = validationError.value.error ?? '\u00A0'
+    errorText.textContent = getValidation().error ?? '\u00A0'
   }))
 
-  unsubs.push(activeFilter.subscribe(() => {
+  unsubs.push(engine.on(FilterChanged, () => {
     updateFilterButtons()
     renderTodoList()
   }))
 
-  unsubs.push(todoList.subscribe(() => {
+  unsubs.push(engine.on(TodoListChanged, () => {
     renderTodoList()
   }))
 

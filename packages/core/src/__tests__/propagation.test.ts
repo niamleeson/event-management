@@ -8,14 +8,14 @@ describe('Propagation', () => {
     engine = new Engine({ maxPropagationRounds: 50 })
   })
 
-  it('should propagate through a linear chain', () => {
+  it('should propagate through a linear chain via nested emits', () => {
     const a = engine.event<number>('a')
     const b = engine.event<number>('b')
     const c = engine.event<number>('c')
     const results: number[] = []
 
-    engine.pipe(a, b, (x) => x * 2)
-    engine.pipe(b, c, (x) => x + 1)
+    engine.on(a, (x) => engine.emit(b, x * 2))
+    engine.on(b, (x) => engine.emit(c, x + 1))
     engine.on(c, (v) => results.push(v))
 
     engine.emit(a, 3)
@@ -29,8 +29,8 @@ describe('Propagation', () => {
     const r1: number[] = []
     const r2: number[] = []
 
-    engine.pipe(src, out1, (x) => x + 10)
-    engine.pipe(src, out2, (x) => x + 20)
+    engine.on(src, (x) => engine.emit(out1, x + 10))
+    engine.on(src, (x) => engine.emit(out2, x + 20))
     engine.on(out1, (v) => r1.push(v))
     engine.on(out2, (v) => r2.push(v))
 
@@ -39,34 +39,20 @@ describe('Propagation', () => {
     expect(r2).toEqual([21])
   })
 
-  it('should handle diamond-shaped DAG', () => {
+  it('should handle diamond-shaped DAG with join', () => {
     const a = engine.event<number>('a')
-    const b = engine.event<number>('b')
-    const c = engine.event<number>('c')
-    const d = engine.event<number>('d')
+    const left = engine.event<number>('left')
+    const right = engine.event<number>('right')
     const results: number[] = []
 
-    engine.pipe(a, b, (x) => x + 1)
-    engine.pipe(a, c, (x) => x + 2)
-    engine.join([b, c], d, {
-      do: (bv, cv) => bv + cv,
+    engine.on(a, (x) => engine.emit(left, x * 2))
+    engine.on(a, (x) => engine.emit(right, x * 3))
+    engine.on([left, right], (l: number, r: number) => {
+      results.push(l + r)
     })
-    engine.on(d, (v) => results.push(v))
 
     engine.emit(a, 10)
-    expect(results).toEqual([23]) // (10+1)+(10+2)
-  })
-
-  it('should detect cycle in DAG when rules form a cycle', () => {
-    const a = engine.event<number>('a')
-    const b = engine.event<number>('b')
-
-    engine.pipe(a, b, (x) => x + 1)
-    // Adding the second pipe creates a cycle — detected at registration or first propagation
-    expect(() => {
-      engine.pipe(b, a, (x) => x + 1)
-      engine.emit(a, 0)
-    }).toThrow(/Cycle detected/)
+    expect(results).toEqual([50]) // 10*2 + 10*3
   })
 
   it('should throw on excessive propagation rounds from nested emits', () => {
@@ -100,27 +86,6 @@ describe('Propagation', () => {
     expect(() => engine.emit(orphan, 99)).not.toThrow()
   })
 
-  it('should maintain topological order across fan-in', () => {
-    const a = engine.event<number>('a')
-    const b = engine.event<number>('b')
-    const c = engine.event<number>('c')
-    const d = engine.event<number>('d')
-    const trace: string[] = []
-
-    engine.pipe(a, b, (x) => { trace.push('a->b'); return x })
-    engine.pipe(a, c, (x) => { trace.push('a->c'); return x })
-    engine.join([b, c], d, {
-      do: (bv, cv) => { trace.push('join->d'); return bv + cv },
-    })
-
-    engine.emit(a, 1)
-    const joinIdx = trace.indexOf('join->d')
-    const abIdx = trace.indexOf('a->b')
-    const acIdx = trace.indexOf('a->c')
-    expect(joinIdx).toBeGreaterThan(abIdx)
-    expect(joinIdx).toBeGreaterThan(acIdx)
-  })
-
   it('should handle multiple sequential emits independently', () => {
     const ev = engine.event<number>('ev')
     const results: number[] = []
@@ -132,5 +97,28 @@ describe('Propagation', () => {
     engine.emit(ev, 3)
 
     expect(results).toEqual([1, 2, 3])
+  })
+
+  it('should maintain synchronous propagation within a single emit call', () => {
+    const a = engine.event<number>('a')
+    const b = engine.event<number>('b')
+    const c = engine.event<number>('c')
+    const trace: string[] = []
+
+    engine.on(a, (x) => {
+      trace.push(`a:${x}`)
+      engine.emit(b, x + 1)
+    })
+    engine.on(b, (x) => {
+      trace.push(`b:${x}`)
+      engine.emit(c, x + 1)
+    })
+    engine.on(c, (x) => {
+      trace.push(`c:${x}`)
+    })
+
+    engine.emit(a, 1)
+    // Everything should have been processed synchronously
+    expect(trace).toEqual(['a:1', 'b:2', 'c:3'])
   })
 })

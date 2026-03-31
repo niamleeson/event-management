@@ -1,22 +1,21 @@
 /**
  * Pulse Ember Showcase — Main Entry Point
  *
- * This showcase demonstrates how the @pulse/ember adapter bridges Pulse's
- * event-driven engine into Ember's autotracking system using:
+ * This showcase demonstrates the simplified Pulse engine API:
  *
- *   - TrackedSignal<T>  — wraps a Pulse Signal with @tracked
- *   - TrackedTween      — wraps a Pulse TweenValue with @tracked
- *   - TrackedSpring     — wraps a Pulse SpringValue with @tracked
- *   - PulseService      — manages lifecycle of tracked wrappers
- *   - createPulseService(engine) — factory to create a service
+ *   - engine.event<T>(name)  — create typed events
+ *   - engine.emit(event, payload)  — fire events
+ *   - engine.on(event, handler)  — subscribe to events
+ *   - engine.on([events], handler)  — join multiple events
+ *   - engine.destroy()  — clean up
  *
- * In a real Ember Octane app, the PulseService would be registered as an
- * Ember Service via the DI container, and Glimmer components would read
- * tracked values in .hbs templates for automatic re-rendering.
+ * The @pulse/ember adapter provides:
+ *   - PulseBinding<T>  — wraps event subscription as @tracked
+ *   - createPulseService(engine)  — lightweight service wrapper
  *
- * Since full Ember CLI requires a heavy build pipeline (broccoli, ember-cli-babel,
- * ember-cli-htmlbars), this showcase uses Vite + vanilla TypeScript DOM rendering
- * to demonstrate the same integration patterns in a lightweight way.
+ * Since full Ember CLI requires a heavy build pipeline, this showcase
+ * uses Vite + vanilla TypeScript DOM rendering to demonstrate the same
+ * integration patterns in a lightweight way.
  */
 
 import { createDevTools } from '@pulse/devtools'

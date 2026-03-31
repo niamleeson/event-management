@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useSignal, useEmit } from '@pulse/vue'
-import { todoList, activeFilter, TodoRemoved, TodoToggled } from './engine'
+import { usePulse, useEmit } from '@pulse/vue'
+import { TodoListChanged, ActiveFilterChanged, TodoRemoved, TodoToggled, getTodos, getActiveFilter } from './engine'
 
 const emit = useEmit()
-const todos = useSignal(todoList)
-const filter = useSignal(activeFilter)
+const todos = usePulse(TodoListChanged, getTodos())
+const filter = usePulse(ActiveFilterChanged, getActiveFilter())
 
 const filtered = computed(() => {
   return todos.value.filter((t) => {

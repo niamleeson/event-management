@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTween, useSpring, useEmit } from '@pulse/vue'
+import { useEmit, usePulse, useTween, useSpring } from '@pulse/vue'
 import {
   HoverCard,
   UnhoverCard,

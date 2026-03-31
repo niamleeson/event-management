@@ -1,132 +1,41 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface VirtualItem {
-  id: number
-  title: string
-  description: string
-  status: 'loaded' | 'loading' | 'skeleton'
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-export const TOTAL_ITEMS = 10000
-export const ITEM_HEIGHT = 60
-export const PAGE_SIZE = 50
-export const PREFETCH_THRESHOLD = 10
-
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
+export interface VirtualItem { id: number; title: string; description: string; status: 'loaded' | 'loading' | 'skeleton' }
+export const TOTAL_ITEMS = 10000, ITEM_HEIGHT = 60, PAGE_SIZE = 50, PREFETCH_THRESHOLD = 10
 
 export const ScrollTo = engine.event<number>('ScrollTo')
-export const PageRequest = engine.event<number>('PageRequest')
-export const PageLoaded = engine.event<{ page: number; items: VirtualItem[] }>('PageLoaded')
-export const PageError = engine.event<{ page: number; error: string }>('PageError')
+export const ScrollTopChanged = engine.event<number>('ScrollTopChanged')
+export const ItemsChanged = engine.event<Map<number, VirtualItem>>('ItemsChanged')
+export const TotalLoadedChanged = engine.event<number>('TotalLoadedChanged')
+export const LoadingPagesChanged = engine.event<Set<number>>('LoadingPagesChanged')
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
+let items = new Map<number, VirtualItem>()
+let loadedPages = new Set<number>()
+let loadingPages = new Set<number>()
+let totalLoaded = 0
 
-export const scrollTop = engine.signal<number>(ScrollTo, 0, (_prev, val) => val)
-
-export const loadedPages = engine.signal<Set<number>>(
-  PageLoaded,
-  new Set(),
-  (prev, { page }) => new Set([...prev, page]),
-)
-
-export const loadingPages = engine.signal<Set<number>>(
-  PageRequest,
-  new Set(),
-  (prev, page) => new Set([...prev, page]),
-)
-engine.signalUpdate(loadingPages, PageLoaded, (prev, { page }) => {
-  const next = new Set(prev)
-  next.delete(page)
-  return next
-})
-
-export const items = engine.signal<Map<number, VirtualItem>>(
-  PageLoaded,
-  new Map(),
-  (prev, { items: pageItems }) => {
-    const next = new Map(prev)
-    for (const item of pageItems) {
-      next.set(item.id, item)
-    }
-    return next
-  },
-)
-
-export const totalLoaded = engine.signal<number>(
-  PageLoaded,
-  0,
-  (prev, { items: pageItems }) => prev + pageItems.length,
-)
-
-// ---------------------------------------------------------------------------
-// Async: page loading with simulated delay
-// ---------------------------------------------------------------------------
-
-engine.async(PageRequest, {
-  done: PageLoaded,
-  error: PageError,
-  strategy: 'all',
-  do: async (page: number, { signal }) => {
-    // Simulated network delay
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 300 + Math.random() * 500)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
-
-    const startIdx = page * PAGE_SIZE
-    const pageItems: VirtualItem[] = Array.from({ length: PAGE_SIZE }, (_, i) => {
-      const idx = startIdx + i
-      return {
-        id: idx,
-        title: `Item #${idx + 1}`,
-        description: `This is item ${idx + 1} of ${TOTAL_ITEMS}`,
-        status: 'loaded' as const,
-      }
-    }).filter(item => item.id < TOTAL_ITEMS)
-
-    return { page, items: pageItems }
-  },
-})
-
-// ---------------------------------------------------------------------------
-// Auto-prefetch: when scroll position nears unloaded pages, request them
-// ---------------------------------------------------------------------------
-
-engine.on(ScrollTo, (scrollTop: number) => {
+engine.on(ScrollTo, async (scrollTop) => {
+  engine.emit(ScrollTopChanged, scrollTop)
   const visibleStart = Math.floor(scrollTop / ITEM_HEIGHT)
-  const visibleEnd = visibleStart + Math.ceil(600 / ITEM_HEIGHT) // assume 600px viewport
+  const visibleEnd = visibleStart + Math.ceil(600 / ITEM_HEIGHT)
   const prefetchEnd = visibleEnd + PREFETCH_THRESHOLD
-
   const startPage = Math.floor(visibleStart / PAGE_SIZE)
   const endPage = Math.floor(prefetchEnd / PAGE_SIZE)
-
   for (let p = startPage; p <= endPage; p++) {
-    if (!loadedPages.value.has(p) && !loadingPages.value.has(p)) {
-      engine.emit(PageRequest, p)
+    if (!loadedPages.has(p) && !loadingPages.has(p)) {
+      loadingPages = new Set([...loadingPages, p]); engine.emit(LoadingPagesChanged, loadingPages)
+      await new Promise((r) => setTimeout(r, 300 + Math.random() * 500))
+      const startIdx = p * PAGE_SIZE
+      const newItems = new Map(items)
+      for (let i = 0; i < PAGE_SIZE; i++) {
+        const idx = startIdx + i; if (idx >= TOTAL_ITEMS) break
+        newItems.set(idx, { id: idx, title: `Item #${idx + 1}`, description: `This is item ${idx + 1} of ${TOTAL_ITEMS}`, status: 'loaded' })
+      }
+      items = newItems; loadedPages.add(p)
+      loadingPages = new Set([...loadingPages]); loadingPages.delete(p)
+      totalLoaded = items.size
+      engine.emit(ItemsChanged, items); engine.emit(TotalLoadedChanged, totalLoaded); engine.emit(LoadingPagesChanged, loadingPages)
     }
   }
 })
-
-// Start frame loop
-engine.startFrameLoop()

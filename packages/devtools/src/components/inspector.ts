@@ -1,5 +1,5 @@
-// ---- Value Inspector Component ----
-// Displays current values of signals, tweens, and springs.
+// ---- Inspector Component ----
+// Displays event types, mailbox contents, and registered rules.
 
 import { el, formatPayload, cleanName, clearChildren } from '../utils.js'
 import type { PulseEngine } from '../types.js'
@@ -14,37 +14,45 @@ export function createInspectorComponent(engine: PulseEngine): InspectorComponen
   const wrapper = el('div')
 
   // Sections
-  const signalsSection = el('div', { cls: 'pd-inspector-section' })
-  const tweensSection = el('div', { cls: 'pd-inspector-section' })
-  const springsSection = el('div', { cls: 'pd-inspector-section' })
+  const eventTypesSection = el('div', { cls: 'pd-inspector-section' })
+  const mailboxSection = el('div', { cls: 'pd-inspector-section' })
+  const rulesSection = el('div', { cls: 'pd-inspector-section' })
 
-  wrapper.appendChild(signalsSection)
-  wrapper.appendChild(tweensSection)
-  wrapper.appendChild(springsSection)
+  wrapper.appendChild(eventTypesSection)
+  wrapper.appendChild(mailboxSection)
+  wrapper.appendChild(rulesSection)
 
   function update(): void {
-    renderSignals()
-    renderTweens()
-    renderSprings()
+    renderEventTypes()
+    renderMailboxes()
+    renderRules()
   }
 
-  function renderSignals(): void {
-    clearChildren(signalsSection)
+  function renderEventTypes(): void {
+    clearChildren(eventTypesSection)
 
-    let signals: Array<{ _eventType: { name: string }; value: any }>
-    try {
-      signals = engine.getSignals()
-    } catch {
-      signals = []
+    const dag = safeGetDAG()
+    const rules = safeGetRules()
+
+    // Count consumers per event type (how many rules are triggered by each event)
+    const consumerCount = new Map<string, number>()
+    for (const node of dag.nodes) {
+      consumerCount.set(node.name, 0)
+    }
+    for (const rule of rules) {
+      for (const t of rule.triggers) {
+        const current = consumerCount.get(t.name) ?? 0
+        consumerCount.set(t.name, current + 1)
+      }
     }
 
     const heading = el('div', { cls: 'pd-inspector-heading' })
-    heading.appendChild(document.createTextNode('Signals'))
-    heading.appendChild(el('span', { cls: 'pd-inspector-heading-count', text: String(signals.length) }))
-    signalsSection.appendChild(heading)
+    heading.appendChild(document.createTextNode('Event Types'))
+    heading.appendChild(el('span', { cls: 'pd-inspector-heading-count', text: String(consumerCount.size) }))
+    eventTypesSection.appendChild(heading)
 
-    if (signals.length === 0) {
-      signalsSection.appendChild(el('div', { cls: 'pd-inspector-empty', text: 'No signals registered.' }))
+    if (consumerCount.size === 0) {
+      eventTypesSection.appendChild(el('div', { cls: 'pd-inspector-empty', text: 'No event types registered.' }))
       return
     }
 
@@ -52,166 +60,140 @@ export function createInspectorComponent(engine: PulseEngine): InspectorComponen
     const thead = el('thead')
     const headerRow = el('tr')
     headerRow.appendChild(el('th', { text: 'Name' }))
-    headerRow.appendChild(el('th', { text: 'Value' }))
-    headerRow.appendChild(el('th', { text: 'Type' }))
+    headerRow.appendChild(el('th', { text: 'Consumers' }))
     thead.appendChild(headerRow)
     table.appendChild(thead)
 
     const tbody = el('tbody')
-    for (const signal of signals) {
+    const sortedNames = [...consumerCount.keys()].sort()
+    for (const name of sortedNames) {
       const row = el('tr')
-      const name = signal._eventType ? cleanName(signal._eventType.name) : '(unknown)'
-      row.appendChild(el('td', { cls: 'pd-inspector-name', text: name, attrs: { title: name } }))
-
-      const valueStr = formatPayload(signal.value, 60)
-      row.appendChild(el('td', { cls: 'pd-inspector-value', text: valueStr, attrs: { title: formatPayload(signal.value, 500) } }))
-
-      const typeStr = signal.value === null ? 'null' : typeof signal.value
-      row.appendChild(el('td', { text: typeStr, style: { color: 'var(--pd-text-dim)', fontSize: '11px' } }))
-
+      row.appendChild(el('td', { cls: 'pd-inspector-name', text: cleanName(name), attrs: { title: name } }))
+      row.appendChild(el('td', { cls: 'pd-inspector-value', text: String(consumerCount.get(name)) }))
       tbody.appendChild(row)
     }
     table.appendChild(tbody)
-    signalsSection.appendChild(table)
+    eventTypesSection.appendChild(table)
   }
 
-  function renderTweens(): void {
-    clearChildren(tweensSection)
+  function renderMailboxes(): void {
+    clearChildren(mailboxSection)
 
-    let tweens: Array<{ value: number; active: boolean; progress: number }>
+    let mailboxes: Map<any, { queue: Array<{ payload: any; seq: number }> }>
     try {
-      tweens = engine.getTweens()
+      mailboxes = engine.getMailboxes()
     } catch {
-      tweens = []
+      mailboxes = new Map()
+    }
+
+    // Count total pending events
+    let totalPending = 0
+    for (const mailbox of mailboxes.values()) {
+      totalPending += mailbox.queue.length
     }
 
     const heading = el('div', { cls: 'pd-inspector-heading' })
-    heading.appendChild(document.createTextNode('Tweens'))
-    heading.appendChild(el('span', { cls: 'pd-inspector-heading-count', text: String(tweens.length) }))
-    tweensSection.appendChild(heading)
+    heading.appendChild(document.createTextNode('Mailboxes'))
+    heading.appendChild(el('span', { cls: 'pd-inspector-heading-count', text: String(totalPending) }))
+    mailboxSection.appendChild(heading)
 
-    if (tweens.length === 0) {
-      tweensSection.appendChild(el('div', { cls: 'pd-inspector-empty', text: 'No tweens registered.' }))
-      return
-    }
+    let hasContent = false
+    for (const [eventType, mailbox] of mailboxes.entries()) {
+      if (mailbox.queue.length === 0) continue
+      hasContent = true
 
-    const table = el('table', { cls: 'pd-inspector-table' })
-    const thead = el('thead')
-    const headerRow = el('tr')
-    headerRow.appendChild(el('th', { text: '#' }))
-    headerRow.appendChild(el('th', { text: 'Value' }))
-    headerRow.appendChild(el('th', { text: 'Progress' }))
-    headerRow.appendChild(el('th', { text: 'Status' }))
-    thead.appendChild(headerRow)
-    table.appendChild(thead)
+      const typeName = eventType.name ?? '(unknown)'
+      const entry = el('div', { cls: 'pd-mailbox-entry' })
+      entry.appendChild(el('span', { cls: 'pd-mailbox-type', text: cleanName(typeName) }))
+      entry.appendChild(
+        el('span', {
+          cls: 'pd-mailbox-count',
+          text: `${mailbox.queue.length} event${mailbox.queue.length !== 1 ? 's' : ''}`,
+        }),
+      )
 
-    const tbody = el('tbody')
-    for (let i = 0; i < tweens.length; i++) {
-      const tween = tweens[i]
-      const row = el('tr')
-
-      row.appendChild(el('td', { cls: 'pd-inspector-name', text: `tween[${i}]` }))
-      row.appendChild(el('td', { cls: 'pd-inspector-value', text: tween.value.toFixed(3) }))
-
-      // Progress bar cell
-      const progressCell = el('td')
-      const progressBar = el('div', { cls: 'pd-progress-bar' })
-      const progressFill = el('div', {
-        cls: ['pd-progress-fill', tween.active ? 'pd-tween-active' : ''],
-        style: { width: `${(tween.progress * 100).toFixed(1)}%` },
-      })
-      progressBar.appendChild(progressFill)
-      progressCell.appendChild(progressBar)
-      const progressLabel = el('span', {
-        text: `${(tween.progress * 100).toFixed(0)}%`,
-        style: { fontSize: '10px', color: 'var(--pd-text-dim)', fontFamily: 'var(--pd-mono)' },
-      })
-      progressCell.appendChild(progressLabel)
-      row.appendChild(progressCell)
-
-      // Status
-      const statusText = tween.active ? 'Active' : 'Idle'
-      const statusColor = tween.active ? 'var(--pd-green)' : 'var(--pd-text-dim)'
-      row.appendChild(el('td', { text: statusText, style: { color: statusColor, fontWeight: '500', fontSize: '11px' } }))
-
-      tbody.appendChild(row)
-    }
-    table.appendChild(tbody)
-    tweensSection.appendChild(table)
-  }
-
-  function renderSprings(): void {
-    clearChildren(springsSection)
-
-    let springs: Array<{ value: number; velocity: number; settled: boolean }>
-    try {
-      springs = engine.getSprings()
-    } catch {
-      springs = []
-    }
-
-    const heading = el('div', { cls: 'pd-inspector-heading' })
-    heading.appendChild(document.createTextNode('Springs'))
-    heading.appendChild(el('span', { cls: 'pd-inspector-heading-count', text: String(springs.length) }))
-    springsSection.appendChild(heading)
-
-    if (springs.length === 0) {
-      springsSection.appendChild(el('div', { cls: 'pd-inspector-empty', text: 'No springs registered.' }))
-      return
-    }
-
-    const table = el('table', { cls: 'pd-inspector-table' })
-    const thead = el('thead')
-    const headerRow = el('tr')
-    headerRow.appendChild(el('th', { text: '#' }))
-    headerRow.appendChild(el('th', { text: 'Value' }))
-    headerRow.appendChild(el('th', { text: 'Velocity' }))
-    headerRow.appendChild(el('th', { text: 'Status' }))
-    thead.appendChild(headerRow)
-    table.appendChild(thead)
-
-    const tbody = el('tbody')
-    for (let i = 0; i < springs.length; i++) {
-      const spring = springs[i]
-      const row = el('tr')
-
-      row.appendChild(el('td', { cls: 'pd-inspector-name', text: `spring[${i}]` }))
-      row.appendChild(el('td', { cls: 'pd-inspector-value', text: spring.value.toFixed(3) }))
-
-      // Velocity indicator
-      const velCell = el('td')
-      const velWrapper = el('span', { cls: 'pd-spring-velocity' })
-      const velLabel = el('span', {
-        text: spring.velocity.toFixed(2),
-        style: { fontFamily: 'var(--pd-mono)', fontSize: '11px' },
-      })
-
-      const indicator = el('span', { cls: 'pd-spring-indicator' })
-      // Map velocity to visual width (clamp to [-1, 1] range for display)
-      const normalizedVel = Math.max(-1, Math.min(1, spring.velocity / 10))
-      const fillWidth = Math.abs(normalizedVel) * 50
-      const fillLeft = normalizedVel >= 0 ? 50 : 50 - fillWidth
-      const fill = el('span', {
-        cls: 'pd-spring-indicator-fill',
-        style: { left: `${fillLeft}%`, width: `${fillWidth}%` },
-      })
-      indicator.appendChild(fill)
-      velWrapper.appendChild(velLabel)
-      velWrapper.appendChild(indicator)
-      velCell.appendChild(velWrapper)
-      row.appendChild(velCell)
-
-      // Settled status
-      if (spring.settled) {
-        row.appendChild(el('td', { cls: 'pd-spring-settled', text: 'Settled' }))
-      } else {
-        row.appendChild(el('td', { text: 'Moving', style: { color: 'var(--pd-orange)', fontWeight: '500', fontSize: '11px' } }))
+      // Show queued payloads
+      for (const item of mailbox.queue) {
+        const payloadRow = el('div', {
+          style: { paddingLeft: '16px', fontSize: '11px', color: 'var(--pd-text-dim)', fontFamily: 'var(--pd-mono)' },
+          text: `#${item.seq}: ${formatPayload(item.payload, 60)}`,
+        })
+        entry.appendChild(payloadRow)
       }
 
+      mailboxSection.appendChild(entry)
+    }
+
+    if (!hasContent) {
+      mailboxSection.appendChild(el('div', { cls: 'pd-inspector-empty', text: 'All mailboxes empty.' }))
+    }
+  }
+
+  function renderRules(): void {
+    clearChildren(rulesSection)
+
+    const rules = safeGetRules()
+
+    const heading = el('div', { cls: 'pd-inspector-heading' })
+    heading.appendChild(document.createTextNode('Rules'))
+    heading.appendChild(el('span', { cls: 'pd-inspector-heading-count', text: String(rules.length) }))
+    rulesSection.appendChild(heading)
+
+    if (rules.length === 0) {
+      rulesSection.appendChild(el('div', { cls: 'pd-inspector-empty', text: 'No rules registered.' }))
+      return
+    }
+
+    const table = el('table', { cls: 'pd-inspector-table' })
+    const thead = el('thead')
+    const headerRow = el('tr')
+    headerRow.appendChild(el('th', { text: 'Name' }))
+    headerRow.appendChild(el('th', { text: 'Mode' }))
+    headerRow.appendChild(el('th', { text: 'Triggers' }))
+    headerRow.appendChild(el('th', { text: 'Outputs' }))
+    thead.appendChild(headerRow)
+    table.appendChild(thead)
+
+    const tbody = el('tbody')
+    for (const rule of rules) {
+      const row = el('tr')
+      row.appendChild(el('td', { cls: 'pd-inspector-name', text: cleanName(rule.name), attrs: { title: rule.id } }))
+      row.appendChild(el('td', { text: rule.mode, style: { fontSize: '11px' } }))
+
+      const triggersText = rule.triggers.map((t) => cleanName(t.name)).join(', ')
+      row.appendChild(el('td', { text: triggersText, style: { fontSize: '11px', color: 'var(--pd-text-dim)' } }))
+
+      const outputsText = rule.outputs.length > 0
+        ? rule.outputs.map((o) => cleanName(o.name)).join(', ')
+        : '(none)'
+      row.appendChild(el('td', { text: outputsText, style: { fontSize: '11px', color: 'var(--pd-text-dim)' } }))
+
       tbody.appendChild(row)
     }
     table.appendChild(tbody)
-    springsSection.appendChild(table)
+    rulesSection.appendChild(table)
+  }
+
+  function safeGetDAG(): { nodes: Array<{ id: string; name: string }>; edges: Array<[{ id: string }, { id: string }]> } {
+    try {
+      return engine.getDAG()
+    } catch {
+      return { nodes: [], edges: [] }
+    }
+  }
+
+  function safeGetRules(): Array<{
+    id: string
+    name: string
+    mode: string
+    triggers: Array<{ name: string }>
+    outputs: Array<{ name: string }>
+  }> {
+    try {
+      return engine.getRules()
+    } catch {
+      return []
+    }
   }
 
   // Initial render

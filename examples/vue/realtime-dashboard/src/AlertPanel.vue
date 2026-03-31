@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { useSignal, useEmit } from '@pulse/vue'
-import { alerts, AlertDismissed } from './engine'
+import { useEmit, usePulse } from '@pulse/vue'
+import {
+  AlertDismissed,
+  AlertsChanged,
+  getAlerts,
+} from './engine'
 
 const emit = useEmit()
-const alertList = useSignal(alerts)
+const alertList = usePulse(AlertsChanged, getAlerts())
 </script>
 
 <template>

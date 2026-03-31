@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import { ref as vueRef } from 'vue'
-import { providePulse, useEmit, useSignal, useSpring } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, USERS, UserTyped, UserDeleted, CursorMoved,
-  document as doc, cursors, editHistory, cursorXSprings,
+  engine,
+  USERS,
+  UserTyped,
+  UserDeleted,
+  CursorMoved,
+  DocumentChanged,
+  CursorsChanged,
+  EditHistoryChanged,
+  CursorXChanged,
+  getDocument,
+  getCursors,
+  getEditHistory,
+  getCursorXPositions,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const text = useSignal(doc)
-const cursorMap = useSignal(cursors)
-const history = useSignal(editHistory)
-
-const cursorSprings: Record<string, ReturnType<typeof useSpring>> = {}
-for (const user of USERS) {
-  cursorSprings[user.name] = useSpring(cursorXSprings[user.name])
-}
+const text = usePulse(DocumentChanged, getDocument())
+const cursorMap = usePulse(CursorsChanged, getCursors())
+const history = usePulse(EditHistoryChanged, getEditHistory())
+const cursorXPos = usePulse(CursorXChanged, getCursorXPositions())
 
 let myPosition = 0
 
@@ -96,7 +102,7 @@ function formatTime(ts: number) {
           :key="user.name"
           :style="{
             position: 'absolute', top: '8px',
-            left: `${16 + cursorSprings[user.name].value}px`,
+            left: `${16 + (cursorXPos[user.name] ?? 0)}px`,
             pointerEvents: 'none',
           }"
         >

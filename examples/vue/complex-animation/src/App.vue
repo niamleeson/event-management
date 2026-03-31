@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { providePulse, useSignal, useTween, useEmit } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
   engine,
   CARDS,
@@ -9,15 +9,18 @@ import {
   allEntered,
   welcomeOpacity,
   welcomeTranslateY,
+  AllEnteredChanged,
+  WelcomeOpacityVal,
+  WelcomeTranslateYVal,
 } from './engine'
 import AnimatedCard from './AnimatedCard.vue'
 
 providePulse(engine)
 
 const emit = useEmit()
-const entered = useSignal(allEntered)
-const wOpacity = useTween(welcomeOpacity)
-const wTranslateY = useTween(welcomeTranslateY)
+const entered = usePulse(AllEnteredChanged, allEntered)
+const wOpacity = usePulse(WelcomeOpacityVal, welcomeOpacity.value)
+const wTranslateY = usePulse(WelcomeTranslateYVal, welcomeTranslateY.value)
 
 onMounted(() => {
   const timer = setTimeout(() => {

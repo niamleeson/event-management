@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { providePulse, useSignal } from '@pulse/vue'
-import { engine, error } from './engine'
+import { providePulse, usePulse } from '@pulse/vue'
+import {
+  engine,
+  error,
+  ErrorChanged,
+} from './engine'
 import SearchBar from './SearchBar.vue'
 import UserList from './UserList.vue'
 import UserDetail from './UserDetail.vue'
 
 providePulse(engine)
 
-const err = useSignal(error)
+const err = usePulse(ErrorChanged, error)
 </script>
 
 <template>

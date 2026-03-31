@@ -1,263 +1,404 @@
-import { For, Show, onMount, onCleanup } from 'solid-js'
-import { useSignal, useEmit, useTween } from '@pulse/solid'
-import type { Signal, TweenValue, EventType } from '@pulse/core'
-import { engine } from './engine'
+import { onMount } from 'solid-js'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  ModalStackChanged,
+  ActiveModalIdChanged,
+  OpenModal,
+  CloseModal,
+  CloseAll,
+  ConfirmAction,
+  CancelAction,
+} from './engine'
+import type { ModalSize, ModalData } from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Size config
+// ---------------------------------------------------------------------------
 
-interface ModalConfig {
-  id: number
-  title: string
-  content: string
-  color: string
-  size: 'sm' | 'md' | 'lg'
+const SIZE_CONFIG: Record<ModalSize, { width: number; 'min-height': number }> = {
+  small: { width: 360, 'min-height': 200 },
+  medium: { width: 520, 'min-height': 300 },
+  large: { width: 700, 'min-height': 400 },
 }
 
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Modal component
+// ---------------------------------------------------------------------------
 
-const OpenModal = engine.event<{ title: string; content: string; color: string; size?: 'sm' | 'md' | 'lg' }>('OpenModal')
-const CloseModal = engine.event<number>('CloseModal')
-const CloseTopModal = engine.event('CloseTopModal')
-
-const ModalOpenStart = engine.event('ModalOpenStart')
-const ModalCloseStart = engine.event('ModalCloseStart')
-
-/* ------------------------------------------------------------------ */
-/*  Tweens                                                            */
-/* ------------------------------------------------------------------ */
-
-const openTween: TweenValue = engine.tween({
-  start: ModalOpenStart,
-  from: 0,
-  to: 1,
-  duration: 300,
-  easing: 'easeOutBack',
-})
-
-const closeTween: TweenValue = engine.tween({
-  start: ModalCloseStart,
-  from: 1,
-  to: 0,
-  duration: 200,
-  easing: 'easeOut',
-})
-
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-let modalId = 0
-
-const modalStack = engine.signal<ModalConfig[]>(
-  OpenModal, [],
-  (prev, { title, content, color, size }) => [
-    ...prev,
-    { id: ++modalId, title, content, color, size: size ?? 'md' },
-  ],
-)
-
-engine.signalUpdate(modalStack, CloseModal, (prev, id) => prev.filter(m => m.id !== id))
-engine.signalUpdate(modalStack, CloseTopModal, (prev) => prev.slice(0, -1))
-
-engine.on(OpenModal, () => engine.emit(ModalOpenStart, undefined))
-engine.on(CloseModal, () => engine.emit(ModalCloseStart, undefined))
-engine.on(CloseTopModal, () => engine.emit(ModalCloseStart, undefined))
-
-/* ------------------------------------------------------------------ */
-/*  Focus trap + Escape key                                           */
-/* ------------------------------------------------------------------ */
-
-function setupKeyListener() {
-  const handler = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') engine.emit(CloseTopModal, undefined)
-  }
-  window.addEventListener('keydown', handler)
-  return () => window.removeEventListener('keydown', handler)
-}
-
-/* ------------------------------------------------------------------ */
-/*  Size map                                                          */
-/* ------------------------------------------------------------------ */
-
-const SIZE_MAP = { sm: '360px', md: '500px', lg: '700px' }
-
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
-
-function Modal(props: { modal: ModalConfig; index: number; total: number }) {
+function Modal({
+  modal,
+  index,
+  total,
+  isActive,
+}: {
+  modal: ModalData
+  index: number
+  total: number
+  isActive: boolean
+}) {
   const emit = useEmit()
-  const openVal = useTween(openTween)
-  const isTop = () => props.index === props.total - 1
+  let dialogRef = null
+  const config = SIZE_CONFIG[modal.size]
 
-  // Stack offset: each stacked modal shifts down and scales
-  const offset = () => (props.total - 1 - props.index) * 20
-  const scale = () => 1 - (props.total - 1 - props.index) * 0.03
-
-  // Only the newest modal gets the entrance animation
-  const animScale = () => isTop() ? 0.85 + openVal() * 0.15 : scale()
-  const animOpacity = () => isTop() ? openVal() : 1
-
-  let modalRef!: HTMLDivElement
-
-  // Focus trap: focus the modal when opened
+  // Focus trap
   onMount(() => {
-    if (isTop() && modalRef) modalRef.focus()
+    if (!isActive || !dialogRef) return
+
+    const el = dialogRef
+    const focusableElements = el.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    const firstFocusable = focusableElements[0]
+    const lastFocusable = focusableElements[focusableElements.length - 1]
+
+    firstFocusable?.focus()
+
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      if (!firstFocusable || !lastFocusable) return
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstFocusable) {
+          e.preventDefault()
+          lastFocusable.focus()
+        }
+      } else {
+        if (document.activeElement === lastFocusable) {
+          e.preventDefault()
+          firstFocusable.focus()
+        }
+      }
+    }
+
+    el.addEventListener('keydown', handleTab)
+    return () => el.removeEventListener('keydown', handleTab)
   })
+
+  // Escape to close
+  onMount(() => {
+    if (!isActive) return
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        emit(CloseModal, modal.id)
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => document.removeEventListener('keydown', handleEsc)
+  })
+
+  const isEntering = modal.state === 'entering'
+  const isExiting = modal.state === 'exiting'
+  const stackOffset = (total - 1 - index) * 8
+  const dimFactor = isActive ? 1 : 0.92 - (total - 1 - index) * 0.04
 
   return (
     <div
-      ref={modalRef}
-      tabIndex={-1}
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={modal.title}
       style={{
-        position: 'fixed',
-        top: `${50 + offset()}%`,
+        position: 'absolute',
+        top: '50%',
         left: '50%',
-        transform: `translate(-50%, -50%) scale(${animScale()})`,
-        width: SIZE_MAP[props.modal.size],
-        'max-width': '90vw',
-        'max-height': '80vh',
-        background: '#1e1e2e',
-        'border-radius': '16px',
-        'box-shadow': `0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px ${props.modal.color}33`,
-        'z-index': String(1000 + props.index),
-        opacity: String(animOpacity()),
-        overflow: 'hidden',
+        width: config.width,
+        'min-height': config.minHeight,
+        transform: isEntering
+          ? `translate(-50%, -50%) scale(0.9)`
+          : isExiting
+            ? `translate(-50%, -50%) scale(0.9)`
+            : `translate(-50%, calc(-50% - ${stackOffset}px)) scale(${dimFactor})`,
+        opacity: isEntering ? 0 : isExiting ? 0 : isActive ? 1 : 0.8,
+        transition:
+          'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease',
+        background: '#1e293b',
+        'border-radius': 16,
+        border: '1px solid #334155',
+        'box-shadow': isActive
+          ? '0 24px 64px rgba(0,0,0,0.4)'
+          : '0 8px 24px rgba(0,0,0,0.2)',
+        'z-index': 1000 + index,
         display: 'flex',
         'flex-direction': 'column',
-        outline: 'none',
+        overflow: 'hidden',
       }}
     >
       {/* Header */}
-      <div style={{
-        padding: '20px 24px', display: 'flex', 'align-items': 'center', 'justify-content': 'space-between',
-        background: `linear-gradient(135deg, ${props.modal.color}22, transparent)`,
-        'border-bottom': `1px solid ${props.modal.color}33`,
-      }}>
-        <h2 style={{ 'font-size': '18px', 'font-weight': '600', color: props.modal.color, margin: '0' }}>
-          {props.modal.title}
+      <div
+        style={{
+          padding: '20px 24px 16px',
+          'border-bottom': '1px solid #334155',
+          display: 'flex',
+          'justify-content': 'space-between',
+          'align-items': 'center',
+        }}
+      >
+        <h2
+          style={{
+            margin: 0,
+            'font-size': 18,
+            'font-weight': 700,
+            color: '#f1f5f9',
+          }}
+        >
+          {modal.title}
         </h2>
         <button
-          onClick={() => emit(CloseModal, props.modal.id)}
+          onClick={() => emit(CloseModal, modal.id)}
           style={{
-            background: 'rgba(255,255,255,0.1)', border: 'none', color: '#888',
-            width: '32px', height: '32px', 'border-radius': '8px', cursor: 'pointer',
-            'font-size': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center',
+            background: 'none',
+            border: 'none',
+            color: '#64748b',
+            cursor: 'pointer',
+            'font-size': 18,
+            padding: '4px 8px',
+            'border-radius': 6,
+            transition: 'all 0.15s',
           }}
-        >\u2715</button>
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#e2e8f0'
+            e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#64748b'
+            e.currentTarget.style.background = 'none'
+          }}
+        >
+          \u2715
+        </button>
       </div>
 
       {/* Content */}
-      <div style={{ padding: '24px', flex: '1', overflow: 'auto', color: '#ccc', 'line-height': '1.6', 'font-size': '14px' }}>
-        <p>{props.modal.content}</p>
+      <div
+        style={{
+          flex: 1,
+          padding: 24,
+          color: '#94a3b8',
+          'font-size': 14,
+          'line-height': 1.6,
+        }}
+      >
+        <p>{modal.content}</p>
 
-        {/* Action to open stacked modal */}
-        <div style={{ 'margin-top': '24px', display: 'flex', gap: '12px' }}>
-          <button
-            onClick={() => emit(OpenModal, {
-              title: `Nested Modal (Level ${props.index + 2})`,
-              content: 'This is a nested modal stacked on top of the previous one. You can stack multiple modals. Press Escape to close the top one.',
-              color: ['#6c5ce7', '#00b894', '#e17055', '#0984e3', '#d63031'][((props.index + 1) % 5)],
-              size: props.modal.size === 'lg' ? 'md' : props.modal.size === 'md' ? 'sm' : 'md',
-            })}
-            style={{
-              padding: '10px 20px', 'border-radius': '8px', border: 'none',
-              background: props.modal.color, color: '#fff', cursor: 'pointer',
-              'font-size': '13px', 'font-weight': '500',
-            }}
-          >Open Nested Modal</button>
-          <button
-            onClick={() => emit(CloseModal, props.modal.id)}
-            style={{
-              padding: '10px 20px', 'border-radius': '8px',
-              border: '1px solid rgba(255,255,255,0.2)', background: 'transparent',
-              color: '#fff', cursor: 'pointer', 'font-size': '13px',
-            }}
-          >Close</button>
-        </div>
+        {/* Demo: open another modal from within */}
+        <button
+          onClick={() => {
+            const sizes: ModalSize[] = ['small', 'medium', 'large']
+            const nextSize = sizes[(sizes.indexOf(modal.size) + 1) % sizes.length]
+            const nextNum = total + 1
+            emit(OpenModal, {
+              id: `modal-${Date.now()}`,
+              title: `Nested Modal #${nextNum}`,
+              content: `This is a ${nextSize} modal opened from within "${modal.title}". You can keep stacking modals. Press Escape to close the top modal.`,
+              size: nextSize,
+            })
+          }}
+          style={{
+            'margin-top': 16,
+            padding: '8px 16px',
+            'border-radius': 8,
+            border: '1px solid #6366f140',
+            background: '#6366f120',
+            color: '#818cf8',
+            'font-size': 13,
+            'font-weight': 600,
+            cursor: 'pointer',
+          }}
+        >
+          Open Another Modal
+        </button>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          padding: '16px 24px',
+          'border-top': '1px solid #334155',
+          display: 'flex',
+          'justify-content': 'flex-end',
+          gap: 10,
+        }}
+      >
+        <button
+          onClick={() => emit(CancelAction, modal.id)}
+          style={{
+            padding: '8px 20px',
+            'border-radius': 8,
+            border: '1px solid #475569',
+            background: 'transparent',
+            color: '#94a3b8',
+            'font-size': 13,
+            'font-weight': 600,
+            cursor: 'pointer',
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => emit(ConfirmAction, modal.id)}
+          style={{
+            padding: '8px 20px',
+            'border-radius': 8,
+            border: 'none',
+            background: '#3b82f6',
+            color: '#fff',
+            'font-size': 13,
+            'font-weight': 600,
+            cursor: 'pointer',
+          }}
+        >
+          Confirm
+        </button>
       </div>
     </div>
   )
 }
 
-function Backdrop(props: { count: number }) {
-  const emit = useEmit()
-
-  return (
-    <Show when={props.count > 0}>
-      <div
-        onClick={() => emit(CloseTopModal, undefined)}
-        style={{
-          position: 'fixed', inset: '0', 'z-index': '999',
-          background: `rgba(0,0,0,${Math.min(0.7, 0.3 + props.count * 0.1)})`,
-          'backdrop-filter': `blur(${Math.min(8, props.count * 3)}px)`,
-          transition: 'all 0.3s',
-        }}
-      />
-    </Show>
-  )
-}
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 
 export default function App() {
   const emit = useEmit()
-  const stack = useSignal(modalStack)
+  const stack = usePulse(ModalStackChanged, [] as ModalData[])
+  const activeId = usePulse(ActiveModalIdChanged, null as string | null)
 
-  onMount(() => {
-    const cleanup = setupKeyListener()
-    onCleanup(cleanup)
-  })
+  let modalCounter = useRef(0)
 
-  const DEMO_MODALS = [
-    { title: 'Welcome', content: 'Welcome to the modal system! This modal uses scale and fade tweens for smooth entrance/exit animations. Try opening nested modals and stacking them.', color: '#6c5ce7', size: 'md' as const },
-    { title: 'Settings', content: 'Configure your preferences here. The backdrop blur increases with each stacked modal for a nice depth effect.', color: '#00b894', size: 'lg' as const },
-    { title: 'Alert', content: 'This is a small alert modal. Press Escape to dismiss or click the backdrop.', color: '#d63031', size: 'sm' as const },
-    { title: 'Large Form', content: 'This large modal could contain a complex form. Each modal gets focus-trapped so keyboard navigation stays within the active modal.', color: '#0984e3', size: 'lg' as const },
-  ]
+  const handleOpen = 
+    (size: ModalSize) => {
+      modalCounter++
+      const n = modalCounter
+      emit(OpenModal, {
+        id: `modal-${Date.now()}`,
+        title: `Modal #${n}`,
+        content: `This is a ${size} modal dialog. It supports focus trapping, stacking with visual offset, and animated entrance/exit transitions. Try opening another modal from inside, or pressing Escape to close.`,
+        size,
+      })
+    }
+  const hasModals = stack().length > 0
+  const anyEntering = stack().some((m) => m.state === 'entering')
+  const anyExiting = stack().some((m) => m.state === 'exiting')
 
   return (
-    <div style={{
-      display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '32px',
-      'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    }}>
-      <h1 style={{ 'font-size': '28px', 'font-weight': '300', 'letter-spacing': '2px' }}>
+    <div
+      style={{
+        'min-height': '100vh',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        'font-family':
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        display: 'flex',
+        'flex-direction': 'column',
+        'align-items': 'center',
+        'justify-content': 'center',
+        padding: 40,
+      }}
+    >
+      <h1
+        style={{
+          'font-size': 32,
+          'font-weight': 800,
+          color: '#f1f5f9',
+          'margin-bottom': 8,
+        }}
+      >
         Modal System
       </h1>
-
-      <p style={{ color: 'rgba(255,255,255,0.5)', 'font-size': '14px', 'max-width': '500px', 'text-align': 'center', 'line-height': '1.6' }}>
-        Stacked modals with scale/fade tweens, backdrop blur, and Escape key to close. Each nested modal scales down the ones below.
+      <p style={{ color: '#64748b', 'font-size': 14, 'margin-bottom': 40, 'text-align': 'center', 'max-width': 500 }}>
+        Stacked modal dialogs with animated entrance/exit, focus trapping, backdrop blur,
+        and visual stacking offset. Escape closes the top modal.
       </p>
 
-      <div style={{ display: 'flex', gap: '12px', 'flex-wrap': 'wrap', 'justify-content': 'center' }}>
-        <For each={DEMO_MODALS}>
-          {(cfg) => (
-            <button
-              onClick={() => emit(OpenModal, cfg)}
-              style={{
-                padding: '12px 24px', 'border-radius': '10px', border: 'none',
-                background: cfg.color, color: '#fff', cursor: 'pointer',
-                'font-size': '14px', 'font-weight': '500',
-                'box-shadow': `0 4px 16px ${cfg.color}44`,
-              }}
-            >{cfg.title} ({cfg.size})</button>
-          )}
-        </For>
+      {/* Open buttons */}
+      <div style={{ display: 'flex', gap: 12, 'margin-bottom': 24 }}>
+        {(['small', 'medium', 'large'] as ModalSize[]).map((size) => (
+          <button
+            onClick={() => handleOpen(size)}
+            style={{
+              padding: '12px 24px',
+              'border-radius': 10,
+              border: '1px solid #3b82f640',
+              background: '#3b82f620',
+              color: '#60a5fa',
+              'font-size': 14,
+              'font-weight': 600,
+              cursor: 'pointer',
+              'text-transform': 'capitalize',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#3b82f635'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#3b82f620'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}
+          >
+            Open {size}
+          </button>
+        ))}
       </div>
 
-      <div style={{ color: 'rgba(255,255,255,0.3)', 'font-size': '13px' }}>
-        Active modals: {stack().length}
-      </div>
+      {stack().length > 0 && (
+        <button
+          onClick={() => emit(CloseAll, undefined)}
+          style={{
+            padding: '10px 20px',
+            'border-radius': 10,
+            border: '1px solid #ef444440',
+            background: '#ef444420',
+            color: '#f87171',
+            'font-size': 13,
+            'font-weight': 600,
+            cursor: 'pointer',
+            'margin-bottom': 24,
+          }}
+        >
+          Close All ({stack().length})
+        </button>
+      )}
 
-      {/* Backdrop */}
-      <Backdrop count={stack().length} />
+      <p style={{ color: '#475569', 'font-size': 13 }}>
+        Open modals: {stack().length}
+      </p>
 
-      {/* Modal stack */}
-      <For each={stack()}>
-        {(modal, i) => <Modal modal={modal} index={i()} total={stack().length} />}
-      </For>
+      {/* Backdrop + Modal stack() */}
+      {hasModals && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            'z-index': 999,
+          }}
+        >
+          {/* Backdrop */}
+          <div
+            onClick={() => {
+              if (activeId()) emit(CloseModal, activeId())
+            }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              'backdrop-filter': `blur(${Math.min(stack.length * 4, 16)}px)`,
+              WebkitBackdropFilter: `blur(${Math.min(stack.length * 4, 16)}px)`,
+              opacity: stack.some((m) => m.state === 'exiting') && stack().length <= 1 ? 0 : 1,
+              transition: 'opacity 0.3s ease, backdrop-filter 0.3s ease',
+            }}
+          />
+
+          {/* Modals */}
+          {stack().map((modal, i) => (
+            <Modal
+              modal={modal}
+              index={i}
+              total={stack().length}
+              isActive={modal.id === activeId()}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

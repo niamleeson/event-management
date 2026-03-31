@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, TweenValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -20,7 +16,7 @@ export interface FileNode {
 /*  File tree data                                                    */
 /* ------------------------------------------------------------------ */
 
-export const FILE_TREE: FileNode = {
+const FILE_TREE: FileNode = {
   id: 'root', name: 'project', type: 'folder', children: [
     { id: 'src', name: 'src', type: 'folder', children: [
       { id: 'comp', name: 'components', type: 'folder', children: [
@@ -56,7 +52,7 @@ export const FILE_TREE: FileNode = {
 /*  File type icons                                                   */
 /* ------------------------------------------------------------------ */
 
-export const FILE_ICONS: Record<string, { icon: string; color: string }> = {
+const FILE_ICONS: Record<string, { icon: string; color: string }> = {
   ts: { icon: 'TS', color: '#3178c6' },
   vue: { icon: 'V', color: '#42b883' },
   css: { icon: '#', color: '#264de4' },
@@ -78,63 +74,37 @@ export const SearchChanged = engine.event<string>('SearchChanged')
 export const KeyNav = engine.event<'up' | 'down' | 'enter'>('KeyNav')
 
 /* ------------------------------------------------------------------ */
-/*  Signals                                                           */
+/*  State-changed events                                              */
 /* ------------------------------------------------------------------ */
 
-export const expandedFolders: Signal<Set<string>> = engine.signal(
-  ToggleFolder,
-  new Set<string>(['root', 'src']),
-  (prev, id) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  },
-)
-
-export const selectedFile: Signal<string> = engine.signal(
-  SelectFile,
-  '',
-  (_prev, id) => id,
-)
-
-export const searchQuery: Signal<string> = engine.signal(
-  SearchChanged,
-  '',
-  (_prev, q) => q,
-)
+export const ExpandedFoldersChanged = engine.event<Set<string>>('ExpandedFoldersChanged')
+export const SelectedFileChanged = engine.event<string>('SelectedFileChanged')
+export const SearchQueryChanged = engine.event<string>('SearchQueryChanged')
 
 /* ------------------------------------------------------------------ */
-/*  Expand/collapse tweens (pool)                                     */
+/*  State                                                             */
 /* ------------------------------------------------------------------ */
 
-export const expandTweens: Map<string, TweenValue> = new Map()
-const expandStarts: Map<string, ReturnType<typeof engine.event>> = new Map()
-
-function getAllFolderIds(node: FileNode): string[] {
-  const ids: string[] = []
-  if (node.type === 'folder') {
-    ids.push(node.id)
-    node.children?.forEach(c => ids.push(...getAllFolderIds(c)))
-  }
-  return ids
-}
-
-for (const folderId of getAllFolderIds(FILE_TREE)) {
-  const start = engine.event(`Expand_${folderId}`)
-  expandStarts.set(folderId, start)
-  expandTweens.set(folderId, engine.tween({
-    start,
-    from: 0,
-    to: 1,
-    duration: 200,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-}
+let expandedFolders = new Set<string>(['root', 'src'])
+let selectedFile = ''
+let searchQuery = ''
 
 engine.on(ToggleFolder, (id) => {
-  const start = expandStarts.get(id)
-  if (start) engine.emit(start, undefined)
+  const next = new Set(expandedFolders)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedFolders = next
+  engine.emit(ExpandedFoldersChanged, expandedFolders)
+})
+
+engine.on(SelectFile, (id) => {
+  selectedFile = id
+  engine.emit(SelectedFileChanged, selectedFile)
+})
+
+engine.on(SearchChanged, (q) => {
+  searchQuery = q
+  engine.emit(SearchQueryChanged, searchQuery)
 })
 
 /* ------------------------------------------------------------------ */
@@ -152,22 +122,22 @@ function flattenTree(node: FileNode, expanded: Set<string>): string[] {
 }
 
 engine.on(KeyNav, (dir) => {
-  const flat = flattenTree(FILE_TREE, expandedFolders.value)
-  const currentIdx = flat.indexOf(selectedFile.value)
+  const flat = flattenTree(FILE_TREE, expandedFolders)
+  const currentIdx = flat.indexOf(selectedFile)
 
   if (dir === 'up' && currentIdx > 0) {
     engine.emit(SelectFile, flat[currentIdx - 1])
   } else if (dir === 'down' && currentIdx < flat.length - 1) {
     engine.emit(SelectFile, flat[currentIdx + 1])
   } else if (dir === 'enter') {
-    const node = findNode(FILE_TREE, selectedFile.value)
+    const node = findNode(FILE_TREE, selectedFile)
     if (node?.type === 'folder') {
       engine.emit(ToggleFolder, node.id)
     }
   }
 })
 
-export function findNode(root: FileNode, id: string): FileNode | null {
+function findNode(root: FileNode, id: string): FileNode | null {
   if (root.id === id) return root
   if (root.children) {
     for (const child of root.children) {
@@ -178,7 +148,7 @@ export function findNode(root: FileNode, id: string): FileNode | null {
   return null
 }
 
-export function getBreadcrumbs(root: FileNode, id: string): string[] {
+function getBreadcrumbs(root: FileNode, id: string): string[] {
   const path: string[] = []
   function walk(node: FileNode): boolean {
     path.push(node.name)
@@ -194,3 +164,13 @@ export function getBreadcrumbs(root: FileNode, id: string): string[] {
   walk(root)
   return path
 }
+
+/* ------------------------------------------------------------------ */
+/*  Initial values                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getExpandedFolders() { return expandedFolders }
+export function getSelectedFile() { return selectedFile }
+export function getSearchQuery() { return searchQuery }
+
+export { FILE_TREE, FILE_ICONS, getBreadcrumbs }

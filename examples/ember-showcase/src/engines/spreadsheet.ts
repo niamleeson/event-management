@@ -11,8 +11,8 @@ export const engine = createEngine()
 // ---------------------------------------------------------------------------
 
 export interface CellData {
-  raw: string       // what user typed (could be formula like =A1+B2)
-  computed: string   // evaluated result
+  raw: string
+  computed: string
   error: boolean
 }
 
@@ -45,7 +45,7 @@ export function parseCellRef(ref: string): CellRef | null {
 export const CellEdited = engine.event<{ row: number; col: number; value: string }>('CellEdited')
 export const CellSelected = engine.event<CellRef | null>('CellSelected')
 export const FormulaBarChanged = engine.event<string>('FormulaBarChanged')
-export const RecalcAll = engine.event<void>('RecalcAll')
+export const GridChanged = engine.event<void>('GridChanged')
 
 // ---------------------------------------------------------------------------
 // Formula evaluation
@@ -56,7 +56,6 @@ function evaluateFormula(formula: string, grid: Record<string, CellData>, visite
 
   const expr = formula.slice(1).toUpperCase()
 
-  // Replace cell references with their values
   const resolved = expr.replace(/[A-H][1-8]/g, (ref) => {
     if (visited.has(ref)) return '#CIRC!'
     const cell = grid[ref]
@@ -71,7 +70,6 @@ function evaluateFormula(formula: string, grid: Record<string, CellData>, visite
   })
 
   try {
-    // Support SUM(A1:A4) function
     const sumResolved = resolved.replace(/SUM\(([A-H])([1-8]):([A-H])([1-8])\)/g,
       (_match, c1, r1, c2, r2) => {
         let sum = 0
@@ -92,10 +90,8 @@ function evaluateFormula(formula: string, grid: Record<string, CellData>, visite
         return String(sum)
       })
 
-    // Simple math eval (safe: only numbers and operators)
     const sanitized = sumResolved.replace(/[^0-9+\-*/.() ]/g, '')
     if (sanitized.length === 0) return '#ERR!'
-    // eslint-disable-next-line no-eval
     const result = Function(`"use strict"; return (${sanitized})`)()
     return typeof result === 'number' ? (Number.isInteger(result) ? String(result) : result.toFixed(2)) : String(result)
   } catch {
@@ -120,17 +116,15 @@ function recalculate(grid: Record<string, CellData>): Record<string, CellData> {
 }
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-// Initialize grid with some default data
 const initialGrid: Record<string, CellData> = {}
 for (let r = 0; r < ROWS; r++) {
   for (let c = 0; c < COLS; c++) {
     initialGrid[cellKey(r, c)] = { raw: '', computed: '', error: false }
   }
 }
-// Add some sample data
 initialGrid['A1'] = { raw: '100', computed: '100', error: false }
 initialGrid['B1'] = { raw: '200', computed: '200', error: false }
 initialGrid['C1'] = { raw: '=A1+B1', computed: '300', error: false }
@@ -139,38 +133,43 @@ initialGrid['B2'] = { raw: '75', computed: '75', error: false }
 initialGrid['C2'] = { raw: '=A2*B2', computed: '3750', error: false }
 initialGrid['A3'] = { raw: '=SUM(A1:A2)', computed: '150', error: false }
 
-export const grid = engine.signal<Record<string, CellData>>(
-  CellEdited, initialGrid,
-  (prev, { row, col, value }) => {
-    const key = cellKey(row, col)
-    const next = { ...prev }
-    const num = parseFloat(value)
-    next[key] = {
-      raw: value,
-      computed: value.startsWith('=') ? '' : (isNaN(num) ? value : String(num)),
-      error: false,
-    }
-    return recalculate(next)
-  },
-)
+let _grid: Record<string, CellData> = initialGrid
+let _selectedCell: CellRef | null = null
+let _formulaBarText = ''
 
-engine.signalUpdate(grid, RecalcAll, (prev) => recalculate(prev))
+export function getGrid(): Record<string, CellData> { return _grid }
+export function getSelectedCell(): CellRef | null { return _selectedCell }
+export function getFormulaBarText(): string { return _formulaBarText }
 
-export const selectedCell = engine.signal<CellRef | null>(
-  CellSelected, null, (_prev, cell) => cell,
-)
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
 
-export const formulaBarText = engine.signal<string>(
-  FormulaBarChanged, '', (_prev, text) => text,
-)
+engine.on(CellEdited, ({ row, col, value }) => {
+  const key = cellKey(row, col)
+  const num = parseFloat(value)
+  _grid = { ..._grid }
+  _grid[key] = {
+    raw: value,
+    computed: value.startsWith('=') ? '' : (isNaN(num) ? value : String(num)),
+    error: false,
+  }
+  _grid = recalculate(_grid)
+  engine.emit(GridChanged, undefined)
+})
 
-// Sync formula bar with selected cell
 engine.on(CellSelected, (cell) => {
+  _selectedCell = cell
   if (cell) {
     const key = cellKey(cell.row, cell.col)
-    const data = grid.value[key]
-    engine.emit(FormulaBarChanged, data?.raw ?? '')
+    const data = _grid[key]
+    _formulaBarText = data?.raw ?? ''
   } else {
-    engine.emit(FormulaBarChanged, '')
+    _formulaBarText = ''
   }
+  engine.emit(GridChanged, undefined)
+})
+
+engine.on(FormulaBarChanged, (text: string) => {
+  _formulaBarText = text
 })

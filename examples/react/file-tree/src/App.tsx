@@ -1,12 +1,12 @@
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import { useCallback, useRef, useEffect } from 'react'
 import {
-  tree,
-  selectedId,
-  expandedIds,
-  searchFilter,
-  contextMenu,
-  clipboard,
+  TreeChanged,
+  SelectedIdChanged,
+  ExpandedIdsChanged,
+  SearchFilterChanged,
+  ContextMenuChanged,
+  ClipboardChanged,
   ToggleFolder,
   SelectItem,
   CreateFile,
@@ -143,7 +143,7 @@ function TreeItem({
             transition: 'transform 0.2s ease',
           }}
         >
-          \u25B6
+          {'\u25B6'}
         </span>
       ) : (
         <span style={{ width: 16, marginRight: 4 }} />
@@ -257,17 +257,100 @@ function ContextMenu({ state }: { state: ContextMenuState }) {
 }
 
 // ---------------------------------------------------------------------------
+// Initial tree for usePulse defaults
+// ---------------------------------------------------------------------------
+
+const INITIAL_TREE: TreeNode[] = [
+  {
+    id: 'root',
+    name: 'my-project',
+    type: 'folder',
+    parentId: null,
+    children: [
+      {
+        id: 'src',
+        name: 'src',
+        type: 'folder',
+        parentId: 'root',
+        children: [
+          {
+            id: 'src-components',
+            name: 'components',
+            type: 'folder',
+            parentId: 'src',
+            children: [
+              { id: 'header-tsx', name: 'Header.tsx', type: 'file', parentId: 'src-components' },
+              { id: 'footer-tsx', name: 'Footer.tsx', type: 'file', parentId: 'src-components' },
+              { id: 'sidebar-tsx', name: 'Sidebar.tsx', type: 'file', parentId: 'src-components' },
+              { id: 'button-tsx', name: 'Button.tsx', type: 'file', parentId: 'src-components' },
+            ],
+          },
+          {
+            id: 'src-hooks',
+            name: 'hooks',
+            type: 'folder',
+            parentId: 'src',
+            children: [
+              { id: 'use-auth-ts', name: 'useAuth.ts', type: 'file', parentId: 'src-hooks' },
+              { id: 'use-theme-ts', name: 'useTheme.ts', type: 'file', parentId: 'src-hooks' },
+            ],
+          },
+          {
+            id: 'src-utils',
+            name: 'utils',
+            type: 'folder',
+            parentId: 'src',
+            children: [
+              { id: 'helpers-ts', name: 'helpers.ts', type: 'file', parentId: 'src-utils' },
+              { id: 'api-ts', name: 'api.ts', type: 'file', parentId: 'src-utils' },
+            ],
+          },
+          { id: 'app-tsx', name: 'App.tsx', type: 'file', parentId: 'src' },
+          { id: 'main-tsx', name: 'main.tsx', type: 'file', parentId: 'src' },
+          { id: 'styles-css', name: 'styles.css', type: 'file', parentId: 'src' },
+        ],
+      },
+      {
+        id: 'public',
+        name: 'public',
+        type: 'folder',
+        parentId: 'root',
+        children: [
+          { id: 'index-html', name: 'index.html', type: 'file', parentId: 'public' },
+          { id: 'favicon-ico', name: 'favicon.ico', type: 'file', parentId: 'public' },
+        ],
+      },
+      {
+        id: 'tests',
+        name: 'tests',
+        type: 'folder',
+        parentId: 'root',
+        children: [
+          { id: 'app-test-tsx', name: 'App.test.tsx', type: 'file', parentId: 'tests' },
+          { id: 'utils-test-ts', name: 'utils.test.ts', type: 'file', parentId: 'tests' },
+        ],
+      },
+      { id: 'pkg-json', name: 'package.json', type: 'file', parentId: 'root' },
+      { id: 'tsconfig-json', name: 'tsconfig.json', type: 'file', parentId: 'root' },
+      { id: 'readme-md', name: 'README.md', type: 'file', parentId: 'root' },
+      { id: 'gitignore', name: '.gitignore', type: 'file', parentId: 'root' },
+      { id: 'env-local', name: '.env.local', type: 'file', parentId: 'root' },
+    ],
+  },
+]
+
+// ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 
 export default function App() {
   const emit = useEmit()
-  const treeData = useSignal(tree)
-  const selected = useSignal(selectedId)
-  const expanded = useSignal(expandedIds)
-  const search = useSignal(searchFilter)
-  const ctxMenu = useSignal(contextMenu)
-  const clip = useSignal(clipboard)
+  const treeData = usePulse(TreeChanged, INITIAL_TREE)
+  const selected = usePulse(SelectedIdChanged, null as string | null)
+  const expanded = usePulse(ExpandedIdsChanged, new Set(['root', 'src']))
+  const search = usePulse(SearchFilterChanged, '')
+  const ctxMenu = usePulse(ContextMenuChanged, { visible: false, x: 0, y: 0, targetId: null } as ContextMenuState)
+  const clip = usePulse(ClipboardChanged, null as string | null)
 
   const flatItems = flattenTree(treeData, expanded)
 

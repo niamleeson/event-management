@@ -1,301 +1,430 @@
-import { For, Show, createSignal as solidSignal, onMount, onCleanup } from 'solid-js'
-import { useSignal, useEmit, useTween } from '@pulse/solid'
-import type { Signal, TweenValue, EventType } from '@pulse/core'
-import { engine } from './engine'
+import { onMount } from 'solid-js'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  ToggleFolder,
+  SelectItem,
+  CreateFile,
+  CreateFolder,
+  DeleteItem,
+  RenameItem,
+  SearchChanged,
+  ContextMenuOpen,
+  ContextMenuClose,
+  ClipboardCopy,
+  ClipboardPaste,
+} from './engine'
+import type { TreeNode, ContextMenuState } from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// File icons by extension
+// ---------------------------------------------------------------------------
 
-interface FileNode {
-  id: string
-  name: string
-  type: 'file' | 'folder'
-  children?: FileNode[]
-  icon?: string
+function getFileIcon(name: string): { icon: string; color: string } {
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  const map: Record<string, { icon: string; color: string }> = {
+    ts: { icon: 'TS', color: '#3178c6' },
+    tsx: { icon: 'TX', color: '#3178c6' },
+    js: { icon: 'JS', color: '#f7df1e' },
+    jsx: { icon: 'JX', color: '#f7df1e' },
+    json: { icon: '{}', color: '#5b9a4b' },
+    css: { icon: '#', color: '#264de4' },
+    html: { icon: '<>', color: '#e34c26' },
+    md: { icon: 'M', color: '#755838' },
+    ico: { icon: '\u25CF', color: '#8b8b8b' },
+    env: { icon: '\u26A1', color: '#ecd53f' },
+    local: { icon: '\u26A1', color: '#ecd53f' },
+    gitignore: { icon: 'G', color: '#f05032' },
+    test: { icon: '\u2713', color: '#15c213' },
+  }
+  // Check compound extensions
+  if (name.includes('.test.')) return map.test
+  if (name.startsWith('.env')) return map.env
+  if (name.startsWith('.git')) return map.gitignore
+  return map[ext] || { icon: '\u25A1', color: '#8b8b8b' }
 }
 
-/* ------------------------------------------------------------------ */
-/*  File tree data                                                    */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// TreeItem component
+// ---------------------------------------------------------------------------
 
-const FILE_TREE: FileNode[] = [
-  { id: '1', name: 'src', type: 'folder', children: [
-    { id: '1.1', name: 'components', type: 'folder', children: [
-      { id: '1.1.1', name: 'App.tsx', type: 'file', icon: '\u269B' },
-      { id: '1.1.2', name: 'Header.tsx', type: 'file', icon: '\u269B' },
-      { id: '1.1.3', name: 'Sidebar.tsx', type: 'file', icon: '\u269B' },
-      { id: '1.1.4', name: 'Footer.tsx', type: 'file', icon: '\u269B' },
-    ]},
-    { id: '1.2', name: 'hooks', type: 'folder', children: [
-      { id: '1.2.1', name: 'useAuth.ts', type: 'file', icon: '\u{1D4AF}' },
-      { id: '1.2.2', name: 'useTheme.ts', type: 'file', icon: '\u{1D4AF}' },
-    ]},
-    { id: '1.3', name: 'utils', type: 'folder', children: [
-      { id: '1.3.1', name: 'helpers.ts', type: 'file', icon: '\u{1D4AF}' },
-      { id: '1.3.2', name: 'constants.ts', type: 'file', icon: '\u{1D4AF}' },
-      { id: '1.3.3', name: 'api.ts', type: 'file', icon: '\u{1D4AF}' },
-    ]},
-    { id: '1.4', name: 'styles', type: 'folder', children: [
-      { id: '1.4.1', name: 'global.css', type: 'file', icon: '\u{1F3A8}' },
-      { id: '1.4.2', name: 'theme.css', type: 'file', icon: '\u{1F3A8}' },
-    ]},
-    { id: '1.5', name: 'main.tsx', type: 'file', icon: '\u269B' },
-    { id: '1.6', name: 'index.html', type: 'file', icon: '\u{1F310}' },
-  ]},
-  { id: '2', name: 'public', type: 'folder', children: [
-    { id: '2.1', name: 'favicon.ico', type: 'file', icon: '\u{1F5BC}' },
-    { id: '2.2', name: 'robots.txt', type: 'file', icon: '\u{1F4C4}' },
-  ]},
-  { id: '3', name: 'package.json', type: 'file', icon: '\u{1F4E6}' },
-  { id: '4', name: 'tsconfig.json', type: 'file', icon: '\u2699' },
-  { id: '5', name: 'README.md', type: 'file', icon: '\u{1F4D6}' },
-  { id: '6', name: '.gitignore', type: 'file', icon: '\u{1F6AB}' },
-]
-
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
-
-const ToggleExpand = engine.event<string>('ToggleExpand')
-const SelectFile = engine.event<string>('SelectFile')
-const SearchChanged = engine.event<string>('SearchChanged')
-const KeyNav = engine.event<'up' | 'down' | 'enter' | 'left' | 'right'>('KeyNav')
-
-// Expand/collapse tween
-const ExpandStart = engine.event('ExpandStart')
-const expandTween: TweenValue = engine.tween({
-  start: ExpandStart,
-  from: 0,
-  to: 1,
-  duration: 200,
-  easing: 'easeOut',
-})
-
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-const expandedFolders = engine.signal<Set<string>>(
-  ToggleExpand, new Set<string>(['1', '1.1']),
-  (prev, id) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  },
-)
-
-const selectedFile = engine.signal<string>(SelectFile, '', (_prev, id) => id)
-const searchQuery = engine.signal<string>(SearchChanged, '', (_prev, q) => q)
-
-engine.on(ToggleExpand, () => engine.emit(ExpandStart, undefined))
-
-/* ------------------------------------------------------------------ */
-/*  Flatten tree for keyboard nav                                     */
-/* ------------------------------------------------------------------ */
-
-function flattenTree(nodes: FileNode[], expanded: Set<string>, query: string): FileNode[] {
-  const result: FileNode[] = []
-  const q = query.toLowerCase()
-
-  function walk(items: FileNode[]) {
-    for (const node of items) {
-      if (q && !node.name.toLowerCase().includes(q)) {
-        if (node.children) walk(node.children)
-        continue
-      }
-      result.push(node)
-      if (node.type === 'folder' && expanded.has(node.id) && node.children) {
-        walk(node.children)
-      }
-    }
-  }
-  walk(nodes)
-  return result
-}
-
-/* ------------------------------------------------------------------ */
-/*  Keyboard navigation                                               */
-/* ------------------------------------------------------------------ */
-
-engine.on(KeyNav, (dir) => {
-  const flat = flattenTree(FILE_TREE, expandedFolders.value, searchQuery.value)
-  const idx = flat.findIndex(n => n.id === selectedFile.value)
-
-  if (dir === 'up' && idx > 0) engine.emit(SelectFile, flat[idx - 1].id)
-  else if (dir === 'down' && idx < flat.length - 1) engine.emit(SelectFile, flat[idx + 1].id)
-  else if (dir === 'enter' || dir === 'right') {
-    const node = flat[idx]
-    if (node?.type === 'folder') engine.emit(ToggleExpand, node.id)
-  } else if (dir === 'left') {
-    const node = flat[idx]
-    if (node?.type === 'folder' && expandedFolders.value.has(node.id)) {
-      engine.emit(ToggleExpand, node.id)
-    }
-  }
-})
-
-/* ------------------------------------------------------------------ */
-/*  Breadcrumbs                                                       */
-/* ------------------------------------------------------------------ */
-
-function getBreadcrumbs(nodes: FileNode[], targetId: string): FileNode[] {
-  const path: FileNode[] = []
-  function find(items: FileNode[]): boolean {
-    for (const node of items) {
-      path.push(node)
-      if (node.id === targetId) return true
-      if (node.children && find(node.children)) return true
-      path.pop()
-    }
-    return false
-  }
-  find(nodes)
-  return path
-}
-
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
-
-function TreeNode(props: { node: FileNode; depth: number }) {
+function TreeItem({
+  node,
+  depth,
+  isSelected,
+  isExpanded,
+  searchTerm,
+}: {
+  node: TreeNode
+  depth: number
+  isSelected: boolean
+  isExpanded: boolean
+  searchTerm: string
+}) {
   const emit = useEmit()
-  const expanded = useSignal(expandedFolders)
-  const selected = useSignal(selectedFile)
-  const expandVal = useTween(expandTween)
+  const isFolder = node.type === 'folder'
+  const fileIcon = !isFolder ? getFileIcon(node.name) : null
 
-  const isExpanded = () => expanded().has(props.node.id)
-  const isSelected = () => selected() === props.node.id
+  const handleClick = () => {
+    emit(SelectItem, node.id)
+    if (isFolder) {
+      emit(ToggleFolder, node.id)
+    }
+  }
+
+  const handleContextMenu = 
+    (e: MouseEvent) => {
+      e.preventDefault()
+      emit(ContextMenuOpen, { x: e.clientX, y: e.clientY, targetId: node.id })
+    }
+  // Highlight search match
+  function renderName() {
+    if (!searchTerm) return node.name
+    const idx = node.name.toLowerCase().indexOf(searchTerm.toLowerCase())
+    if (idx === -1) return node.name
+    return (
+      <>
+        {node.name.slice(0, idx)}
+        <span style={{ background: '#fbbf2440', color: '#fbbf24', 'border-radius': 2, padding: '0 1px' }}>
+          {node.name.slice(idx, idx + searchTerm.length)}
+        </span>
+        {node.name.slice(idx + searchTerm.length)}
+      </>
+    )
+  }
 
   return (
-    <div>
-      <div
-        onClick={() => {
-          emit(SelectFile, props.node.id)
-          if (props.node.type === 'folder') emit(ToggleExpand, props.node.id)
-        }}
-        style={{
-          display: 'flex', 'align-items': 'center', gap: '6px',
-          padding: '4px 8px', 'padding-left': `${12 + props.depth * 20}px`,
-          cursor: 'pointer', 'border-radius': '4px',
-          background: isSelected() ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
-          color: isSelected() ? '#89b4fa' : '#cdd6f4',
-          'font-size': '13px', 'user-select': 'none',
-        }}
-        onMouseEnter={(e) => { if (!isSelected()) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)' }}
-        onMouseLeave={(e) => { if (!isSelected()) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-      >
-        {/* Expand arrow for folders */}
-        <span style={{
-          width: '16px', 'font-size': '10px', color: '#666',
-          transform: props.node.type === 'folder' && isExpanded() ? 'rotate(90deg)' : 'rotate(0deg)',
-          transition: 'transform 0.15s',
-          display: 'inline-block', 'text-align': 'center',
-        }}>
-          {props.node.type === 'folder' ? '\u25B6' : ''}
+    <div
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
+      style={{
+        display: 'flex',
+        'align-items': 'center',
+        padding: '4px 8px',
+        'padding-left': 8 + depth * 18,
+        cursor: 'pointer',
+        background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+        'border-left': isSelected ? '2px solid #3b82f6' : '2px solid transparent',
+        color: isSelected ? '#e2e8f0' : '#94a3b8',
+        'font-size': 13,
+        'user-select': 'none',
+        transition: 'background 0.15s, padding-left 0.2s',
+        'border-radius': 4,
+        margin: '1px 4px',
+      }}
+      onMouseEnter={(e) => {
+        if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected) e.currentTarget.style.background = 'transparent'
+      }}
+    >
+      {/* Expand/collapse icon for folders */}
+      {isFolder ? (
+        <span
+          style={{
+            display: 'inline-block',
+            width: 16,
+            'text-align': 'center',
+            'margin-right': 4,
+            'font-size': 10,
+            color: '#64748b',
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease',
+          }}
+        >
+          \u25B6
         </span>
+      ) : (
+        <span style={{ width: 16, 'margin-right': 4 }} />
+      )}
 
-        {/* Icon */}
-        <span style={{ 'font-size': '14px' }}>
-          {props.node.type === 'folder' ? (isExpanded() ? '\u{1F4C2}' : '\u{1F4C1}') : (props.node.icon ?? '\u{1F4C4}')}
+      {/* Icon */}
+      {isFolder ? (
+        <span style={{ 'margin-right': 6, 'font-size': 14 }}>
+          {isExpanded ? '\uD83D\uDCC2' : '\uD83D\uDCC1'}
         </span>
-
-        {/* Name */}
-        <span style={{ 'font-weight': props.node.type === 'folder' ? '500' : '400' }}>
-          {props.node.name}
+      ) : (
+        <span
+          style={{
+            'margin-right': 6,
+            'font-size': 9,
+            'font-weight': 700,
+            color: fileIcon!.color,
+            background: `${fileIcon!.color}18`,
+            'border-radius': 3,
+            padding: '1px 3px',
+            'font-family': 'monospace',
+          }}
+        >
+          {fileIcon!.icon}
         </span>
-      </div>
+      )}
 
-      {/* Children */}
-      <Show when={props.node.type === 'folder' && isExpanded() && props.node.children}>
-        <div style={{ overflow: 'hidden' }}>
-          <For each={props.node.children!}>
-            {(child) => <TreeNode node={child} depth={props.depth + 1} />}
-          </For>
+      {/* Name */}
+      <span style={{ 'font-family': 'monospace', 'font-size': 13 }}>{renderName()}</span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ContextMenu
+// ---------------------------------------------------------------------------
+
+function ContextMenu({ state }: { state: ContextMenuState }) {
+  const emit = useEmit()
+  let menuRef = null
+
+  onMount(() => {
+    if (!state.visible) return
+    const handler = () => emit(ContextMenuClose, undefined)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  })
+
+  if (!state.visible || !state.targetId) return null
+
+  const items = [
+    { label: 'New File', action: () => {
+      const name = prompt('File name:')
+      if (name) emit(CreateFile, { parentId: state.targetId!, name })
+    }},
+    { label: 'New Folder', action: () => {
+      const name = prompt('Folder name:')
+      if (name) emit(CreateFolder, { parentId: state.targetId!, name })
+    }},
+    { label: 'Rename', action: () => {
+      const name = prompt('New name:')
+      if (name) emit(RenameItem, { id: state.targetId!, name })
+    }},
+    { label: 'Delete', action: () => emit(DeleteItem, state.targetId!) },
+    { label: 'Copy', action: () => emit(ClipboardCopy, state.targetId!) },
+    { label: 'Paste', action: () => emit(ClipboardPaste, state.targetId!) },
+  ]
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        left: state.x,
+        top: state.y,
+        background: '#1e293b',
+        border: '1px solid #334155',
+        'border-radius': 8,
+        padding: '4px 0',
+        'min-width': 160,
+        'box-shadow': '0 8px 24px rgba(0,0,0,0.4)',
+        'z-index': 9999,
+      }}
+    >
+      {items.map((item) => (
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            item.action()
+            emit(ContextMenuClose, undefined)
+          }}
+          style={{
+            padding: '8px 16px',
+            'font-size': 13,
+            color: '#e2e8f0',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+          }}
+        >
+          {item.label}
         </div>
-      </Show>
+      ))}
     </div>
   )
 }
 
-function Breadcrumbs() {
-  const selected = useSignal(selectedFile)
-  const crumbs = () => getBreadcrumbs(FILE_TREE, selected())
-
-  return (
-    <div style={{ display: 'flex', 'align-items': 'center', gap: '4px', padding: '8px 16px', background: '#181825', 'border-bottom': '1px solid #313244', 'font-size': '12px' }}>
-      <For each={crumbs()}>
-        {(node, i) => (
-          <>
-            <Show when={i() > 0}>
-              <span style={{ color: '#585b70' }}>/</span>
-            </Show>
-            <span style={{ color: i() === crumbs().length - 1 ? '#89b4fa' : '#a6adc8' }}>
-              {node.name}
-            </span>
-          </>
-        )}
-      </For>
-      <Show when={crumbs().length === 0}>
-        <span style={{ color: '#585b70' }}>No file selected</span>
-      </Show>
-    </div>
-  )
-}
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 
 export default function App() {
   const emit = useEmit()
-  const query = useSignal(searchQuery)
+  const treeData = usePulse(tree)
+  const selected = usePulse(selectedId)
+  const expanded = usePulse(expandedIds)
+  const search = usePulse(searchFilter)
+  const ctxMenu = usePulse(contextMenu)
+  const clip = usePulse(clipboard)
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'ArrowUp') { e.preventDefault(); emit(KeyNav, 'up') }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); emit(KeyNav, 'down') }
-    else if (e.key === 'Enter') { e.preventDefault(); emit(KeyNav, 'enter') }
-    else if (e.key === 'ArrowLeft') { e.preventDefault(); emit(KeyNav, 'left') }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); emit(KeyNav, 'right') }
+  const flatItems = flattenTree(treeData, expanded)
+
+  // Filter by search
+  const visibleItems = search
+    ? flatItems.filter((n) => n.name.toLowerCase().includes(search.toLowerCase()))
+    : flatItems
+
+  // Compute breadcrumb
+  const breadcrumb = selected ? getPath(treeData, selected) : []
+
+  // Keyboard navigation
+  let containerRef = null
+
+  const handleKeyDown = 
+    (e: KeyboardEvent) => {
+      const currentIndex = visibleItems.findIndex((n) => n.id === selected)
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        const next = Math.min(currentIndex + 1, visibleItems.length - 1)
+        emit(SelectItem, visibleItems[next].id)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        const prev = Math.max(currentIndex - 1, 0)
+        emit(SelectItem, visibleItems[prev].id)
+      } else if (e.key === 'ArrowRight' && selected) {
+        const node = visibleItems.find((n) => n.id === selected)
+        if (node?.type === 'folder' && !expanded.has(node.id)) {
+          emit(ToggleFolder, node.id)
+        }
+      } else if (e.key === 'ArrowLeft' && selected) {
+        const node = visibleItems.find((n) => n.id === selected)
+        if (node?.type === 'folder' && expanded.has(node.id)) {
+          emit(ToggleFolder, node.id)
+        }
+      } else if (e.key === 'Enter' && selected) {
+        const node = visibleItems.find((n) => n.id === selected)
+        if (node?.type === 'folder') {
+          emit(ToggleFolder, node.id)
+        }
+      } else if (e.key === 'Delete' && selected) {
+        emit(DeleteItem, selected)
+      }
+    }
+  // Compute depth for each flat item
+  function getDepth(node: TreeNode): number {
+    let d = 0
+    let current = node
+    const treeFlat = flatItems
+    while (current.parentId) {
+      d++
+      const parent = treeFlat.find((n) => n.id === current.parentId)
+      if (!parent) break
+      current = parent
+    }
+    return d
   }
 
-  onMount(() => { window.addEventListener('keydown', handleKeyDown) })
-  onCleanup(() => { window.removeEventListener('keydown', handleKeyDown) })
-
   return (
-    <div style={{ height: '100vh', display: 'flex', 'flex-direction': 'column', 'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+    <div
+      style={{
+        'min-height': '100vh',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        display: 'flex',
+        'flex-direction': 'column',
+      }}
+    >
       {/* Header */}
-      <div style={{ background: '#181825', padding: '12px 16px', 'border-bottom': '1px solid #313244', display: 'flex', 'align-items': 'center', gap: '12px' }}>
-        <span style={{ 'font-size': '18px' }}>{'\u{1F4C2}'}</span>
-        <h1 style={{ 'font-size': '16px', 'font-weight': '600', margin: '0' }}>File Tree Explorer</h1>
-      </div>
-
-      <Breadcrumbs />
-
-      {/* Search */}
-      <div style={{ padding: '8px 16px', background: '#1e1e2e', 'border-bottom': '1px solid #313244' }}>
+      <div
+        style={{
+          padding: '20px 24px',
+          'border-bottom': '1px solid #1e293b',
+        }}
+      >
+        <h1 style={{ 'font-size': 22, 'font-weight': 700, color: '#f1f5f9', margin: 0, 'margin-bottom': 12 }}>
+          File Explorer
+        </h1>
+        {/* Search */}
         <input
+          type="text"
           placeholder="Search files..."
-          value={query()}
-          onInput={(e) => emit(SearchChanged, e.currentTarget.value)}
+          value={search}
+          onChange={(e) => emit(SearchChanged, e.currentTarget.value)}
           style={{
-            width: '100%', padding: '8px 12px', background: '#313244', border: 'none',
-            'border-radius': '6px', color: '#cdd6f4', 'font-size': '13px', outline: 'none',
+            width: '100%',
+            'max-width': 400,
+            padding: '8px 12px',
+            'border-radius': 8,
+            border: '1px solid #334155',
+            background: '#0f172a',
+            color: '#e2e8f0',
+            'font-size': 13,
+            outline: 'none',
           }}
         />
       </div>
 
+      {/* Breadcrumb */}
+      {breadcrumb.length > 0 && (
+        <div
+          style={{
+            padding: '8px 24px',
+            'font-size': 12,
+            color: '#64748b',
+            display: 'flex',
+            'align-items': 'center',
+            gap: 4,
+            'border-bottom': '1px solid #1e293b22',
+          }}
+        >
+          {breadcrumb.map((segment, i) => (
+            <span style={{ display: 'flex', 'align-items': 'center', gap: 4 }}>
+              {i > 0 && <span style={{ color: '#475569' }}>/</span>}
+              <span style={{ color: i === breadcrumb.length - 1 ? '#e2e8f0' : '#64748b' }}>
+                {segment}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Tree */}
-      <div style={{ flex: '1', overflow: 'auto', padding: '8px 0' }}>
-        <For each={FILE_TREE}>
-          {(node) => <TreeNode node={node} depth={0} />}
-        </For>
+      <div
+        ref={containerRef}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        style={{
+          flex: 1,
+          'overflow-y': 'auto',
+          padding: '8px 0',
+          outline: 'none',
+        }}
+      >
+        {visibleItems.map((node) => (
+          <TreeItem
+            node={node}
+            depth={getDepth(node)}
+            isSelected={node.id === selected}
+            isExpanded={expanded.has(node.id)}
+            searchTerm={search}
+          />
+        ))}
+        {visibleItems.length === 0 && (
+          <div style={{ padding: 24, 'text-align': 'center', color: '#475569', 'font-size': 14 }}>
+            No files match "{search}"
+          </div>
+        )}
       </div>
 
       {/* Status bar */}
-      <div style={{
-        background: '#181825', padding: '4px 16px', 'border-top': '1px solid #313244',
-        'font-size': '11px', color: '#585b70', display: 'flex', gap: '16px',
-      }}>
-        <span>Use arrow keys to navigate</span>
-        <span>Enter to expand/collapse</span>
+      <div
+        style={{
+          padding: '8px 24px',
+          'border-top': '1px solid #1e293b',
+          'font-size': 12,
+          color: '#475569',
+          display: 'flex',
+          'justify-content': 'space-between',
+        }}
+      >
+        <span>{visibleItems.length} items</span>
+        <span>
+          {clip && 'Clipboard: copied'} | Arrow keys to navigate | Right-click for context menu
+        </span>
       </div>
+
+      {/* Context menu */}
+      <ContextMenu state={ctxMenu} />
     </div>
   )
 }

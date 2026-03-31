@@ -1,14 +1,13 @@
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  searchQuery,
-  searchResults,
-  isSearching,
-  selectedUserId,
-  userDetails,
-  isLoadingDetails,
-  error,
   SearchInput,
+  SearchQueryChanged,
+  SearchLoading,
+  SearchDone,
+  SearchError,
   UserSelected,
+  UserDetailsDone,
+  UserDetailsLoading,
   type User,
   type UserDetails,
 } from './engine'
@@ -205,8 +204,8 @@ const styles = {
 
 function SearchBar() {
   const emit = useEmit()
-  const query = useSignal(searchQuery)
-  const loading = useSignal(isSearching)
+  const query = usePulse(SearchQueryChanged, '')
+  const loading = usePulse(SearchLoading, false)
 
   return (
     <div style={styles.searchBox}>
@@ -225,7 +224,7 @@ function SearchBar() {
 
 function UserCard({ user }: { user: User }) {
   const emit = useEmit()
-  const selected = useSignal(selectedUserId)
+  const selected = usePulse(UserSelected, null as string | null)
 
   return (
     <div
@@ -252,9 +251,9 @@ function UserCard({ user }: { user: User }) {
 }
 
 function SearchResults() {
-  const results = useSignal(searchResults)
-  const query = useSignal(searchQuery)
-  const loading = useSignal(isSearching)
+  const results = usePulse(SearchDone, [] as User[])
+  const query = usePulse(SearchQueryChanged, '')
+  const loading = usePulse(SearchLoading, false)
 
   if (loading && results.length === 0) {
     return <div style={styles.loadingOverlay}>Searching...</div>
@@ -282,9 +281,9 @@ function SearchResults() {
 }
 
 function UserDetailsPanel() {
-  const details = useSignal(userDetails) as UserDetails | null
-  const loading = useSignal(isLoadingDetails)
-  const selected = useSignal(selectedUserId)
+  const details = usePulse(UserDetailsDone, null as UserDetails | null)
+  const loading = usePulse(UserDetailsLoading, false)
+  const selected = usePulse(UserSelected, null as string | null)
 
   if (!selected) return null
 
@@ -342,7 +341,7 @@ function UserDetailsPanel() {
 }
 
 function ErrorBanner() {
-  const err = useSignal(error)
+  const err = usePulse(SearchError, null as string | null)
   if (!err) return null
   return <div style={styles.errorBox}>{err}</div>
 }

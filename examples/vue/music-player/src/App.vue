@@ -1,17 +1,32 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
+import { providePulse, useEmit, usePulse, useSignal } from '@pulse/vue'
 import {
-  engine, PLAYLIST, Play, Pause, NextTrack, PrevTrack, SelectTrack,
-  currentTrack, isPlaying, progress, visualizerBars, albumRotation, VisualizerUpdated,
+  engine,
+  PLAYLIST,
+  Play,
+  Pause,
+  NextTrack,
+  PrevTrack,
+  SelectTrack,
+  currentTrack,
+  isPlaying,
+  progress,
+  visualizerBars,
+  albumRotation,
+  VisualizerUpdated,
+  CurrentTrackChanged,
+  IsPlayingChanged,
+  ProgressChanged,
+  AlbumRotationChanged,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const track = useSignal(currentTrack)
-const playing = useSignal(isPlaying)
-const prog = useSignal(progress)
-const rotation = useSignal(albumRotation)
+const track = usePulse(CurrentTrackChanged, currentTrack)
+const playing = usePulse(IsPlayingChanged, isPlaying)
+const prog = usePulse(ProgressChanged, progress)
+const rotation = usePulse(AlbumRotationChanged, albumRotation)
 
 // Force re-render on visualizer update
 const vizKey = useSignal(engine.signal(VisualizerUpdated, 0, (prev) => prev + 1))

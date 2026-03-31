@@ -1,4 +1,4 @@
-import { createEngine, type TweenValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -38,81 +38,39 @@ export const OpenModal = engine.event<ModalConfig>('OpenModal')
 export const CloseModal = engine.event<string>('CloseModal')
 export const CloseTopModal = engine.event<void>('CloseTopModal')
 export const CloseAllModals = engine.event<void>('CloseAllModals')
-export const ModalOpened = engine.event<string>('ModalOpened')
-export const ModalClosed = engine.event<string>('ModalClosed')
-
-// Animation events per modal
-export const ModalEnter: Record<string, ReturnType<typeof engine.event<void>>> = {}
-export const ModalEnterDone: Record<string, ReturnType<typeof engine.event<void>>> = {}
+export const ModalStackChanged = engine.event<void>('ModalStackChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const modalStack = engine.signal<ModalConfig[]>(
-  OpenModal, [],
-  (prev, modal) => [...prev, modal],
-)
+let _modalStack: ModalConfig[] = []
 
-engine.signalUpdate(modalStack, CloseModal, (prev, id) =>
-  prev.filter((m) => m.id !== id),
-)
-
-engine.signalUpdate(modalStack, CloseTopModal, (prev) =>
-  prev.length > 0 ? prev.slice(0, -1) : prev,
-)
-
-engine.signalUpdate(modalStack, CloseAllModals, () => [])
-
-export const stackDepth = engine.signal<number>(
-  OpenModal, 0, (prev) => prev + 1,
-)
-engine.signalUpdate(stackDepth, CloseModal, (prev) => Math.max(0, prev - 1))
-engine.signalUpdate(stackDepth, CloseTopModal, (prev) => Math.max(0, prev - 1))
-engine.signalUpdate(stackDepth, CloseAllModals, () => 0)
+export function getModalStack(): ModalConfig[] { return _modalStack }
+export function getStackDepth(): number { return _modalStack.length }
 
 // ---------------------------------------------------------------------------
-// Tweens — backdrop opacity and modal scale
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const modalTweens: Record<string, { scale: TweenValue; opacity: TweenValue }> = {}
-
-export function createModalTweens(id: string): { scale: TweenValue; opacity: TweenValue } {
-  const enterEvt = engine.event<void>(`ModalEnter_${id}`)
-  const enterDone = engine.event<void>(`ModalEnterDone_${id}`)
-  ModalEnter[id] = enterEvt
-  ModalEnterDone[id] = enterDone
-
-  const scale = engine.tween({
-    start: enterEvt,
-    done: enterDone,
-    from: 0.85,
-    to: 1,
-    duration: 250,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  })
-
-  const opacity = engine.tween({
-    start: enterEvt,
-    from: 0,
-    to: 1,
-    duration: 200,
-    easing: (t: number) => t,
-  })
-
-  modalTweens[id] = { scale, opacity }
-  return { scale, opacity }
-}
-
-// Trigger animations on open
-engine.on(OpenModal, (modal) => {
-  createModalTweens(modal.id)
-  setTimeout(() => {
-    if (ModalEnter[modal.id]) {
-      engine.emit(ModalEnter[modal.id], undefined)
-    }
-  }, 10)
+engine.on(OpenModal, (modal: ModalConfig) => {
+  _modalStack = [..._modalStack, modal]
+  engine.emit(ModalStackChanged, undefined)
 })
 
-// Start frame loop for tweens
-engine.startFrameLoop()
+engine.on(CloseModal, (id: string) => {
+  _modalStack = _modalStack.filter((m) => m.id !== id)
+  engine.emit(ModalStackChanged, undefined)
+})
+
+engine.on(CloseTopModal, () => {
+  if (_modalStack.length > 0) {
+    _modalStack = _modalStack.slice(0, -1)
+    engine.emit(ModalStackChanged, undefined)
+  }
+})
+
+engine.on(CloseAllModals, () => {
+  _modalStack = []
+  engine.emit(ModalStackChanged, undefined)
+})

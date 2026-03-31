@@ -1,15 +1,25 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSpring, useSignal } from '@pulse/vue'
+import { providePulse, useEmit, usePulse, useSpring } from '@pulse/vue'
 import {
-  engine, ITEMS, ANGLE_STEP, DragStart, DragMove, DragEnd, ItemSelected,
-  rotationSpring, selectedItem, selectedZSprings,
+  engine,
+  ITEMS,
+  ANGLE_STEP,
+  DragStart,
+  DragMove,
+  DragEnd,
+  ItemSelected,
+  rotationSpring,
+  selectedItem,
+  selectedZSprings,
+  SelectedItemChanged,
+  RotationSpringVal,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const rotation = useSpring(rotationSpring)
-const selected = useSignal(selectedItem)
+const rotation = usePulse(RotationSpringVal, rotationSpring.value)
+const selected = usePulse(SelectedItemChanged, selectedItem)
 const zBoosts = ITEMS.map((_, i) => useSpring(selectedZSprings[i]))
 
 let dragging = false

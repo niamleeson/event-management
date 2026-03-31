@@ -4,10 +4,10 @@ import {
   engine,
   Increment,
   Decrement,
-  count,
-  animatedCount,
-  colorIntensity,
-  bounceScale,
+  CountChanged,
+  AnimatedCountChanged,
+  ColorIntensityChanged,
+  BounceScaleChanged,
 } from './engine'
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ function getTextColor(intensity: number): string {
       [style.background]="bgColor()"
     >
       <h1 class="title">Animated Counter</h1>
-      <p class="subtitle">Tweens smoothly animate the count and background color</p>
+      <p class="subtitle">Smooth animation via engine.on() handlers with requestAnimationFrame</p>
 
       <div class="counter-area" [style.transform]="'scale(' + bounce() + ')'">
         <div class="counter-number" [style.color]="textColor()">
@@ -72,94 +72,32 @@ function getTextColor(intensity: number): string {
     </div>
   `,
   styles: [`
-    .page {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      transition: background 0.1s;
-    }
-    .title {
-      font-size: 28px;
-      font-weight: 700;
-      color: #1a1a2e;
-      margin-bottom: 8px;
-    }
-    .subtitle {
-      color: #6c757d;
-      font-size: 14px;
-      margin-bottom: 48px;
-    }
-    .counter-area {
-      margin-bottom: 48px;
-    }
-    .counter-number {
-      font-size: 120px;
-      font-weight: 800;
-      line-height: 1;
-      text-align: center;
-      font-variant-numeric: tabular-nums;
-      transition: color 0.3s;
-      user-select: none;
-    }
-    .counter-detail {
-      text-align: center;
-      font-size: 14px;
-      color: #aaa;
-      margin-top: 8px;
-    }
-    .buttons {
-      display: flex;
-      gap: 16px;
-    }
-    .btn {
-      width: 80px;
-      height: 80px;
-      border-radius: 20px;
-      border: none;
-      color: #fff;
-      font-size: 36px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 0.1s, box-shadow 0.1s;
-    }
-    .btn:active {
-      transform: scale(0.95);
-    }
-    .decrement {
-      background: #e63946;
-      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
-    }
-    .increment {
-      background: #4361ee;
-      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
-    }
-    .hint {
-      margin-top: 48px;
-      color: #bbb;
-      font-size: 13px;
-    }
+    .page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: background 0.1s; }
+    .title { font-size: 28px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
+    .subtitle { color: #6c757d; font-size: 14px; margin-bottom: 48px; }
+    .counter-area { margin-bottom: 48px; }
+    .counter-number { font-size: 120px; font-weight: 800; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; transition: color 0.3s; user-select: none; }
+    .counter-detail { text-align: center; font-size: 14px; color: #aaa; margin-top: 8px; }
+    .buttons { display: flex; gap: 16px; }
+    .btn { width: 80px; height: 80px; border-radius: 20px; border: none; color: #fff; font-size: 36px; font-weight: 700; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+    .btn:active { transform: scale(0.95); }
+    .decrement { background: #e63946; box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3); }
+    .increment { background: #4361ee; box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3); }
+    .hint { margin-top: 48px; color: #bbb; font-size: 13px; }
   `],
 })
 export class SimpleAnimationComponent implements OnInit, OnDestroy {
-  currentCount: WritableSignal<number>
-  animCount: WritableSignal<number>
-  colorT: WritableSignal<number>
-  bounce: WritableSignal<number>
+  currentCount = this.pulse.use(CountChanged, 0)
+  animCount = this.pulse.use(AnimatedCountChanged, 0)
+  colorT = this.pulse.use(ColorIntensityChanged, 0)
+  bounce = this.pulse.use(BounceScaleChanged, 1)
 
   displayCount = computed(() => Math.round(this.animCount()))
 
   bgColor = computed(() => getBackgroundColor(this.colorT()))
   textColor = computed(() => getTextColor(this.colorT()))
 
-  constructor(private pulse: PulseService) {
-    this.currentCount = pulse.signal(count)
-    this.animCount = pulse.tween(animatedCount)
-    this.colorT = pulse.tween(colorIntensity)
-    this.bounce = pulse.tween(bounceScale)
-  }
+  constructor(private pulse: PulseService) {}
 
   ngOnInit(): void {
     ;(window as any).__pulseEngine = engine

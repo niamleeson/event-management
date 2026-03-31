@@ -1,10 +1,9 @@
 import { useRef } from 'react'
-import { useSignal, useEmit, useTween } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  filters,
-  undoStack,
-  redoStack,
-  filterTransition,
+  FiltersChanged,
+  UndoStackChanged,
+  RedoStackChanged,
   FilterAdded,
   FilterRemoved,
   FilterReordered,
@@ -300,9 +299,9 @@ function FilterToolbar() {
 
 function ActionBar() {
   const emit = useEmit()
-  const undo = useSignal(undoStack)
-  const redo = useSignal(redoStack)
-  const currentFilters = useSignal(filters)
+  const undo = usePulse(UndoStackChanged, [] as Filter[][])
+  const redo = usePulse(RedoStackChanged, [] as Filter[][])
+  const currentFilters = usePulse(FiltersChanged, [] as Filter[])
 
   return (
     <div style={styles.actionBar}>
@@ -333,7 +332,7 @@ function ActionBar() {
 
 function FilterItem({ filter, index }: { filter: Filter; index: number }) {
   const emit = useEmit()
-  const totalFilters = useSignal(filters).length
+  const totalFilters = usePulse(FiltersChanged, [] as Filter[]).length
   const cfg = filterConfigs[filter.name]
 
   return (
@@ -394,7 +393,7 @@ function FilterItem({ filter, index }: { filter: Filter; index: number }) {
 }
 
 function FilterList() {
-  const currentFilters = useSignal(filters)
+  const currentFilters = usePulse(FiltersChanged, [] as Filter[])
 
   if (currentFilters.length === 0) {
     return (
@@ -414,7 +413,7 @@ function FilterList() {
 }
 
 function ImagePreview() {
-  const currentFilters = useSignal(filters)
+  const currentFilters = usePulse(FiltersChanged, [] as Filter[])
   const splitRef = useRef(50)
   const containerRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
@@ -484,7 +483,7 @@ function ImagePreview() {
 }
 
 function BottomBar() {
-  const currentFilters = useSignal(filters)
+  const currentFilters = usePulse(FiltersChanged, [] as Filter[])
   const filterStr = computeFilterString(currentFilters)
 
   return (

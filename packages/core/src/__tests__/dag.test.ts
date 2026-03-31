@@ -63,7 +63,6 @@ describe('DAG', () => {
     const r2 = makeRule('r2', [b], [a])
 
     dag.addRule(r1)
-    // Cycle detected either at addRule or getTopologicalOrder
     expect(() => {
       dag.addRule(r2)
       dag.getTopologicalOrder()
@@ -150,7 +149,6 @@ describe('DAG', () => {
     dag.addRule(r1)
     dag.addRule(r2)
 
-    // No cycle, both should be in order
     const order = dag.getTopologicalOrder()
     expect(order).toContain(r1)
     expect(order).toContain(r2)
@@ -169,5 +167,51 @@ describe('DAG', () => {
 
     const order = dag.getTopologicalOrder()
     expect(order.length).toBe(20)
+  })
+
+  it('should support dynamic edge discovery via addEdgesForOutput', () => {
+    const a = makeType('a')
+    const b = makeType('b')
+
+    // r1 triggers on a, initially no outputs
+    const r1 = createRule({
+      name: 'r1',
+      triggers: [a],
+      mode: 'each',
+      action: () => {},
+      outputs: [],
+    })
+    registerRuleConsumers(r1)
+
+    // r2 triggers on b
+    const r2 = createRule({
+      name: 'r2',
+      triggers: [b],
+      mode: 'each',
+      action: () => {},
+      outputs: [],
+    })
+    registerRuleConsumers(r2)
+
+    dag.addRule(r1)
+    dag.addRule(r2)
+
+    // Initially no edges
+    expect(dag.getEdges().length).toBe(0)
+
+    // Simulate runtime discovery: r1 emits b
+    r1.outputs.push(b)
+    dag.addEdgesForOutput(r1, b)
+    dag.markDirty()
+
+    // Now there should be an edge from r1 to r2
+    const edges = dag.getEdges()
+    expect(edges.length).toBe(1)
+    expect(edges[0][0]).toBe(r1)
+    expect(edges[0][1]).toBe(r2)
+
+    // Topological order should have r1 before r2
+    const order = dag.getTopologicalOrder()
+    expect(order.indexOf(r1)).toBeLessThan(order.indexOf(r2))
   })
 })

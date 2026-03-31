@@ -1,327 +1,81 @@
-import {
-  engine,
-  CANVAS_WIDTH,
-  CANVAS_HEIGHT,
-  COLORS,
-  BRUSH_SIZES,
-  SelectTool,
-  SelectColor,
-  SelectSize,
-  StartStroke,
-  ContinueStroke,
-  EndStroke,
-  UndoStroke,
-  RedoStroke,
-  ClearCanvas,
-  AddLayer,
-  SelectLayer,
-  ToggleLayerVisibility,
-  currentTool,
-  currentColor,
-  currentSize,
-  layers,
-  activeLayerId,
-  isDrawing,
-  strokes,
-  currentStroke,
-  redoStack,
-  type Tool,
-  type DrawStroke,
-} from '../engines/canvas-paint'
+import { engine, CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, BRUSH_SIZES, SelectTool, SelectColor, SelectSize, StartStroke, ContinueStroke, EndStroke, UndoStroke, RedoStroke, ClearCanvas, AddLayer, RemoveLayer, SelectLayer, ToggleLayerVisibility, getCurrentTool, getCurrentColor, getCurrentSize, getLayers, getActiveLayerId, getIsDrawing, getCurrentStroke, getStrokes, PaintChanged, type Tool } from '../engines/canvas-paint'
 
 export function mount(container: HTMLElement): () => void {
   ;(window as any).__pulseEngine = engine
-
   const unsubs: (() => void)[] = []
-
-  const wrapper = document.createElement('div')
-  wrapper.style.cssText = 'max-width: 900px; margin: 0 auto; padding: 32px 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;'
-
-  // Header
-  const h1 = document.createElement('h2')
-  h1.style.cssText = 'font-size: 28px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px;'
-  h1.textContent = 'Canvas Paint'
-  const sub = document.createElement('p')
-  sub.style.cssText = 'color: #666; font-size: 14px; margin-bottom: 16px;'
-  sub.textContent = 'Drawing tools, color picker, brush sizes, layers, and full undo/redo support.'
-  wrapper.appendChild(h1)
-  wrapper.appendChild(sub)
+  const wrapper = document.createElement('div'); wrapper.style.cssText = 'max-width: 900px; margin: 0 auto; padding: 32px 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;'
+  wrapper.innerHTML = `<h2 style="font-size: 28px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px;">Canvas Paint</h2><p style="color: #666; font-size: 14px; margin-bottom: 16px;">Tools, colors, layers, undo/redo. All state via Pulse events.</p>`
 
   // Toolbar
-  const toolbar = document.createElement('div')
-  toolbar.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center;'
-
-  // Tools
-  const tools: { tool: Tool; label: string }[] = [
-    { tool: 'brush', label: 'Brush' },
-    { tool: 'eraser', label: 'Eraser' },
-    { tool: 'line', label: 'Line' },
-    { tool: 'rect', label: 'Rect' },
-    { tool: 'circle', label: 'Circle' },
-  ]
-
-  const toolBtns: HTMLButtonElement[] = []
-  for (const t of tools) {
-    const btn = document.createElement('button')
-    btn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;'
-    btn.textContent = t.label
-    btn.addEventListener('click', () => engine.emit(SelectTool, t.tool))
-    toolbar.appendChild(btn)
-    toolBtns.push(btn)
-  }
-
-  // Separator
-  const sep1 = document.createElement('div')
-  sep1.style.cssText = 'width: 1px; height: 24px; background: #e4e7ec; margin: 0 4px;'
-  toolbar.appendChild(sep1)
-
-  // Undo/Redo
-  const undoBtn = document.createElement('button')
-  undoBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 6px; background: #e4e7ec; color: #344054; font-size: 12px; font-weight: 600; cursor: pointer;'
-  undoBtn.textContent = 'Undo'
-  undoBtn.addEventListener('click', () => engine.emit(UndoStroke, undefined))
-  toolbar.appendChild(undoBtn)
-
-  const redoBtn = document.createElement('button')
-  redoBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 6px; background: #e4e7ec; color: #344054; font-size: 12px; font-weight: 600; cursor: pointer;'
-  redoBtn.textContent = 'Redo'
-  redoBtn.addEventListener('click', () => engine.emit(RedoStroke, undefined))
-  toolbar.appendChild(redoBtn)
-
-  const clearBtn = document.createElement('button')
-  clearBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 6px; background: #e63946; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;'
-  clearBtn.textContent = 'Clear'
-  clearBtn.addEventListener('click', () => engine.emit(ClearCanvas, undefined))
-  toolbar.appendChild(clearBtn)
-
+  const toolbar = document.createElement('div'); toolbar.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center;'
+  const tools: Tool[] = ['brush', 'eraser', 'line', 'rect', 'circle']
+  const toolBtns: Record<string, HTMLButtonElement> = {}
+  for (const tool of tools) { const btn = document.createElement('button'); btn.style.cssText = 'padding: 6px 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px;'; btn.textContent = tool; btn.addEventListener('click', () => engine.emit(SelectTool, tool)); toolbar.appendChild(btn); toolBtns[tool] = btn }
+  toolbar.innerHTML += '<span style="color: #e0e0e0;">|</span>'
+  const undoBtn = document.createElement('button'); undoBtn.style.cssText = 'padding: 6px 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px;'; undoBtn.textContent = 'Undo'; undoBtn.addEventListener('click', () => engine.emit(UndoStroke, undefined)); toolbar.appendChild(undoBtn)
+  const redoBtn = document.createElement('button'); redoBtn.style.cssText = 'padding: 6px 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px;'; redoBtn.textContent = 'Redo'; redoBtn.addEventListener('click', () => engine.emit(RedoStroke, undefined)); toolbar.appendChild(redoBtn)
+  const clearAllBtn = document.createElement('button'); clearAllBtn.style.cssText = 'padding: 6px 12px; border: 1px solid #e63946; border-radius: 6px; background: #fff; color: #e63946; cursor: pointer; font-size: 13px;'; clearAllBtn.textContent = 'Clear'; clearAllBtn.addEventListener('click', () => engine.emit(ClearCanvas, undefined)); toolbar.appendChild(clearAllBtn)
   wrapper.appendChild(toolbar)
 
-  // Color picker and size
-  const optionsRow = document.createElement('div')
-  optionsRow.style.cssText = 'display: flex; gap: 16px; margin-bottom: 12px; align-items: center;'
-
   // Colors
-  const colorsContainer = document.createElement('div')
-  colorsContainer.style.cssText = 'display: flex; gap: 4px; flex-wrap: wrap;'
-  const colorBtns: HTMLElement[] = []
-  for (const color of COLORS) {
-    const btn = document.createElement('div')
-    btn.style.cssText = `width: 24px; height: 24px; border-radius: 50%; background: ${color}; cursor: pointer; border: 2px solid transparent;`
-    btn.addEventListener('click', () => engine.emit(SelectColor, color))
-    colorsContainer.appendChild(btn)
-    colorBtns.push(btn)
-  }
-  optionsRow.appendChild(colorsContainer)
+  const colorRow = document.createElement('div'); colorRow.style.cssText = 'display: flex; gap: 4px; margin-bottom: 8px;'
+  for (const color of COLORS) { const swatch = document.createElement('div'); swatch.style.cssText = `width: 24px; height: 24px; border-radius: 4px; background: ${color}; cursor: pointer; border: 2px solid transparent;`; swatch.addEventListener('click', () => engine.emit(SelectColor, color)); colorRow.appendChild(swatch) }
+  wrapper.appendChild(colorRow)
 
-  // Separator
-  const sep2 = document.createElement('div')
-  sep2.style.cssText = 'width: 1px; height: 24px; background: #e4e7ec;'
-  optionsRow.appendChild(sep2)
-
-  // Brush sizes
-  const sizesContainer = document.createElement('div')
-  sizesContainer.style.cssText = 'display: flex; gap: 6px; align-items: center;'
-  const sizeBtns: HTMLElement[] = []
-  for (const size of BRUSH_SIZES) {
-    const btn = document.createElement('div')
-    btn.style.cssText = `width: ${10 + size}px; height: ${10 + size}px; border-radius: 50%; background: #344054; cursor: pointer; border: 2px solid transparent;`
-    btn.addEventListener('click', () => engine.emit(SelectSize, size))
-    sizesContainer.appendChild(btn)
-    sizeBtns.push(btn)
-  }
-  optionsRow.appendChild(sizesContainer)
-  wrapper.appendChild(optionsRow)
-
-  // Main area: canvas + layers panel
-  const mainArea = document.createElement('div')
-  mainArea.style.cssText = 'display: flex; gap: 12px;'
+  // Sizes
+  const sizeRow = document.createElement('div'); sizeRow.style.cssText = 'display: flex; gap: 6px; margin-bottom: 12px; align-items: center;'
+  sizeRow.innerHTML = '<span style="font-size: 12px; color: #667085; margin-right: 4px;">Size:</span>'
+  for (const size of BRUSH_SIZES) { const btn = document.createElement('button'); btn.style.cssText = 'padding: 4px 10px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px;'; btn.textContent = String(size); btn.addEventListener('click', () => engine.emit(SelectSize, size)); sizeRow.appendChild(btn) }
+  wrapper.appendChild(sizeRow)
 
   // Canvas
-  const canvas = document.createElement('canvas')
-  canvas.width = CANVAS_WIDTH
-  canvas.height = CANVAS_HEIGHT
-  canvas.style.cssText = 'border: 1px solid #e4e7ec; border-radius: 10px; background: #f0f2f5; cursor: crosshair; flex-shrink: 0;'
+  const canvas = document.createElement('canvas'); canvas.width = CANVAS_WIDTH; canvas.height = CANVAS_HEIGHT
+  canvas.style.cssText = 'border: 1px solid #e4e7ec; border-radius: 8px; cursor: crosshair; background: #f0f2f5; max-width: 100%;'
   const ctx = canvas.getContext('2d')!
+  wrapper.appendChild(canvas)
 
-  canvas.addEventListener('mousedown', (e) => {
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    const x = (e.clientX - rect.left) * scaleX
-    const y = (e.clientY - rect.top) * scaleY
-    engine.emit(StartStroke, { x, y })
-  })
+  function getCanvasPos(e: MouseEvent): { x: number; y: number } { const rect = canvas.getBoundingClientRect(); return { x: (e.clientX - rect.left) * (canvas.width / rect.width), y: (e.clientY - rect.top) * (canvas.height / rect.height) } }
+  canvas.addEventListener('mousedown', (e) => engine.emit(StartStroke, getCanvasPos(e)))
+  canvas.addEventListener('mousemove', (e) => { if (getIsDrawing()) engine.emit(ContinueStroke, getCanvasPos(e)) })
+  canvas.addEventListener('mouseup', () => engine.emit(EndStroke, undefined))
+  canvas.addEventListener('mouseleave', () => { if (getIsDrawing()) engine.emit(EndStroke, undefined) })
 
-  canvas.addEventListener('mousemove', (e) => {
-    if (!isDrawing.value) return
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    const x = (e.clientX - rect.left) * scaleX
-    const y = (e.clientY - rect.top) * scaleY
-    engine.emit(ContinueStroke, { x, y })
-  })
-
-  const endStroke = () => {
-    if (isDrawing.value) engine.emit(EndStroke, undefined)
-  }
-  canvas.addEventListener('mouseup', endStroke)
-  canvas.addEventListener('mouseleave', endStroke)
-
-  mainArea.appendChild(canvas)
-
-  // Layers panel
-  const layersPanel = document.createElement('div')
-  layersPanel.style.cssText = 'width: 160px; border: 1px solid #e4e7ec; border-radius: 10px; background: #fff; overflow: hidden;'
-
-  const layersHeader = document.createElement('div')
-  layersHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #e4e7ec; background: #f8f9fa;'
-  const layersTitle = document.createElement('div')
-  layersTitle.style.cssText = 'font-size: 12px; font-weight: 700; color: #344054;'
-  layersTitle.textContent = 'Layers'
-  const addLayerBtn = document.createElement('button')
-  addLayerBtn.style.cssText = 'padding: 2px 8px; border: none; border-radius: 4px; background: #4361ee; color: #fff; font-size: 11px; font-weight: 600; cursor: pointer;'
-  addLayerBtn.textContent = '+ Add'
-  addLayerBtn.addEventListener('click', () => engine.emit(AddLayer, undefined))
-  layersHeader.appendChild(layersTitle)
-  layersHeader.appendChild(addLayerBtn)
-  layersPanel.appendChild(layersHeader)
-
-  const layersList = document.createElement('div')
-  layersList.style.cssText = 'padding: 4px;'
-  layersPanel.appendChild(layersList)
-
-  mainArea.appendChild(layersPanel)
-  wrapper.appendChild(mainArea)
-
-  // Info
-  const info = document.createElement('div')
-  info.style.cssText = 'margin-top: 12px; font-size: 12px; color: #98a2b3;'
-  wrapper.appendChild(info)
-
+  // Layers
+  const layersPanel = document.createElement('div'); layersPanel.style.cssText = 'margin-top: 12px; border: 1px solid #e4e7ec; border-radius: 8px; overflow: hidden;'
+  const layersHeader = document.createElement('div'); layersHeader.style.cssText = 'display: flex; justify-content: space-between; padding: 8px 12px; background: #f8f9fa; border-bottom: 1px solid #e4e7ec;'
+  layersHeader.innerHTML = '<span style="font-weight: 600; font-size: 13px;">Layers</span>'
+  const addLayerBtn = document.createElement('button'); addLayerBtn.style.cssText = 'padding: 2px 8px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px;'; addLayerBtn.textContent = '+ Add'; addLayerBtn.addEventListener('click', () => engine.emit(AddLayer, undefined))
+  layersHeader.appendChild(addLayerBtn); layersPanel.appendChild(layersHeader)
+  const layersList = document.createElement('div'); layersPanel.appendChild(layersList); wrapper.appendChild(layersPanel)
   container.appendChild(wrapper)
 
-  function drawStrokeOnCanvas(stroke: DrawStroke) {
-    const { tool, color, size, points } = stroke
-    if (points.length < 2 && (tool === 'brush' || tool === 'eraser')) return
-
-    ctx.strokeStyle = color
-    ctx.fillStyle = color
-    ctx.lineWidth = size
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-
-    if (tool === 'brush' || tool === 'eraser') {
-      ctx.beginPath()
-      ctx.moveTo(points[0].x, points[0].y)
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y)
-      }
-      ctx.stroke()
-    } else if (tool === 'line' && points.length >= 2) {
-      ctx.beginPath()
-      ctx.moveTo(points[0].x, points[0].y)
-      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y)
-      ctx.stroke()
-    } else if (tool === 'rect' && points.length >= 2) {
-      const p0 = points[0]
-      const p1 = points[points.length - 1]
-      ctx.strokeRect(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y)
-    } else if (tool === 'circle' && points.length >= 2) {
-      const p0 = points[0]
-      const p1 = points[points.length - 1]
-      const r = Math.sqrt(Math.pow(p1.x - p0.x, 2) + Math.pow(p1.y - p0.y, 2))
-      ctx.beginPath()
-      ctx.arc(p0.x, p0.y, r, 0, Math.PI * 2)
+  function drawAll() {
+    ctx.fillStyle = '#f0f2f5'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+    const allStrokes = getStrokes(); const currentStr = getCurrentStroke()
+    for (const stroke of [...allStrokes, ...(currentStr ? [currentStr] : [])]) {
+      if (stroke.points.length < 2) continue
+      ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.size; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+      ctx.beginPath(); ctx.moveTo(stroke.points[0].x, stroke.points[0].y)
+      for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x, stroke.points[i].y)
       ctx.stroke()
     }
   }
 
-  function renderCanvas() {
-    ctx.fillStyle = '#f0f2f5'
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-
-    const layerList = layers.value
-    const allStrokes = strokes.value
-
-    for (const layer of layerList) {
-      if (!layer.visible) continue
-      const layerStrokes = allStrokes.filter((s) => s.layerId === layer.id)
-      for (const stroke of layerStrokes) {
-        drawStrokeOnCanvas(stroke)
-      }
-    }
-
-    // Draw current stroke
-    const current = currentStroke.value
-    if (current && current.points.length > 1) {
-      drawStrokeOnCanvas(current)
-    }
-  }
-
-  function renderUI() {
-    const tool = currentTool.value
-    const color = currentColor.value
-    const size = currentSize.value
-
-    // Tool buttons
-    for (let i = 0; i < tools.length; i++) {
-      toolBtns[i].style.background = tools[i].tool === tool ? '#4361ee' : '#e4e7ec'
-      toolBtns[i].style.color = tools[i].tool === tool ? '#fff' : '#344054'
-    }
-
-    // Color buttons
-    for (let i = 0; i < COLORS.length; i++) {
-      colorBtns[i].style.borderColor = COLORS[i] === color ? '#1a1a2e' : 'transparent'
-    }
-
-    // Size buttons
-    for (let i = 0; i < BRUSH_SIZES.length; i++) {
-      sizeBtns[i].style.borderColor = BRUSH_SIZES[i] === size ? '#4361ee' : 'transparent'
-    }
-
+  function render() {
+    drawAll()
+    const activeTool = getCurrentTool()
+    for (const [tool, btn] of Object.entries(toolBtns)) { btn.style.background = tool === activeTool ? '#4361ee' : '#fff'; btn.style.color = tool === activeTool ? '#fff' : '#344054' }
     // Layers list
     layersList.innerHTML = ''
-    const layerList = layers.value
-    const activeLayer = activeLayerId.value
-    for (const layer of layerList) {
-      const el = document.createElement('div')
-      el.style.cssText = `display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; ${layer.id === activeLayer ? 'background: #eef0ff;' : ''}`
-      el.addEventListener('click', () => engine.emit(SelectLayer, layer.id))
-
-      const vis = document.createElement('button')
-      vis.style.cssText = `background: none; border: none; cursor: pointer; font-size: 12px; color: ${layer.visible ? '#4361ee' : '#98a2b3'}; padding: 0;`
-      vis.textContent = layer.visible ? '\u{1F441}' : '\u{1F441}\u{200D}\u{1F5E8}'
-      vis.addEventListener('click', (e) => { e.stopPropagation(); engine.emit(ToggleLayerVisibility, layer.id) })
-
-      const name = document.createElement('span')
-      name.style.cssText = 'flex: 1; color: #344054; font-weight: 500;'
-      name.textContent = layer.name
-
-      el.appendChild(vis)
-      el.appendChild(name)
-      layersList.appendChild(el)
+    for (const layer of getLayers()) {
+      const row = document.createElement('div'); row.style.cssText = `display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: ${layer.id === getActiveLayerId() ? '#eef0ff' : '#fff'}; border-bottom: 1px solid #f0f2f5; cursor: pointer;`
+      row.innerHTML = `<span style="font-size: 13px; flex: 1; font-weight: ${layer.id === getActiveLayerId() ? 600 : 400};">${layer.name}</span>`
+      const visBtn = document.createElement('button'); visBtn.style.cssText = 'border: none; background: none; cursor: pointer; font-size: 12px;'; visBtn.textContent = layer.visible ? 'visible' : 'hidden'; visBtn.addEventListener('click', (e) => { e.stopPropagation(); engine.emit(ToggleLayerVisibility, layer.id) })
+      row.appendChild(visBtn)
+      row.addEventListener('click', () => engine.emit(SelectLayer, layer.id)); layersList.appendChild(row)
     }
-
-    const allStrokes = strokes.value
-    info.textContent = `Tool: ${tool} | Color: ${color} | Size: ${size}px | Strokes: ${allStrokes.length} | Layers: ${layerList.length} | Undo: ${allStrokes.length} | Redo: ${redoStack.value.length}`
   }
 
-  unsubs.push(strokes.subscribe(() => { renderCanvas(); renderUI() }))
-  unsubs.push(currentStroke.subscribe(() => renderCanvas()))
-  unsubs.push(currentTool.subscribe(() => renderUI()))
-  unsubs.push(currentColor.subscribe(() => renderUI()))
-  unsubs.push(currentSize.subscribe(() => renderUI()))
-  unsubs.push(layers.subscribe(() => { renderCanvas(); renderUI() }))
-  unsubs.push(activeLayerId.subscribe(() => renderUI()))
-
-  renderCanvas()
-  renderUI()
-
-  return () => {
-    ;(window as any).__pulseEngine = null
-    engine.destroy()
-    unsubs.forEach((u) => u())
-    container.removeChild(wrapper)
-  }
+  unsubs.push(engine.on(PaintChanged, () => render())); render()
+  return () => { ;(window as any).__pulseEngine = null; engine.destroy(); unsubs.forEach((u) => u()) }
 }

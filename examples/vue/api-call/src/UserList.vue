@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useSignal, useEmit } from '@pulse/vue'
+import { useEmit, usePulse } from '@pulse/vue'
 import {
   searchResults,
   searchQuery,
@@ -7,13 +7,17 @@ import {
   selectedUserId,
   UserSelected,
   type User,
+  SearchResultsChanged,
+  SearchQueryChanged,
+  IsSearchingChanged,
+  SelectedUserIdChanged,
 } from './engine'
 
 const emit = useEmit()
-const results = useSignal(searchResults)
-const query = useSignal(searchQuery)
-const loading = useSignal(isSearching)
-const selected = useSignal(selectedUserId)
+const results = usePulse(SearchResultsChanged, searchResults)
+const query = usePulse(SearchQueryChanged, searchQuery)
+const loading = usePulse(IsSearchingChanged, isSearching)
+const selected = usePulse(SelectedUserIdChanged, selectedUserId)
 
 const colors = {
   primary: '#4361ee',

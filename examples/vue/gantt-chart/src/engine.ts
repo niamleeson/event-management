@@ -1,6 +1,4 @@
 import { createEngine } from '@pulse/core'
-import type { Signal } from '@pulse/core'
-
 export const engine = createEngine()
 
 /* ------------------------------------------------------------------ */
@@ -48,13 +46,12 @@ const INITIAL_TASKS: Task[] = [
 /*  Signals                                                           */
 /* ------------------------------------------------------------------ */
 
-export const tasks: Signal<Task[]> = engine.signal(
-  TasksUpdated,
-  INITIAL_TASKS,
-  (_prev, updated) => updated,
-)
+export let tasks = INITIAL_TASKS
+export const TasksChanged = engine.event('TasksChanged')
+engine.on(TasksUpdated, (v: any) => { tasks = ((_prev, updated) => updated)(tasks, v); engine.emit(TasksChanged, tasks) })
 
-export const zoom: Signal<ZoomLevel> = engine.signal(ZoomChanged, 'day' as ZoomLevel, (_prev, z) => z)
+export let zoom = 'day' as ZoomLevel
+engine.on(ZoomChanged, (v: any) => { zoom = ((_prev, z) => z)(zoom, v); engine.emit(ZoomChanged, zoom) })
 
 /* ------------------------------------------------------------------ */
 /*  Auto-shift dependents when a task is moved                        */
@@ -91,15 +88,15 @@ function shiftDependents(taskList: Task[], movedId: number): Task[] {
   return result
 }
 
-engine.pipe(TaskMoved, TasksUpdated, ({ id, newStart }) => {
-  let updated = tasks.value.map(t => t.id === id ? { ...t, start: Math.max(0, newStart) } : { ...t })
+engine.on(TaskMoved, (v: any) => { engine.emit(TasksUpdated, (({ id, newStart }) => {
+  let updated = tasks.map(t => t.id === id ? { ...t, start: Math.max(0, newStart) } : { ...t })
   return shiftDependents(updated, id)
-})
+})(v)) })
 
-engine.pipe(TaskResized, TasksUpdated, ({ id, newDuration }) => {
-  let updated = tasks.value.map(t => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : { ...t })
+engine.on(TaskResized, (v: any) => { engine.emit(TasksUpdated, (({ id, newDuration }) => {
+  let updated = tasks.map(t => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : { ...t })
   return shiftDependents(updated, id)
-})
+})(v)) })
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -107,10 +104,13 @@ engine.pipe(TaskResized, TasksUpdated, ({ id, newDuration }) => {
 
 export const TOTAL_DAYS = 40
 
-export function dayWidth(z: ZoomLevel): number {
+function dayWidth(z: ZoomLevel): number {
   switch (z) {
     case 'day': return 30
     case 'week': return 12
     case 'month': return 4
   }
 }
+
+
+export { dayWidth }

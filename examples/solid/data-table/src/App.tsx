@@ -1,408 +1,711 @@
-import { For, Show, onMount, onCleanup, createSignal as solidSignal } from 'solid-js'
-import { useSignal, useEmit, useTween } from '@pulse/solid'
-import type { Signal, TweenValue, EventType } from '@pulse/core'
-import { engine } from './engine'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  pageSize,
+  SortChanged,
+  FilterChanged,
+  PageChanged,
+  RowSelected,
+  RowExpanded,
+  BulkAction,
+  SearchChanged,
+  ColumnResized,
+  SelectAll,
+  DeselectAll,
+  getProcessedData,
+} from './engine'
+import type { SortDirection, RowData } from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Status badge
+// ---------------------------------------------------------------------------
 
-interface Row {
-  id: number
-  name: string
-  email: string
-  department: string
-  role: string
-  salary: number
-  startDate: string
-  status: 'active' | 'inactive' | 'onleave'
-}
-
-type SortField = 'name' | 'department' | 'salary' | 'startDate' | 'status'
-type SortDir = 'asc' | 'desc'
-
-/* ------------------------------------------------------------------ */
-/*  Data generation                                                   */
-/* ------------------------------------------------------------------ */
-
-const DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Sales', 'HR', 'Finance', 'Legal', 'Operations']
-const ROLES = ['Junior', 'Mid', 'Senior', 'Lead', 'Manager', 'Director', 'VP']
-const STATUSES: Row['status'][] = ['active', 'inactive', 'onleave']
-const FIRST = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack', 'Karen', 'Leo', 'Mia', 'Nate', 'Olivia', 'Pat', 'Quinn', 'Rose', 'Sam', 'Tina']
-const LAST = ['Smith', 'Jones', 'Wilson', 'Brown', 'Davis', 'Miller', 'Moore', 'Taylor', 'Anderson', 'Thomas', 'Jackson', 'White', 'Harris', 'Martin', 'Garcia', 'Clark', 'Lewis', 'Lee', 'Walker', 'Hall']
-
-function generateRows(count: number): Row[] {
-  return Array.from({ length: count }, (_, i) => {
-    const first = FIRST[i % FIRST.length]
-    const last = LAST[Math.floor(i / FIRST.length) % LAST.length]
-    const dept = DEPARTMENTS[i % DEPARTMENTS.length]
-    const year = 2015 + (i % 9)
-    const month = (i % 12) + 1
-    return {
-      id: i + 1,
-      name: `${first} ${last}`,
-      email: `${first.toLowerCase()}.${last.toLowerCase()}${i}@company.com`,
-      department: dept,
-      role: ROLES[i % ROLES.length],
-      salary: 50000 + Math.floor(Math.random() * 120000),
-      startDate: `${year}-${String(month).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
-      status: STATUSES[i % 3],
-    }
-  })
-}
-
-const ALL_ROWS = generateRows(1000)
-
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
-
-const SetPage = engine.event<number>('SetPage')
-const SetSort = engine.event<SortField>('SetSort')
-const SetFilter = engine.event<string>('SetFilter')
-const SetDeptFilter = engine.event<string>('SetDeptFilter')
-const ToggleRowExpand = engine.event<number>('ToggleRowExpand')
-const ToggleSelect = engine.event<number>('ToggleSelect')
-const ToggleSelectAll = engine.event('ToggleSelectAll')
-const BulkAction = engine.event<string>('BulkAction')
-const ColumnResized = engine.event<{ col: string; width: number }>('ColumnResized')
-
-// Async fetch simulation
-const FetchPage = engine.event<number>('FetchPage')
-const FetchPending = engine.event<number>('FetchPending')
-const FetchDone = engine.event<{ page: number; rows: Row[]; total: number }>('FetchDone')
-const FetchError = engine.event<{ error: string }>('FetchError')
-
-// Row expand tween
-const ExpandRowStart = engine.event('ExpandRowStart')
-const expandRowTween: TweenValue = engine.tween({
-  start: ExpandRowStart,
-  from: 0,
-  to: 1,
-  duration: 250,
-  easing: 'easeOut',
-})
-
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-const PAGE_SIZE = 20
-
-const currentPage = engine.signal<number>(SetPage, 0, (_prev, p) => p)
-const sortField = engine.signal<SortField>(SetSort, 'name', (_prev, f) => f)
-const sortDir = engine.signal<SortDir>(SetSort, 'asc' as SortDir, (prev, f) => {
-  if (sortField.value === f) return prev === 'asc' ? 'desc' : 'asc'
-  return 'asc'
-})
-const filterText = engine.signal<string>(SetFilter, '', (_prev, q) => q)
-const deptFilter = engine.signal<string>(SetDeptFilter, '', (_prev, d) => d)
-const expandedRow = engine.signal<number>(ToggleRowExpand, -1, (prev, id) => prev === id ? -1 : id)
-const selectedRows = engine.signal<Set<number>>(
-  ToggleSelect, new Set<number>(),
-  (prev, id) => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s },
-)
-engine.signalUpdate(selectedRows, ToggleSelectAll, (prev) => {
-  const pageRows = getPageRows()
-  const allSelected = pageRows.every(r => prev.has(r.id))
-  if (allSelected) return new Set<number>()
-  return new Set(pageRows.map(r => r.id))
-})
-engine.signalUpdate(selectedRows, BulkAction, () => new Set<number>())
-
-const isLoading = engine.signal<boolean>(FetchPending, false, () => true)
-engine.signalUpdate(isLoading, FetchDone, () => false)
-engine.signalUpdate(isLoading, FetchError, () => false)
-
-const columnWidths = engine.signal<Record<string, number>>(
-  ColumnResized, { name: 180, email: 220, department: 120, role: 100, salary: 100, startDate: 110, status: 90 },
-  (prev, { col, width }) => ({ ...prev, [col]: Math.max(60, width) }),
-)
-
-engine.on(ToggleRowExpand, () => engine.emit(ExpandRowStart, undefined))
-
-/* ------------------------------------------------------------------ */
-/*  Async fetch                                                       */
-/* ------------------------------------------------------------------ */
-
-engine.async<number, { page: number; rows: Row[]; total: number }>(FetchPage, {
-  pending: FetchPending,
-  done: FetchDone,
-  error: FetchError,
-  strategy: 'latest',
-  do: async (page) => {
-    await new Promise(r => setTimeout(r, 150 + Math.random() * 200))
-    const filtered = getFilteredSorted()
-    const start = page * PAGE_SIZE
-    return { page, rows: filtered.slice(start, start + PAGE_SIZE), total: filtered.length }
-  },
-})
-
-/* ------------------------------------------------------------------ */
-/*  Derived data helpers                                              */
-/* ------------------------------------------------------------------ */
-
-function getFilteredSorted(): Row[] {
-  let rows = [...ALL_ROWS]
-  const q = filterText.value.toLowerCase()
-  const dept = deptFilter.value
-
-  if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q))
-  if (dept) rows = rows.filter(r => r.department === dept)
-
-  const field = sortField.value
-  const dir = sortDir.value === 'asc' ? 1 : -1
-  rows.sort((a, b) => {
-    const av = a[field]
-    const bv = b[field]
-    if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir
-    return ((av as number) - (bv as number)) * dir
-  })
-
-  return rows
-}
-
-function getPageRows(): Row[] {
-  const filtered = getFilteredSorted()
-  const start = currentPage.value * PAGE_SIZE
-  return filtered.slice(start, start + PAGE_SIZE)
-}
-
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
-
-const STATUS_COLORS: Record<string, string> = { active: '#00b894', inactive: '#d63031', onleave: '#fdcb6e' }
-
-function SortHeader(props: { field: SortField; label: string }) {
-  const emit = useEmit()
-  const sf = useSignal(sortField)
-  const sd = useSignal(sortDir)
-  const widths = useSignal(columnWidths)
-
-  let resizing = false
-  let startX = 0
-  let startW = 0
-
-  const onResizeDown = (e: PointerEvent) => {
-    e.stopPropagation()
-    resizing = true
-    startX = e.clientX
-    startW = widths()[props.field] ?? 100
-    const move = (ev: PointerEvent) => {
-      const dx = ev.clientX - startX
-      emit(ColumnResized, { col: props.field, width: startW + dx })
-    }
-    const up = () => { resizing = false; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+function StatusBadge({ status }: { status: string }) {
+  const colors: Record<string, { bg: string; text: string }> = {
+    Active: { bg: 'rgba(34, 197, 94, 0.15)', text: '#4ade80' },
+    Inactive: { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171' },
+    Pending: { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24' },
   }
-
+  const c = colors[status] || { bg: '#334155', text: '#94a3b8' }
   return (
-    <th
-      onClick={() => emit(SetSort, props.field)}
+    <span
       style={{
-        width: `${widths()[props.field]}px`, padding: '10px 12px', 'text-align': 'left',
-        'font-size': '12px', 'font-weight': '600', color: '#666', cursor: 'pointer',
-        'text-transform': 'uppercase', 'letter-spacing': '0.5px',
-        background: '#fafafa', 'border-bottom': '2px solid #e0e0e0',
-        'user-select': 'none', position: 'relative',
+        padding: '2px 8px',
+        'border-radius': 10,
+        background: c.bg,
+        color: c.text,
+        'font-size': 11,
+        'font-weight': 600,
       }}
     >
-      {props.label}
-      {sf() === props.field && <span style={{ 'margin-left': '4px' }}>{sd() === 'asc' ? '\u25B2' : '\u25BC'}</span>}
+      {status}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Highlight matching text
+// ---------------------------------------------------------------------------
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(query.toLowerCase())
+  if (idx === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <span style={{ background: '#fbbf2440', color: '#fbbf24', 'border-radius': 2, padding: '0 1px' }}>
+        {text.slice(idx, idx + query.length)}
+      </span>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Column header with sort
+// ---------------------------------------------------------------------------
+
+function SortHeader({
+  label,
+  column,
+  width,
+}: {
+  label: string
+  column: string
+  width: number
+}) {
+  const emit = useEmit()
+  const sort = usePulse(sortState)
+  const widths = usePulse(columnWidths)
+  let resizing = false
+  let startX = 0
+  let startWidth = 0
+
+  const isActive = sort.column === column
+  const direction = isActive ? sort.direction : null
+
+  const handleSort = () => {
+    let newDir: SortDirection
+    if (!isActive) {
+      newDir = 'asc'
+    } else if (direction === 'asc') {
+      newDir = 'desc'
+    } else {
+      newDir = null
+    }
+    emit(SortChanged, { column, direction: newDir })
+  }
+
+  const handleResizeStart = 
+    (e: MouseEvent) => {
+      e.stopPropagation()
+      resizing = true
+      startX = e.clientX
+      startWidth = widths[column] || width
+
+      const handleMove = (me: MouseEvent) => {
+        if (!resizing) return
+        const diff = me.clientX - startX
+        emit(ColumnResized, { column, width: startWidth + diff })
+      }
+
+      const handleUp = () => {
+        resizing = false
+        document.removeEventListener('mousemove', handleMove)
+        document.removeEventListener('mouseup', handleUp)
+      }
+
+      document.addEventListener('mousemove', handleMove)
+      document.addEventListener('mouseup', handleUp)
+    }
+  return (
+    <th
+      style={{
+        width: widths[column] || width,
+        'min-width': 50,
+        padding: '10px 12px',
+        'text-align': 'left',
+        'font-size': 11,
+        'font-weight': 700,
+        color: '#64748b',
+        'text-transform': 'uppercase',
+        'letter-spacing': 0.5,
+        cursor: 'pointer',
+        'user-select': 'none',
+        position: 'relative',
+        'border-bottom': '1px solid #1e293b',
+        'white-space': 'nowrap',
+      }}
+      onClick={handleSort}
+    >
+      {label}{' '}
+      <span style={{ color: isActive ? '#3b82f6' : '#334155', 'font-size': 10 }}>
+        {direction === 'asc' ? '\u25B2' : direction === 'desc' ? '\u25BC' : '\u25B2'}
+      </span>
+      {/* Resize handle */}
       <div
-        onPointerDown={onResizeDown}
+        onMouseDown={handleResizeStart}
+        onClick={(e) => e.stopPropagation()}
         style={{
-          position: 'absolute', right: '0', top: '0', bottom: '0', width: '6px',
-          cursor: 'col-resize', background: resizing ? '#4361ee' : 'transparent',
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 6,
+          cursor: 'col-resize',
+          background: 'transparent',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent'
         }}
       />
     </th>
   )
 }
 
-function DataRow(props: { row: Row }) {
-  const emit = useEmit()
-  const expanded = useSignal(expandedRow)
-  const selected = useSignal(selectedRows)
-  const expandVal = useTween(expandRowTween)
+// ---------------------------------------------------------------------------
+// Expanded row detail
+// ---------------------------------------------------------------------------
 
-  const isExpanded = () => expanded() === props.row.id
-  const isSelected = () => selected().has(props.row.id)
+function ExpandedDetail({ row }: { row: RowData }) {
+  return (
+    <tr>
+      <td
+        colSpan={9}
+        style={{
+          padding: '16px 24px',
+          background: '#111827',
+          'border-bottom': '1px solid #1e293b',
+        }}
+      >
+        <div style={{ display: 'grid', 'grid-template-columns': '1fr 1fr', gap: 16, 'font-size': 13 }}>
+          <div>
+            <div style={{ color: '#64748b', 'margin-bottom': 4 }}>Full Details</div>
+            <div style={{ color: '#e2e8f0' }}>
+              <strong>Name:</strong> {row.name}<br />
+              <strong>Email:</strong> {row.email}<br />
+              <strong>Role:</strong> {row.role}<br />
+              <strong>Status:</strong> {row.status}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#64748b', 'margin-bottom': 4 }}>Activity</div>
+            <div style={{ color: '#e2e8f0' }}>
+              <strong>Created:</strong> {row.created}<br />
+              <strong>Revenue:</strong> ${row.revenue.toLocaleString()}<br />
+              <strong>ID:</strong> {row.id}
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+export default function App() {
+  const emit = useEmit()
+  const sort = usePulse(sortState)
+  const filterState = usePulse(filters)
+  const page = usePulse(currentPage)
+  const selected = usePulse(selectedRows)
+  const expanded = usePulse(expandedRows)
+  const search = usePulse(searchQuery)
+  const widths = usePulse(columnWidths)
+  const loading = usePulse(isLoading)
+
+  const { rows, totalRows, totalPages } = getProcessedData()
+  const allVisibleSelected = rows.length > 0 && rows.every((r) => selected.has(r.id))
+
+  return (
+    <div
+      style={{
+        'min-height': '100vh',
+        background: '#0a0e17',
+        'font-family':
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        color: '#e2e8f0',
+        padding: 24,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          'justify-content': 'space-between',
+          'align-items': 'center',
+          'margin-bottom': 20,
+        }}
+      >
+        <div>
+          <h1 style={{ 'font-size': 24, 'font-weight': 700, margin: 0 }}>Data Table</h1>
+          <p style={{ color: '#64748b', 'font-size': 13, 'margin-top': 4 }}>
+            {totalRows.toLocaleString()} records | Page {page} of {totalPages}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, 'align-items': 'center' }}>
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => emit(SearchChanged, e.currentTarget.value)}
+            style={{
+              padding: '8px 12px',
+              'border-radius': 8,
+              border: '1px solid #334155',
+              background: '#0f172a',
+              color: '#e2e8f0',
+              'font-size': 13,
+              width: 220,
+              outline: 'none',
+            }}
+          />
+
+          {/* Bulk actions */}
+          {selected.size > 0 && (
+            <div style={{ display: 'flex', gap: 6, 'align-items': 'center' }}>
+              <span style={{ 'font-size': 12, color: '#3b82f6' }}>
+                {selected.size} selected
+              </span>
+              <select
+                onChange={(e) => {
+                  if (e.currentTarget.value) {
+                    emit(BulkAction, {
+                      action: e.currentTarget.value,
+                      ids: Array.from(selected),
+                    })
+                    e.currentTarget.value = ''
+                  }
+                }}
+                style={{
+                  padding: '6px 10px',
+                  'border-radius': 6,
+                  border: '1px solid #334155',
+                  background: '#0f172a',
+                  color: '#94a3b8',
+                  'font-size': 12,
+                }}
+              >
+                <option value="">Bulk Actions...</option>
+                <option value="delete">Delete</option>
+                <option value="activate">Activate</option>
+                <option value="deactivate">Deactivate</option>
+                <option value="export">Export</option>
+              </select>
+              <button
+                onClick={() => emit(DeselectAll, undefined)}
+                style={{
+                  padding: '4px 8px',
+                  'border-radius': 4,
+                  border: '1px solid #334155',
+                  background: 'transparent',
+                  color: '#64748b',
+                  'font-size': 11,
+                  cursor: 'pointer',
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Loading bar */}
+      {loading && (
+        <div
+          style={{
+            height: 2,
+            background: '#3b82f6',
+            'border-radius': 1,
+            'margin-bottom': 2,
+            animation: 'loading-bar 0.8s ease infinite',
+          }}
+        />
+      )}
+
+      {/* Table */}
+      <div
+        style={{
+          background: '#111827',
+          'border-radius': 12,
+          border: '1px solid #1e293b',
+          overflow: 'auto',
+        }}
+      >
+        <table
+          style={{
+            width: '100%',
+            'border-collapse': 'collapse',
+            'font-size': 13,
+          }}
+        >
+          <thead
+            style={{
+              position: 'sticky',
+              top: 0,
+              background: '#111827',
+              'z-index': 10,
+            }}
+          >
+            <tr>
+              {/* Checkbox column */}
+              <th
+                style={{
+                  width: 40,
+                  padding: '10px 12px',
+                  'border-bottom': '1px solid #1e293b',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={() => emit(SelectAll, undefined)}
+                  style={{ 'accent-color': '#3b82f6', cursor: 'pointer' }}
+                />
+              </th>
+              <SortHeader label="ID" column="id" width={60} />
+              <SortHeader label="Name" column="name" width={160} />
+              <SortHeader label="Email" column="email" width={200} />
+              <SortHeader label="Role" column="role" width={100} />
+              <SortHeader label="Status" column="status" width={90} />
+              <SortHeader label="Created" column="created" width={110} />
+              <SortHeader label="Revenue" column="revenue" width={110} />
+              <th
+                style={{
+                  width: 80,
+                  padding: '10px 12px',
+                  'text-align': 'left',
+                  'font-size': 11,
+                  'font-weight': 700,
+                  color: '#64748b',
+                  'text-transform': 'uppercase',
+                  'letter-spacing': 0.5,
+                  'border-bottom': '1px solid #1e293b',
+                }}
+              >
+                Actions
+              </th>
+            </tr>
+            {/* Filter row */}
+            <tr>
+              <td style={{ padding: '6px 12px', 'border-bottom': '1px solid #1e293b' }} />
+              <td style={{ padding: '6px 12px', 'border-bottom': '1px solid #1e293b' }} />
+              {['name', 'email', 'role', 'status', 'created'].map((col) => (
+                <td
+                  style={{ padding: '6px 8px', 'border-bottom': '1px solid #1e293b' }}
+                >
+                  <input
+                    type="text"
+                    placeholder={`Filter...`}
+                    value={filterState[col] || ''}
+                    onChange={(e) =>
+                      emit(FilterChanged, { column: col, value: e.currentTarget.value })
+                    }
+                    style={{
+                      width: '100%',
+                      padding: '4px 6px',
+                      'border-radius': 4,
+                      border: '1px solid #1e293b',
+                      background: '#0a0e17',
+                      color: '#94a3b8',
+                      'font-size': 11,
+                      outline: 'none',
+                    }}
+                  />
+                </td>
+              ))}
+              <td style={{ padding: '6px 12px', 'border-bottom': '1px solid #1e293b' }} />
+              <td style={{ padding: '6px 12px', 'border-bottom': '1px solid #1e293b' }} />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => {
+              const isSelected = selected.has(row.id)
+              const isExpanded = expanded.has(row.id)
+              const isEven = i % 2 === 0
+              return (
+                <RowGroup
+                  row={row}
+                  isSelected={isSelected}
+                  isExpanded={isExpanded}
+                  isEven={isEven}
+                  search={search}
+                />
+              )
+            })}
+          </tbody>
+        </table>
+
+        {rows.length === 0 && (
+          <div
+            style={{
+              padding: 40,
+              'text-align': 'center',
+              color: '#475569',
+              'font-size': 14,
+            }}
+          >
+            No results found
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      <div
+        style={{
+          display: 'flex',
+          'justify-content': 'space-between',
+          'align-items': 'center',
+          'margin-top': 16,
+          'font-size': 13,
+          color: '#64748b',
+        }}
+      >
+        <span>
+          Showing {(page - 1) * pageSize + 1}-
+          {Math.min(page * pageSize, totalRows)} of {totalRows}
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <PageButton
+            label="\u00AB"
+            disabled={page <= 1}
+            onClick={() => emit(PageChanged, 1)}
+          />
+          <PageButton
+            label="\u2039"
+            disabled={page <= 1}
+            onClick={() => emit(PageChanged, page - 1)}
+          />
+          {getPageNumbers(page, totalPages).map((p, i) =>
+            p === -1 ? (
+              <span style={{ padding: '6px 4px', color: '#475569' }}>
+                ...
+              </span>
+            ) : (
+              <PageButton
+                label={String(p)}
+                active={p === page}
+                disabled={false}
+                onClick={() => emit(PageChanged, p)}
+              />
+            ),
+          )}
+          <PageButton
+            label="\u203A"
+            disabled={page >= totalPages}
+            onClick={() => emit(PageChanged, page + 1)}
+          />
+          <PageButton
+            label="\u00BB"
+            disabled={page >= totalPages}
+            onClick={() => emit(PageChanged, totalPages)}
+          />
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes loading-bar {
+          0% { transform: translateX(-100%); }
+          50% { transform: translateX(0%); }
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Row group (row + optional expansion)
+// ---------------------------------------------------------------------------
+
+function RowGroup({
+  row,
+  isSelected,
+  isExpanded,
+  isEven,
+  search,
+}: {
+  row: RowData
+  isSelected: boolean
+  isExpanded: boolean
+  isEven: boolean
+  search: string
+}) {
+  const emit = useEmit()
 
   return (
     <>
       <tr
-        onClick={() => emit(ToggleRowExpand, props.row.id)}
         style={{
-          cursor: 'pointer',
-          background: isSelected() ? '#e8f0fe' : isExpanded() ? '#f8f9fa' : '#fff',
-          'border-bottom': '1px solid #f0f0f0',
+          background: isSelected
+            ? 'rgba(59, 130, 246, 0.08)'
+            : isEven
+              ? '#0d1424'
+              : 'transparent',
           transition: 'background 0.15s',
         }}
+        onMouseEnter={(e) => {
+          if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+        }}
+        onMouseLeave={(e) => {
+          if (!isSelected) {
+            e.currentTarget.style.background = isEven ? '#0d1424' : 'transparent'
+          }
+        }}
       >
-        <td style={{ padding: '10px 12px', 'text-align': 'center' }}>
+        <td style={{ padding: '10px 12px', 'border-bottom': '1px solid #1e293b11' }}>
           <input
             type="checkbox"
-            checked={isSelected()}
-            onClick={(e) => { e.stopPropagation(); emit(ToggleSelect, props.row.id) }}
+            checked={isSelected}
+            onChange={() => emit(RowSelected, row.id)}
+            style={{ 'accent-color': '#3b82f6', cursor: 'pointer' }}
           />
         </td>
-        <td style={{ padding: '10px 12px', 'font-weight': '500', color: '#333', 'font-size': '13px' }}>{props.row.name}</td>
-        <td style={{ padding: '10px 12px', color: '#666', 'font-size': '13px' }}>{props.row.email}</td>
-        <td style={{ padding: '10px 12px', color: '#666', 'font-size': '13px' }}>{props.row.department}</td>
-        <td style={{ padding: '10px 12px', color: '#666', 'font-size': '13px' }}>{props.row.role}</td>
-        <td style={{ padding: '10px 12px', 'font-size': '13px', 'font-weight': '500' }}>${props.row.salary.toLocaleString()}</td>
-        <td style={{ padding: '10px 12px', color: '#888', 'font-size': '12px' }}>{props.row.startDate}</td>
-        <td style={{ padding: '10px 12px' }}>
-          <span style={{
-            padding: '2px 10px', 'border-radius': '10px', 'font-size': '11px', 'font-weight': '600',
-            background: STATUS_COLORS[props.row.status] + '22', color: STATUS_COLORS[props.row.status],
-          }}>{props.row.status}</span>
+        <td
+          style={{
+            padding: '10px 12px',
+            'border-bottom': '1px solid #1e293b11',
+            color: '#475569',
+            'font-family': 'monospace',
+            'font-size': 11,
+          }}
+        >
+          {row.id.split('-')[1]}
+        </td>
+        <td
+          style={{
+            padding: '10px 12px',
+            'border-bottom': '1px solid #1e293b11',
+            'font-weight': 500,
+          }}
+        >
+          <HighlightText text={row.name} query={search} />
+        </td>
+        <td
+          style={{
+            padding: '10px 12px',
+            'border-bottom': '1px solid #1e293b11',
+            color: '#94a3b8',
+          }}
+        >
+          <HighlightText text={row.email} query={search} />
+        </td>
+        <td style={{ padding: '10px 12px', 'border-bottom': '1px solid #1e293b11' }}>
+          <HighlightText text={row.role} query={search} />
+        </td>
+        <td style={{ padding: '10px 12px', 'border-bottom': '1px solid #1e293b11' }}>
+          <StatusBadge status={row.status} />
+        </td>
+        <td
+          style={{
+            padding: '10px 12px',
+            'border-bottom': '1px solid #1e293b11',
+            'font-family': 'monospace',
+            'font-size': 12,
+            color: '#94a3b8',
+          }}
+        >
+          {row.created}
+        </td>
+        <td
+          style={{
+            padding: '10px 12px',
+            'border-bottom': '1px solid #1e293b11',
+            'font-family': 'monospace',
+            'font-size': 12,
+            color: row.revenue > 500 ? '#4ade80' : '#94a3b8',
+            'font-weight': row.revenue > 500 ? 600 : 400,
+          }}
+        >
+          ${row.revenue.toLocaleString()}
+        </td>
+        <td style={{ padding: '10px 12px', 'border-bottom': '1px solid #1e293b11' }}>
+          <button
+            onClick={() => emit(RowExpanded, row.id)}
+            style={{
+              padding: '4px 8px',
+              'border-radius': 4,
+              border: '1px solid #334155',
+              background: isExpanded ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+              color: isExpanded ? '#60a5fa' : '#64748b',
+              'font-size': 11,
+              cursor: 'pointer',
+            }}
+          >
+            {isExpanded ? 'Close' : 'View'}
+          </button>
         </td>
       </tr>
-      <Show when={isExpanded()}>
-        <tr>
-          <td colspan="8" style={{
-            padding: '16px 24px', background: '#f8f9fa', 'border-bottom': '1px solid #e0e0e0',
-            overflow: 'hidden',
-            'max-height': `${expandVal() * 120}px`,
-            opacity: String(expandVal()),
-          }}>
-            <div style={{ display: 'grid', 'grid-template-columns': 'repeat(3, 1fr)', gap: '12px', 'font-size': '13px' }}>
-              <div><strong>Full Name:</strong> {props.row.name}</div>
-              <div><strong>Email:</strong> {props.row.email}</div>
-              <div><strong>Department:</strong> {props.row.department}</div>
-              <div><strong>Role:</strong> {props.row.role}</div>
-              <div><strong>Salary:</strong> ${props.row.salary.toLocaleString()}</div>
-              <div><strong>Start Date:</strong> {props.row.startDate}</div>
-              <div><strong>Status:</strong> {props.row.status}</div>
-              <div><strong>Employee ID:</strong> #{props.row.id.toString().padStart(5, '0')}</div>
-            </div>
-          </td>
-        </tr>
-      </Show>
+      {isExpanded && <ExpandedDetail row={row} />}
     </>
   )
 }
 
-export default function App() {
-  const emit = useEmit()
-  const page = useSignal(currentPage)
-  const filter = useSignal(filterText)
-  const dept = useSignal(deptFilter)
-  const loading = useSignal(isLoading)
-  const selected = useSignal(selectedRows)
+// ---------------------------------------------------------------------------
+// Page button
+// ---------------------------------------------------------------------------
 
-  const pageRows = () => getPageRows()
-  const totalFiltered = () => getFilteredSorted().length
-  const totalPages = () => Math.ceil(totalFiltered() / PAGE_SIZE)
-
+function PageButton({
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string
+  active?: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
   return (
-    <div style={{
-      'min-height': '100vh', padding: '24px',
-      'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center', 'margin-bottom': '16px' }}>
-        <div>
-          <h1 style={{ 'font-size': '24px', 'font-weight': '700', color: '#333', margin: '0' }}>Data Table</h1>
-          <p style={{ 'font-size': '13px', color: '#888', margin: '4px 0 0' }}>1,000 rows &middot; Sort, filter, paginate, expand, bulk actions</p>
-        </div>
-        <Show when={selected().size > 0}>
-          <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
-            <span style={{ 'font-size': '13px', color: '#4361ee', 'font-weight': '600' }}>{selected().size} selected</span>
-            <button onClick={() => emit(BulkAction, 'delete')} style={{ padding: '6px 16px', 'border-radius': '6px', border: 'none', background: '#d63031', color: '#fff', cursor: 'pointer', 'font-size': '12px' }}>Delete</button>
-            <button onClick={() => emit(BulkAction, 'export')} style={{ padding: '6px 16px', 'border-radius': '6px', border: 'none', background: '#4361ee', color: '#fff', cursor: 'pointer', 'font-size': '12px' }}>Export</button>
-          </div>
-        </Show>
-      </div>
-
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', 'margin-bottom': '16px' }}>
-        <input
-          placeholder="Search by name or email..."
-          value={filter()}
-          onInput={(e) => { emit(SetFilter, e.currentTarget.value); emit(SetPage, 0) }}
-          style={{ flex: '1', padding: '10px 14px', 'font-size': '13px', border: '1px solid #ddd', 'border-radius': '8px', outline: 'none' }}
-        />
-        <select
-          value={dept()}
-          onChange={(e) => { emit(SetDeptFilter, e.currentTarget.value); emit(SetPage, 0) }}
-          style={{ padding: '10px 14px', 'font-size': '13px', border: '1px solid #ddd', 'border-radius': '8px', outline: 'none', background: '#fff' }}
-        >
-          <option value="">All Departments</option>
-          <For each={DEPARTMENTS}>{(d) => <option value={d}>{d}</option>}</For>
-        </select>
-      </div>
-
-      {/* Table */}
-      <div style={{ background: '#fff', 'border-radius': '8px', 'box-shadow': '0 1px 4px rgba(0,0,0,0.1)', overflow: 'auto', 'margin-bottom': '16px' }}>
-        <table style={{ width: '100%', 'border-collapse': 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ width: '40px', padding: '10px', background: '#fafafa', 'border-bottom': '2px solid #e0e0e0' }}>
-                <input type="checkbox" onChange={() => emit(ToggleSelectAll, undefined)} />
-              </th>
-              <SortHeader field="name" label="Name" />
-              <th style={{ padding: '10px 12px', 'text-align': 'left', 'font-size': '12px', 'font-weight': '600', color: '#666', background: '#fafafa', 'border-bottom': '2px solid #e0e0e0' }}>Email</th>
-              <SortHeader field="department" label="Department" />
-              <th style={{ padding: '10px 12px', 'text-align': 'left', 'font-size': '12px', 'font-weight': '600', color: '#666', background: '#fafafa', 'border-bottom': '2px solid #e0e0e0' }}>Role</th>
-              <SortHeader field="salary" label="Salary" />
-              <SortHeader field="startDate" label="Start Date" />
-              <SortHeader field="status" label="Status" />
-            </tr>
-          </thead>
-          <tbody>
-            <Show when={!loading()} fallback={
-              <For each={Array.from({ length: 5 })}>{() => (
-                <tr><td colspan="8" style={{ padding: '16px', 'text-align': 'center', color: '#888' }}>Loading...</td></tr>
-              )}</For>
-            }>
-              <For each={pageRows()}>
-                {(row) => <DataRow row={row} />}
-              </For>
-            </Show>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
-        <span style={{ 'font-size': '13px', color: '#888' }}>
-          Showing {page() * PAGE_SIZE + 1}-{Math.min((page() + 1) * PAGE_SIZE, totalFiltered())} of {totalFiltered()}
-        </span>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          <button
-            disabled={page() === 0}
-            onClick={() => emit(SetPage, page() - 1)}
-            style={{ padding: '6px 12px', 'border-radius': '6px', border: '1px solid #ddd', background: '#fff', cursor: page() > 0 ? 'pointer' : 'default', 'font-size': '13px' }}
-          >Prev</button>
-          <For each={Array.from({ length: Math.min(5, totalPages()) }, (_, i) => {
-            const start = Math.max(0, Math.min(page() - 2, totalPages() - 5))
-            return start + i
-          })}>
-            {(p) => (
-              <button
-                onClick={() => emit(SetPage, p)}
-                style={{
-                  padding: '6px 12px', 'border-radius': '6px', 'font-size': '13px',
-                  border: page() === p ? 'none' : '1px solid #ddd',
-                  background: page() === p ? '#4361ee' : '#fff',
-                  color: page() === p ? '#fff' : '#333',
-                  cursor: 'pointer',
-                }}
-              >{p + 1}</button>
-            )}
-          </For>
-          <button
-            disabled={page() >= totalPages() - 1}
-            onClick={() => emit(SetPage, page() + 1)}
-            style={{ padding: '6px 12px', 'border-radius': '6px', border: '1px solid #ddd', background: '#fff', cursor: page() < totalPages() - 1 ? 'pointer' : 'default', 'font-size': '13px' }}
-          >Next</button>
-        </div>
-      </div>
-    </div>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: '6px 10px',
+        'border-radius': 6,
+        border: active ? '1px solid #3b82f6' : '1px solid #1e293b',
+        background: active ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+        color: disabled ? '#334155' : active ? '#3b82f6' : '#94a3b8',
+        'font-size': 12,
+        'font-weight': active ? 700 : 400,
+        cursor: disabled ? 'default' : 'pointer',
+        'min-width': 32,
+      }}
+    >
+      {label}
+    </button>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Page number calculation
+// ---------------------------------------------------------------------------
+
+function getPageNumbers(current: number, total: number): number[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+
+  const pages: number[] = [1]
+
+  if (current > 3) pages.push(-1) // ellipsis
+
+  const start = Math.max(2, current - 1)
+  const end = Math.min(total - 1, current + 1)
+
+  for (let i = start; i <= end; i++) pages.push(i)
+
+  if (current < total - 2) pages.push(-1) // ellipsis
+
+  pages.push(total)
+
+  return pages
 }

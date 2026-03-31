@@ -1,21 +1,15 @@
-import { useState } from 'react'
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  currentStep,
-  stepDirection,
-  fieldValues,
-  fieldErrors,
-  stepValid,
-  isSubmitting,
-  submitResult,
-  shakeActive,
+  CurrentStepChanged,
+  StepDirectionChanged,
+  FieldValuesChanged,
+  FieldErrorsChanged,
+  IsSubmittingChanged,
+  SubmitResultChanged,
+  ShakeCountChanged,
   FieldUpdated,
   NextStep,
   PrevStep,
-  startRec,
-  stopRec,
-  replayRec,
-  STEP_FIELDS,
   STEP_LABELS,
   type StepId,
   type FormData,
@@ -26,203 +20,53 @@ import {
 // ---------------------------------------------------------------------------
 
 const colors = {
-  bg: '#f8fafc',
-  card: '#ffffff',
-  primary: '#4361ee',
-  primaryHover: '#3451de',
-  text: '#0f172a',
-  muted: '#64748b',
-  border: '#e2e8f0',
-  error: '#ef4444',
-  errorBg: '#fef2f2',
-  success: '#10b981',
-  successBg: '#ecfdf5',
+  bg: '#f8fafc', card: '#ffffff', primary: '#4361ee', primaryHover: '#3451de',
+  text: '#0f172a', muted: '#64748b', border: '#e2e8f0', error: '#ef4444',
+  errorBg: '#fef2f2', success: '#10b981', successBg: '#ecfdf5',
 }
 
 const styles = {
   container: {
-    minHeight: '100vh',
-    background: colors.bg,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    padding: 20,
+    minHeight: '100vh', background: colors.bg, display: 'flex', alignItems: 'center',
+    justifyContent: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', padding: 20,
   } as React.CSSProperties,
-  card: {
-    background: colors.card,
-    borderRadius: 20,
-    boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-    width: '100%',
-    maxWidth: 540,
-    overflow: 'hidden',
-  } as React.CSSProperties,
-  header: {
-    padding: '32px 32px 0',
-  } as React.CSSProperties,
-  title: {
-    fontSize: 28,
-    fontWeight: 800,
-    color: colors.text,
-    margin: 0,
-  } as React.CSSProperties,
-  subtitle: {
-    color: colors.muted,
-    fontSize: 14,
-    marginTop: 4,
-  } as React.CSSProperties,
-  progressBar: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '24px 32px',
-    gap: 0,
-  } as React.CSSProperties,
-  progressStep: (active: boolean, completed: boolean) =>
-    ({
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-    }) as React.CSSProperties,
-  progressDot: (active: boolean, completed: boolean) =>
-    ({
-      width: 32,
-      height: 32,
-      borderRadius: '50%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: 13,
-      fontWeight: 700,
-      background: completed ? colors.primary : active ? colors.primary : colors.border,
-      color: completed || active ? '#fff' : colors.muted,
-      transition: 'all 0.3s',
-    }) as React.CSSProperties,
-  progressLabel: (active: boolean) =>
-    ({
-      fontSize: 12,
-      fontWeight: active ? 600 : 400,
-      color: active ? colors.primary : colors.muted,
-      marginTop: 6,
-      transition: 'color 0.3s',
-    }) as React.CSSProperties,
-  progressLine: (completed: boolean) =>
-    ({
-      flex: 1,
-      height: 2,
-      background: completed ? colors.primary : colors.border,
-      marginBottom: 22,
-      transition: 'background 0.3s',
-    }) as React.CSSProperties,
-  body: {
-    padding: '8px 32px 32px',
-    minHeight: 280,
-  } as React.CSSProperties,
-  fieldGroup: {
-    marginBottom: 20,
-  } as React.CSSProperties,
-  label: {
-    display: 'block',
-    fontSize: 13,
-    fontWeight: 600,
-    color: colors.text,
-    marginBottom: 6,
-  } as React.CSSProperties,
-  input: (hasError: boolean) =>
-    ({
-      width: '100%',
-      padding: '12px 14px',
-      fontSize: 15,
-      border: `2px solid ${hasError ? colors.error : colors.border}`,
-      borderRadius: 10,
-      outline: 'none',
-      boxSizing: 'border-box' as const,
-      transition: 'border-color 0.2s',
-      background: hasError ? colors.errorBg : '#fff',
-    }) as React.CSSProperties,
-  errorText: {
-    fontSize: 12,
-    color: colors.error,
-    marginTop: 4,
-    minHeight: 16,
-  } as React.CSSProperties,
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 16,
-  } as React.CSSProperties,
-  footer: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '16px 32px 32px',
-  } as React.CSSProperties,
-  backBtn: {
-    padding: '12px 24px',
-    fontSize: 14,
-    fontWeight: 600,
-    border: `2px solid ${colors.border}`,
-    borderRadius: 10,
-    background: '#fff',
-    color: colors.text,
-    cursor: 'pointer',
-    transition: 'border-color 0.2s',
-  } as React.CSSProperties,
-  nextBtn: (disabled: boolean) =>
-    ({
-      padding: '12px 32px',
-      fontSize: 14,
-      fontWeight: 600,
-      border: 'none',
-      borderRadius: 10,
-      background: disabled ? colors.border : colors.primary,
-      color: disabled ? colors.muted : '#fff',
-      cursor: disabled ? 'not-allowed' : 'pointer',
-      transition: 'background 0.2s',
-    }) as React.CSSProperties,
-  reviewSection: {
-    marginBottom: 16,
-  } as React.CSSProperties,
-  reviewLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: colors.muted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  } as React.CSSProperties,
-  reviewValue: {
-    fontSize: 16,
-    color: colors.text,
-    padding: '8px 0',
-    borderBottom: `1px solid ${colors.border}`,
-  } as React.CSSProperties,
-  successCard: {
-    textAlign: 'center' as const,
-    padding: '60px 32px',
-  } as React.CSSProperties,
-  successIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: '50%',
-    background: colors.successBg,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: '0 auto 16px',
-    fontSize: 32,
-  } as React.CSSProperties,
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 700,
-    color: colors.text,
-    margin: 0,
-  } as React.CSSProperties,
-  successMessage: {
-    color: colors.muted,
-    fontSize: 14,
-    marginTop: 8,
-  } as React.CSSProperties,
+  card: { background: colors.card, borderRadius: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', width: '100%', maxWidth: 540, overflow: 'hidden' } as React.CSSProperties,
+  header: { padding: '32px 32px 0' } as React.CSSProperties,
+  title: { fontSize: 28, fontWeight: 800, color: colors.text, margin: 0 } as React.CSSProperties,
+  subtitle: { color: colors.muted, fontSize: 14, marginTop: 4 } as React.CSSProperties,
+  progressBar: { display: 'flex', alignItems: 'center', padding: '24px 32px', gap: 0 } as React.CSSProperties,
+  progressStep: (_active: boolean, _completed: boolean) => ({ flex: 1, display: 'flex', flexDirection: 'column' as const, alignItems: 'center' }) as React.CSSProperties,
+  progressDot: (active: boolean, completed: boolean) => ({
+    width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 13, fontWeight: 700, background: completed ? colors.primary : active ? colors.primary : colors.border,
+    color: completed || active ? '#fff' : colors.muted, transition: 'all 0.3s',
+  }) as React.CSSProperties,
+  progressLabel: (active: boolean) => ({ fontSize: 12, fontWeight: active ? 600 : 400, color: active ? colors.primary : colors.muted, marginTop: 6, transition: 'color 0.3s' }) as React.CSSProperties,
+  progressLine: (completed: boolean) => ({ flex: 1, height: 2, background: completed ? colors.primary : colors.border, marginBottom: 22, transition: 'background 0.3s' }) as React.CSSProperties,
+  body: { padding: '8px 32px 32px', minHeight: 280 } as React.CSSProperties,
+  fieldGroup: { marginBottom: 20 } as React.CSSProperties,
+  label: { display: 'block', fontSize: 13, fontWeight: 600, color: colors.text, marginBottom: 6 } as React.CSSProperties,
+  input: (hasError: boolean) => ({
+    width: '100%', padding: '12px 14px', fontSize: 15, border: `2px solid ${hasError ? colors.error : colors.border}`,
+    borderRadius: 10, outline: 'none', boxSizing: 'border-box' as const, transition: 'border-color 0.2s',
+    background: hasError ? colors.errorBg : '#fff',
+  }) as React.CSSProperties,
+  errorText: { fontSize: 12, color: colors.error, marginTop: 4, minHeight: 16 } as React.CSSProperties,
+  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 } as React.CSSProperties,
+  footer: { display: 'flex', justifyContent: 'space-between', padding: '16px 32px 32px' } as React.CSSProperties,
+  backBtn: { padding: '12px 24px', fontSize: 14, fontWeight: 600, border: `2px solid ${colors.border}`, borderRadius: 10, background: '#fff', color: colors.text, cursor: 'pointer', transition: 'border-color 0.2s' } as React.CSSProperties,
+  nextBtn: (disabled: boolean) => ({
+    padding: '12px 32px', fontSize: 14, fontWeight: 600, border: 'none', borderRadius: 10,
+    background: disabled ? colors.border : colors.primary, color: disabled ? colors.muted : '#fff',
+    cursor: disabled ? 'not-allowed' : 'pointer', transition: 'background 0.2s',
+  }) as React.CSSProperties,
+  reviewSection: { marginBottom: 16 } as React.CSSProperties,
+  reviewLabel: { fontSize: 12, fontWeight: 600, color: colors.muted, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 4 } as React.CSSProperties,
+  reviewValue: { fontSize: 16, color: colors.text, padding: '8px 0', borderBottom: `1px solid ${colors.border}` } as React.CSSProperties,
+  successCard: { textAlign: 'center' as const, padding: '60px 32px' } as React.CSSProperties,
+  successIcon: { width: 64, height: 64, borderRadius: '50%', background: colors.successBg, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 32 } as React.CSSProperties,
+  successTitle: { fontSize: 24, fontWeight: 700, color: colors.text, margin: 0 } as React.CSSProperties,
+  successMessage: { color: colors.muted, fontSize: 14, marginTop: 8 } as React.CSSProperties,
 }
 
 // ---------------------------------------------------------------------------
@@ -230,14 +74,8 @@ const styles = {
 // ---------------------------------------------------------------------------
 
 const FIELD_LABELS: Record<string, string> = {
-  firstName: 'First Name',
-  lastName: 'Last Name',
-  email: 'Email Address',
-  phone: 'Phone Number',
-  street: 'Street Address',
-  city: 'City',
-  state: 'State',
-  zip: 'ZIP Code',
+  firstName: 'First Name', lastName: 'Last Name', email: 'Email Address', phone: 'Phone Number',
+  street: 'Street Address', city: 'City', state: 'State', zip: 'ZIP Code',
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +84,8 @@ const FIELD_LABELS: Record<string, string> = {
 
 function FormField({ field, step }: { field: string; step: StepId }) {
   const emit = useEmit()
-  const values = useSignal(fieldValues)
-  const errors = useSignal(fieldErrors)
+  const values = usePulse(FieldValuesChanged, { firstName: '', lastName: '', email: '', phone: '', street: '', city: '', state: '', zip: '' } as FormData)
+  const errors = usePulse(FieldErrorsChanged, {} as Record<string, string | null>)
 
   const value = values[field as keyof FormData] ?? ''
   const error = errors[field] ?? null
@@ -260,24 +98,14 @@ function FormField({ field, step }: { field: string; step: StepId }) {
         style={styles.input(hasError)}
         value={value}
         placeholder={FIELD_LABELS[field] ?? field}
-        onChange={(e) =>
-          emit(FieldUpdated, { step, field, value: e.target.value })
-        }
-        onFocus={(e) => {
-          e.currentTarget.style.borderColor = hasError ? colors.error : colors.primary
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.borderColor = hasError ? colors.error : colors.border
-        }}
+        onChange={(e) => emit(FieldUpdated, { step, field, value: e.target.value })}
+        onFocus={(e) => { e.currentTarget.style.borderColor = hasError ? colors.error : colors.primary }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = hasError ? colors.error : colors.border }}
       />
       <div style={styles.errorText}>{error ?? '\u00A0'}</div>
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Step 0: Personal Info
-// ---------------------------------------------------------------------------
 
 function PersonalInfoStep() {
   return (
@@ -292,10 +120,6 @@ function PersonalInfoStep() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Step 1: Address
-// ---------------------------------------------------------------------------
-
 function AddressStep() {
   return (
     <div>
@@ -309,13 +133,8 @@ function AddressStep() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Step 2: Review
-// ---------------------------------------------------------------------------
-
 function ReviewStep() {
-  const values = useSignal(fieldValues)
-
+  const values = usePulse(FieldValuesChanged, { firstName: '', lastName: '', email: '', phone: '', street: '', city: '', state: '', zip: '' } as FormData)
   const reviewFields = [
     { label: 'Name', value: `${values.firstName} ${values.lastName}` },
     { label: 'Email', value: values.email },
@@ -325,9 +144,7 @@ function ReviewStep() {
 
   return (
     <div>
-      <p style={{ color: colors.muted, fontSize: 14, marginBottom: 20 }}>
-        Please review your information before submitting.
-      </p>
+      <p style={{ color: colors.muted, fontSize: 14, marginBottom: 20 }}>Please review your information before submitting.</p>
       {reviewFields.map((item) => (
         <div key={item.label} style={styles.reviewSection}>
           <div style={styles.reviewLabel}>{item.label}</div>
@@ -338,47 +155,30 @@ function ReviewStep() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Progress bar
-// ---------------------------------------------------------------------------
-
 function ProgressBar() {
-  const step = useSignal(currentStep)
+  const step = usePulse(CurrentStepChanged, 0 as StepId)
 
   return (
     <div style={styles.progressBar}>
       {STEP_LABELS.map((label, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
           <div style={styles.progressStep(step === i, step > i)}>
-            <div style={styles.progressDot(step === i, step > i)}>
-              {step > i ? '\u2713' : i + 1}
-            </div>
+            <div style={styles.progressDot(step === i, step > i)}>{step > i ? '\u2713' : i + 1}</div>
             <span style={styles.progressLabel(step === i)}>{label}</span>
           </div>
-          {i < STEP_LABELS.length - 1 && (
-            <div style={styles.progressLine(step > i)} />
-          )}
+          {i < STEP_LABELS.length - 1 && <div style={styles.progressLine(step > i)} />}
         </div>
       ))}
     </div>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Success screen
-// ---------------------------------------------------------------------------
-
 function SuccessScreen() {
   return (
     <div style={styles.successCard}>
-      <div style={styles.successIcon}>
-        <span role="img" aria-label="check">&#10004;</span>
-      </div>
+      <div style={styles.successIcon}><span role="img" aria-label="check">&#10004;</span></div>
       <h2 style={styles.successTitle}>Submission Complete</h2>
-      <p style={styles.successMessage}>
-        Your form has been submitted successfully. All state was managed through
-        Pulse events and signals.
-      </p>
+      <p style={styles.successMessage}>Your form has been submitted successfully. All state was managed through Pulse events and on/emit.</p>
     </div>
   )
 }
@@ -389,21 +189,16 @@ function SuccessScreen() {
 
 export default function App() {
   const emit = useEmit()
-  const step = useSignal(currentStep)
-  const direction = useSignal(stepDirection)
-  const submitting = useSignal(isSubmitting)
-  const result = useSignal(submitResult)
-  const shake = useSignal(shakeActive)
-  const [recording, setRecording] = useState(false)
-  const [recorded, setRecorded] = useState<any[] | null>(null)
+  const step = usePulse(CurrentStepChanged, 0 as StepId)
+  const direction = usePulse(StepDirectionChanged, 'next' as 'next' | 'prev')
+  const submitting = usePulse(IsSubmittingChanged, false)
+  const result = usePulse(SubmitResultChanged, null as { success: boolean } | null)
+  const shake = usePulse(ShakeCountChanged, 0)
 
-  // Show success screen after submit
   if (result?.success) {
     return (
       <div style={styles.container}>
-        <div style={styles.card}>
-          <SuccessScreen />
-        </div>
+        <div style={styles.card}><SuccessScreen /></div>
       </div>
     )
   }
@@ -417,151 +212,26 @@ export default function App() {
   return (
     <div style={styles.container}>
       <style>{`
-        @keyframes shakeForm {
-          0%, 100% { transform: translateX(0); }
-          10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
-          20%, 40%, 60%, 80% { transform: translateX(6px); }
-        }
-        @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(30px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes slideInLeft {
-          from { opacity: 0; transform: translateX(-30px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
+        @keyframes shakeForm { 0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); } 20%, 40%, 60%, 80% { transform: translateX(6px); } }
+        @keyframes slideInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
       `}</style>
 
-      <div
-        style={{
-          ...styles.card,
-          animation: shake > 0 ? 'shakeForm 0.5s ease-in-out' : undefined,
-        }}
-        key={`shake-${shake}`}
-      >
+      <div style={{ ...styles.card, animation: shake > 0 ? 'shakeForm 0.5s ease-in-out' : undefined }} key={`shake-${shake}`}>
         <div style={styles.header}>
           <h1 style={styles.title}>Create Account</h1>
-          <p style={styles.subtitle}>
-            Multi-step form with event-driven validation
-          </p>
+          <p style={styles.subtitle}>Multi-step form with event-driven validation</p>
         </div>
-
         <ProgressBar />
-
-        <div
-          style={{
-            ...styles.body,
-            animation:
-              direction === 'next'
-                ? 'slideInRight 0.3s ease-out'
-                : 'slideInLeft 0.3s ease-out',
-          }}
-          key={`step-${step}`}
-        >
+        <div style={{ ...styles.body, animation: direction === 'next' ? 'slideInRight 0.3s ease-out' : 'slideInLeft 0.3s ease-out' }} key={`step-${step}`}>
           {stepComponents[step]}
         </div>
-
         <div style={styles.footer}>
-          {step > 0 ? (
-            <button
-              style={styles.backBtn}
-              onClick={() => emit(PrevStep, undefined)}
-            >
-              Back
-            </button>
-          ) : (
-            <div />
-          )}
-          <button
-            style={styles.nextBtn(submitting)}
-            disabled={submitting}
-            onClick={() => emit(NextStep, undefined)}
-          >
-            {submitting
-              ? 'Submitting...'
-              : step === 2
-                ? 'Submit'
-                : 'Continue'}
+          {step > 0 ? <button style={styles.backBtn} onClick={() => emit(PrevStep, undefined)}>Back</button> : <div />}
+          <button style={styles.nextBtn(submitting)} disabled={submitting} onClick={() => emit(NextStep, undefined)}>
+            {submitting ? 'Submitting...' : step === 2 ? 'Submit' : 'Continue'}
           </button>
         </div>
-      </div>
-
-      {/* Record & Replay controls (engine.startRecording / stopRecording / replay) */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          marginTop: 16,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-      >
-        {!recording ? (
-          <button
-            onClick={() => {
-              startRec()
-              setRecording(true)
-              setRecorded(null)
-            }}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: `1px solid ${colors.error}40`,
-              background: `${colors.error}10`,
-              color: colors.error,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Record
-          </button>
-        ) : (
-          <button
-            onClick={() => {
-              const events = stopRec()
-              setRecording(false)
-              setRecorded(events)
-            }}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: `1px solid ${colors.error}`,
-              background: colors.error,
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Stop
-          </button>
-        )}
-        <button
-          onClick={() => {
-            if (recorded && recorded.length > 0) {
-              replayRec(recorded)
-            }
-          }}
-          disabled={!recorded || recorded.length === 0}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 8,
-            border: `1px solid ${colors.primary}40`,
-            background: recorded ? `${colors.primary}10` : colors.border,
-            color: recorded ? colors.primary : colors.muted,
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: recorded ? 'pointer' : 'not-allowed',
-          }}
-        >
-          Replay{recorded ? ` (${recorded.length})` : ''}
-        </button>
-        {recording && (
-          <span style={{ fontSize: 12, color: colors.error, fontWeight: 600 }}>
-            Recording...
-          </span>
-        )}
       </div>
     </div>
   )

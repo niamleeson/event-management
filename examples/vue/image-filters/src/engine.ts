@@ -1,6 +1,4 @@
 import { createEngine } from '@pulse/core'
-import type { Signal } from '@pulse/core'
-
 export const engine = createEngine()
 
 /* ------------------------------------------------------------------ */
@@ -80,22 +78,22 @@ function makeDefaultFilters(): FilterState[] {
 /*  Signals                                                           */
 /* ------------------------------------------------------------------ */
 
-export const filters: Signal<FilterState[]> = engine.signal(
-  FilterValueChanged,
-  makeDefaultFilters(),
-  (prev, { id, value }) => prev.map(f => f.id === id ? { ...f, value } : f),
-)
+export let filters = makeDefaultFilters()
+export const FiltersChanged = engine.event('FiltersChanged')
+engine.on(FilterValueChanged, (v: any) => { filters = ((prev, { id, value }) => prev.map(f => f.id === id ? { ...f, value } : f))(filters, v); engine.emit(FiltersChanged, filters) })
 
-engine.signalUpdate(filters, FilterReordered, (prev, { fromIdx, toIdx }) => {
+engine.on(FilterReordered, (v: any) => { filters = ((prev, { fromIdx, toIdx }) => {
   const next = [...prev]
   const [item] = next.splice(fromIdx, 1)
   next.splice(toIdx, 0, item)
   return next
-})
+})(filters, v); engine.emit(FiltersChanged, filters) })
 
-engine.signalUpdate(filters, ResetAll, () => makeDefaultFilters())
+engine.on(ResetAll, (v: any) => { filters = (() => makeDefaultFilters())(filters, v); engine.emit(FiltersChanged, filters) })
 
-export const splitPosition: Signal<number> = engine.signal(SplitChanged, 50, (_prev, val) => val)
+export let splitPosition = 50
+export const SplitPositionChanged = engine.event('SplitPositionChanged')
+engine.on(SplitChanged, (v: any) => { splitPosition = ((_prev, val) => val)(splitPosition, v); engine.emit(SplitPositionChanged, splitPosition) })
 
 /* ------------------------------------------------------------------ */
 /*  Undo/Redo stack                                                   */
@@ -104,20 +102,24 @@ export const splitPosition: Signal<number> = engine.signal(SplitChanged, 50, (_p
 const undoStack: HistoryEntry[] = []
 const redoStack: HistoryEntry[] = []
 
-export const canUndo: Signal<boolean> = engine.signal(FilterValueChanged, false, () => undoStack.length > 0)
-export const canRedo: Signal<boolean> = engine.signal(FilterValueChanged, false, () => redoStack.length > 0)
+export let canUndo = false
+export const CanUndoChanged = engine.event('CanUndoChanged')
+engine.on(FilterValueChanged, (v: any) => { canUndo = (() => undoStack.length > 0)(canUndo, v); engine.emit(CanUndoChanged, canUndo) })
+export let canRedo = false
+export const CanRedoChanged = engine.event('CanRedoChanged')
+engine.on(FilterValueChanged, (v: any) => { canRedo = (() => redoStack.length > 0)(canRedo, v); engine.emit(CanRedoChanged, canRedo) })
 
 // Record history on each change
 engine.on(FilterValueChanged, ({ id }) => {
-  const filterName = filters.value.find(f => f.id === id)?.name ?? 'unknown'
-  undoStack.push({ filters: filters.value.map(f => ({ ...f })), label: `Changed ${filterName}` })
+  const filterName = filters.find(f => f.id === id)?.name ?? 'unknown'
+  undoStack.push({ filters: filters.map(f => ({ ...f })), label: `Changed ${filterName}` })
   redoStack.length = 0
 })
 
 engine.on(Undo, () => {
   if (undoStack.length === 0) return
   const entry = undoStack.pop()!
-  redoStack.push({ filters: filters.value.map(f => ({ ...f })), label: 'Undo' })
+  redoStack.push({ filters: filters.map(f => ({ ...f })), label: 'Undo' })
   // Restore filters by emitting reset then re-applying
   engine.emit(ResetAll, undefined)
   for (const f of entry.filters) {
@@ -128,7 +130,7 @@ engine.on(Undo, () => {
 engine.on(Redo, () => {
   if (redoStack.length === 0) return
   const entry = redoStack.pop()!
-  undoStack.push({ filters: filters.value.map(f => ({ ...f })), label: 'Redo' })
+  undoStack.push({ filters: filters.map(f => ({ ...f })), label: 'Redo' })
   engine.emit(ResetAll, undefined)
   for (const f of entry.filters) {
     engine.emit(FilterValueChanged, { id: f.id, value: f.value })

@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useTween, useSpring } from '@pulse/vue'
-import { engine, CARDS, anims } from './engine'
+import { providePulse, useEmit, usePulse, useTween, useSpring } from '@pulse/vue'
+import {
+  engine,
+  CARDS,
+  anims,
+} from './engine'
 
 providePulse(engine)
 

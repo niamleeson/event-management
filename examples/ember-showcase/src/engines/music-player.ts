@@ -1,4 +1,4 @@
-import { createEngine, type TweenValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -14,7 +14,7 @@ export interface Track {
   id: number
   title: string
   artist: string
-  duration: number // seconds
+  duration: number
   color: string
 }
 
@@ -43,70 +43,84 @@ export const NextTrack = engine.event<void>('NextTrack')
 export const PrevTrack = engine.event<void>('PrevTrack')
 export const SelectTrack = engine.event<number>('SelectTrack')
 export const Seek = engine.event<number>('Seek')
-export const BeatPulse = engine.event<void>('BeatPulse')
-export const BeatPulseDone = engine.event<void>('BeatPulseDone')
+export const PlayerStateChanged = engine.event<void>('PlayerStateChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const isPlaying = engine.signal<boolean>(Play, false, () => true)
-engine.signalUpdate(isPlaying, Pause, () => false)
+let _isPlaying = false
+let _currentTrackIndex = 0
+let _currentTime = 0
+let _visualizerBars = new Array(BAR_COUNT).fill(0.1)
+let _beatScale = 1
+let _beatStart = 0
+let _beatActive = false
 
-export const currentTrackIndex = engine.signal<number>(
-  SelectTrack, 0, (_prev, idx) => idx % PLAYLIST.length,
-)
-engine.signalUpdate(currentTrackIndex, NextTrack, (prev) => (prev + 1) % PLAYLIST.length)
-engine.signalUpdate(currentTrackIndex, PrevTrack, (prev) => (prev - 1 + PLAYLIST.length) % PLAYLIST.length)
-
-export const currentTime = engine.signal<number>(
-  Seek, 0, (_prev, time) => time,
-)
-
-// Reset time on track change
-engine.signalUpdate(currentTime, SelectTrack, () => 0)
-engine.signalUpdate(currentTime, NextTrack, () => 0)
-engine.signalUpdate(currentTime, PrevTrack, () => 0)
-
-// Visualizer bars — randomized audio levels
-export const visualizerBars = engine.signal<number[]>(
-  Play, new Array(BAR_COUNT).fill(0.1),
-  () => new Array(BAR_COUNT).fill(0.1),
-)
+export function getIsPlaying(): boolean { return _isPlaying }
+export function getCurrentTrackIndex(): number { return _currentTrackIndex }
+export function getCurrentTime(): number { return _currentTime }
+export function getVisualizerBars(): number[] { return _visualizerBars }
+export function getBeatScale(): number { return _beatScale }
 
 // ---------------------------------------------------------------------------
-// Tween — beat pulse (album art scale)
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const beatScale: TweenValue = engine.tween({
-  start: BeatPulse,
-  done: BeatPulseDone,
-  from: 1.08,
-  to: 1,
-  duration: 300,
-  easing: (t: number) => 1 - Math.pow(1 - t, 3),
+engine.on(Play, () => {
+  _isPlaying = true
+  engine.emit(PlayerStateChanged, undefined)
+})
+
+engine.on(Pause, () => {
+  _isPlaying = false
+  engine.emit(PlayerStateChanged, undefined)
+})
+
+engine.on(SelectTrack, (idx: number) => {
+  _currentTrackIndex = idx % PLAYLIST.length
+  _currentTime = 0
+  engine.emit(PlayerStateChanged, undefined)
+})
+
+engine.on(NextTrack, () => {
+  _currentTrackIndex = (_currentTrackIndex + 1) % PLAYLIST.length
+  _currentTime = 0
+  engine.emit(PlayerStateChanged, undefined)
+})
+
+engine.on(PrevTrack, () => {
+  _currentTrackIndex = (_currentTrackIndex - 1 + PLAYLIST.length) % PLAYLIST.length
+  _currentTime = 0
+  engine.emit(PlayerStateChanged, undefined)
+})
+
+engine.on(Seek, (time: number) => {
+  _currentTime = time
+  engine.emit(PlayerStateChanged, undefined)
 })
 
 // ---------------------------------------------------------------------------
-// Frame loop — simulate audio playback and visualizer
+// Frame update
 // ---------------------------------------------------------------------------
 
-engine.on(engine.frame, ({ dt }) => {
-  if (!isPlaying.value) return
+export function updateFrame(dt: number, now: number): void {
+  if (!_isPlaying) return
 
   const dtSec = dt / 1000
-  const track = PLAYLIST[currentTrackIndex.value]
-  const newTime = currentTime.value + dtSec
+  const track = PLAYLIST[_currentTrackIndex]
+  const newTime = _currentTime + dtSec
 
   if (newTime >= track.duration) {
-    engine.emit(NextTrack, undefined)
-    engine.emit(Play, undefined)
+    _currentTrackIndex = (_currentTrackIndex + 1) % PLAYLIST.length
+    _currentTime = 0
+    _isPlaying = true
     return
   }
 
-  currentTime.set(newTime)
+  _currentTime = newTime
 
-  // Update visualizer bars with simulated audio data
+  // Visualizer bars
   const bars = new Array(BAR_COUNT)
   for (let i = 0; i < BAR_COUNT; i++) {
     const freq = (i / BAR_COUNT) * Math.PI * 2
@@ -114,13 +128,22 @@ engine.on(engine.frame, ({ dt }) => {
     const noise = Math.random() * 0.4
     bars[i] = Math.min(1, Math.max(0.05, base + noise))
   }
-  visualizerBars.set(bars)
+  _visualizerBars = bars
 
   // Beat pulse every ~0.5 seconds
   if (Math.floor(newTime * 2) !== Math.floor((newTime - dtSec) * 2)) {
-    engine.emit(BeatPulse, undefined)
+    _beatStart = now
+    _beatActive = true
   }
-})
 
-// Start frame loop
-engine.startFrameLoop()
+  if (_beatActive) {
+    const elapsed = now - _beatStart
+    const t = Math.min(1, elapsed / 300)
+    const e = 1 - Math.pow(1 - t, 3)
+    _beatScale = 1.08 + (1 - 1.08) * e
+    if (t >= 1) {
+      _beatActive = false
+      _beatScale = 1
+    }
+  }
+}

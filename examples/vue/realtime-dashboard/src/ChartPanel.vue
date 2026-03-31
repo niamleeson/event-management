@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { useSignal } from '@pulse/vue'
-import { chartData, METRICS, type ChartDataPoint } from './engine'
+import { usePulse } from '@pulse/vue'
+import {
+  METRICS,
+  ChartDataChanged,
+  getChartData,
+  type ChartDataPoint,
+} from './engine'
 
-const data = useSignal(chartData)
+const data = usePulse(ChartDataChanged, getChartData())
 
 const CHART_COLORS: Record<string, string> = {
   'CPU Usage': '#4361ee',

@@ -1,5 +1,4 @@
-import { createEngine, createSignal } from '@pulse/core'
-import type { Signal } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -43,6 +42,14 @@ export const ContextMenuClose = engine.event<void>('ContextMenuClose')
 export const ClipboardCopy = engine.event<string>('ClipboardCopy')
 export const ClipboardPaste = engine.event<string>('ClipboardPaste')
 export const KeyNav = engine.event<string>('KeyNav')
+
+// State-changed events for React subscriptions
+export const TreeChanged = engine.event<TreeNode[]>('TreeChanged')
+export const SelectedIdChanged = engine.event<string | null>('SelectedIdChanged')
+export const ExpandedIdsChanged = engine.event<Set<string>>('ExpandedIdsChanged')
+export const SearchFilterChanged = engine.event<string>('SearchFilterChanged')
+export const ClipboardChanged = engine.event<string | null>('ClipboardChanged')
+export const ContextMenuChanged = engine.event<ContextMenuState>('ContextMenuChanged')
 
 // ---------------------------------------------------------------------------
 // Initial tree
@@ -151,19 +158,6 @@ function findNode(nodes: TreeNode[], id: string): TreeNode | null {
   return null
 }
 
-function findParentOf(nodes: TreeNode[], id: string): TreeNode | null {
-  for (const n of nodes) {
-    if (n.children) {
-      for (const child of n.children) {
-        if (child.id === id) return n
-      }
-      const found = findParentOf(n.children, id)
-      if (found) return found
-    }
-  }
-  return null
-}
-
 function removeNode(nodes: TreeNode[], id: string): TreeNode[] {
   return nodes
     .filter((n) => n.id !== id)
@@ -193,7 +187,7 @@ function renameNode(nodes: TreeNode[], id: string, name: string): TreeNode[] {
   })
 }
 
-function flattenTree(nodes: TreeNode[], expanded: Set<string>): TreeNode[] {
+export function flattenTree(nodes: TreeNode[], expanded: Set<string>): TreeNode[] {
   const result: TreeNode[] = []
   function walk(items: TreeNode[]) {
     for (const item of items) {
@@ -207,7 +201,7 @@ function flattenTree(nodes: TreeNode[], expanded: Set<string>): TreeNode[] {
   return result
 }
 
-function getPath(nodes: TreeNode[], id: string): string[] {
+export function getPath(nodes: TreeNode[], id: string): string[] {
   function walk(items: TreeNode[], path: string[]): string[] | null {
     for (const item of items) {
       const currentPath = [...path, item.name]
@@ -223,120 +217,113 @@ function getPath(nodes: TreeNode[], id: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const tree: Signal<TreeNode[]> = createSignal<TreeNode[]>(INITIAL_TREE)
-engine['_signals'].push(tree)
-
-export const selectedId = engine.signal<string | null>(
-  SelectItem,
-  null,
-  (_prev, id) => id,
-)
-
-export const expandedIds: Signal<Set<string>> = createSignal<Set<string>>(
-  new Set(['root', 'src']),
-)
-engine['_signals'].push(expandedIds)
-
-export const searchFilter = engine.signal<string>(
-  SearchChanged,
-  '',
-  (_prev, value) => value,
-)
-
-export const clipboard: Signal<string | null> = createSignal<string | null>(null)
-engine['_signals'].push(clipboard)
-
-export const contextMenu: Signal<ContextMenuState> = createSignal<ContextMenuState>({
-  visible: false,
-  x: 0,
-  y: 0,
-  targetId: null,
-})
-engine['_signals'].push(contextMenu)
+let tree: TreeNode[] = INITIAL_TREE
+let selectedId: string | null = null
+let expandedIds: Set<string> = new Set(['root', 'src'])
+let searchFilter = ''
+let clipboard: string | null = null
+let contextMenu: ContextMenuState = { visible: false, x: 0, y: 0, targetId: null }
 
 // ---------------------------------------------------------------------------
 // Event handlers
 // ---------------------------------------------------------------------------
 
+engine.on(SelectItem, (id) => {
+  selectedId = id
+  engine.emit(SelectedIdChanged, selectedId)
+})
+
+engine.on(SearchChanged, (value) => {
+  searchFilter = value
+  engine.emit(SearchFilterChanged, searchFilter)
+})
+
 engine.on(ToggleFolder, (id) => {
-  const current = new Set(expandedIds.value)
+  const current = new Set(expandedIds)
   if (current.has(id)) {
     current.delete(id)
   } else {
     current.add(id)
   }
-  expandedIds.set(current)
+  expandedIds = current
+  engine.emit(ExpandedIdsChanged, expandedIds)
 })
 
 engine.on(CreateFile, ({ parentId, name }) => {
   const id = `file-${++nodeCounter}`
   const newNode: TreeNode = { id, name, type: 'file', parentId }
-  tree.set(addChild(deepCloneTree(tree.value), parentId, newNode))
+  tree = addChild(deepCloneTree(tree), parentId, newNode)
+  engine.emit(TreeChanged, tree)
   // Auto-expand parent
-  const exp = new Set(expandedIds.value)
+  const exp = new Set(expandedIds)
   exp.add(parentId)
-  expandedIds.set(exp)
+  expandedIds = exp
+  engine.emit(ExpandedIdsChanged, expandedIds)
 })
 
 engine.on(CreateFolder, ({ parentId, name }) => {
   const id = `folder-${++nodeCounter}`
   const newNode: TreeNode = { id, name, type: 'folder', parentId, children: [] }
-  tree.set(addChild(deepCloneTree(tree.value), parentId, newNode))
-  const exp = new Set(expandedIds.value)
+  tree = addChild(deepCloneTree(tree), parentId, newNode)
+  engine.emit(TreeChanged, tree)
+  const exp = new Set(expandedIds)
   exp.add(parentId)
-  expandedIds.set(exp)
+  expandedIds = exp
+  engine.emit(ExpandedIdsChanged, expandedIds)
 })
 
 engine.on(DeleteItem, (id) => {
   if (id === 'root') return
-  tree.set(removeNode(deepCloneTree(tree.value), id))
-  if (selectedId.value === id) {
-    engine.emit(SelectItem, '')
+  tree = removeNode(deepCloneTree(tree), id)
+  engine.emit(TreeChanged, tree)
+  if (selectedId === id) {
+    selectedId = ''
+    engine.emit(SelectedIdChanged, selectedId)
   }
 })
 
 engine.on(RenameItem, ({ id, name }) => {
-  tree.set(renameNode(deepCloneTree(tree.value), id, name))
+  tree = renameNode(deepCloneTree(tree), id, name)
+  engine.emit(TreeChanged, tree)
 })
 
 engine.on(DragItem, ({ id, targetId }) => {
   if (id === targetId) return
-  const current = deepCloneTree(tree.value)
+  const current = deepCloneTree(tree)
   const node = findNode(current, id)
   if (!node) return
   const target = findNode(current, targetId)
   if (!target || target.type !== 'folder') return
   const without = removeNode(current, id)
-  tree.set(addChild(without, targetId, { ...node, parentId: targetId }))
+  tree = addChild(without, targetId, { ...node, parentId: targetId })
+  engine.emit(TreeChanged, tree)
 })
 
 engine.on(ContextMenuOpen, ({ x, y, targetId }) => {
-  contextMenu.set({ visible: true, x, y, targetId })
+  contextMenu = { visible: true, x, y, targetId }
+  engine.emit(ContextMenuChanged, contextMenu)
 })
 
 engine.on(ContextMenuClose, () => {
-  contextMenu.set({ visible: false, x: 0, y: 0, targetId: null })
+  contextMenu = { visible: false, x: 0, y: 0, targetId: null }
+  engine.emit(ContextMenuChanged, contextMenu)
 })
 
 engine.on(ClipboardCopy, (id) => {
-  clipboard.set(id)
+  clipboard = id
+  engine.emit(ClipboardChanged, clipboard)
 })
 
 engine.on(ClipboardPaste, (parentId) => {
-  const copyId = clipboard.value
-  if (!copyId) return
-  const current = deepCloneTree(tree.value)
-  const node = findNode(current, copyId)
+  if (!clipboard) return
+  const current = deepCloneTree(tree)
+  const node = findNode(current, clipboard)
   if (!node) return
   const newId = `copy-${++nodeCounter}`
   const copy: TreeNode = { ...node, id: newId, parentId, name: `${node.name} (copy)` }
-  tree.set(addChild(current, parentId, copy))
+  tree = addChild(current, parentId, copy)
+  engine.emit(TreeChanged, tree)
 })
-
-// Export helpers for components
-export { flattenTree, getPath }
-
-engine.startFrameLoop()

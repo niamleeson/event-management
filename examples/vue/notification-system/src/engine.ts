@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, TweenValue, SpringValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -23,14 +19,14 @@ export interface Notification {
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
 
-export const PRIORITY_COLORS: Record<Priority, string> = {
+const PRIORITY_COLORS: Record<Priority, string> = {
   info: '#0984e3',
   success: '#00b894',
   warning: '#fdcb6e',
   error: '#d63031',
 }
 
-export const PRIORITY_ICONS: Record<Priority, string> = {
+const PRIORITY_ICONS: Record<Priority, string> = {
   info: '\u2139',
   success: '\u2713',
   warning: '\u26A0',
@@ -52,55 +48,31 @@ export const AddNotification = engine.event<{ title: string; message: string; pr
 export const DismissNotification = engine.event<number>('DismissNotification')
 export const NotificationAdded = engine.event<Notification>('NotificationAdded')
 export const FloodNotifications = engine.event('FloodNotifications')
-export const ReflowUpdated = engine.event('ReflowUpdated')
 
 /* ------------------------------------------------------------------ */
-/*  Signals                                                           */
+/*  State-changed events                                              */
+/* ------------------------------------------------------------------ */
+
+export const NotificationsChanged = engine.event<Notification[]>('NotificationsChanged')
+
+/* ------------------------------------------------------------------ */
+/*  State                                                             */
 /* ------------------------------------------------------------------ */
 
 let nextId = 1
+let notifications: Notification[] = []
 
-export const notifications: Signal<Notification[]> = engine.signal(
-  NotificationAdded,
-  [] as Notification[],
-  (prev, notif) => [notif, ...prev].slice(0, 20),
-)
-engine.signalUpdate(notifications, DismissNotification, (prev, id) => prev.filter(n => n.id !== id))
-
-/* ------------------------------------------------------------------ */
-/*  Entrance/exit tweens (pool of 20 slots)                           */
-/* ------------------------------------------------------------------ */
-
-export const entranceTweens: TweenValue[] = []
-const entranceStarts = []
-
-for (let i = 0; i < 20; i++) {
-  const start = engine.event(`NotifEntrance_${i}`)
-  entranceStarts.push(start)
-  entranceTweens.push(engine.tween({
-    start,
-    from: -100,
-    to: 0,
-    duration: 300,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-}
+engine.on(NotificationAdded, (notif) => {
+  notifications = [notif, ...notifications].slice(0, 20)
+  engine.emit(NotificationsChanged, notifications)
+})
+engine.on(DismissNotification, (id) => {
+  notifications = notifications.filter(n => n.id !== id)
+  engine.emit(NotificationsChanged, notifications)
+})
 
 /* ------------------------------------------------------------------ */
-/*  Spring-driven reflow                                              */
-/* ------------------------------------------------------------------ */
-
-export const reflowTargets: Signal<number>[] = []
-export const reflowSprings: SpringValue[] = []
-
-for (let i = 0; i < 20; i++) {
-  const target = engine.signal(ReflowUpdated, 0 as number, () => i * 90)
-  reflowTargets.push(target)
-  reflowSprings.push(engine.spring(target, { stiffness: 200, damping: 22 }))
-}
-
-/* ------------------------------------------------------------------ */
-/*  Pipes                                                             */
+/*  Add notification logic                                            */
 /* ------------------------------------------------------------------ */
 
 engine.on(AddNotification, ({ title, message, priority }) => {
@@ -115,14 +87,9 @@ engine.on(AddNotification, ({ title, message, priority }) => {
   }
   engine.emit(NotificationAdded, notif)
 
-  const idx = 0 // new notifications go to top
-  if (entranceStarts[idx]) engine.emit(entranceStarts[idx], undefined)
-  engine.emit(ReflowUpdated, undefined)
-
   // Auto-dismiss
   setTimeout(() => {
     engine.emit(DismissNotification, notif.id)
-    engine.emit(ReflowUpdated, undefined)
   }, AUTO_DISMISS_MS[priority])
 })
 
@@ -151,3 +118,11 @@ engine.on(FloodNotifications, () => {
     }, i * 200)
   }
 })
+
+/* ------------------------------------------------------------------ */
+/*  Initial values                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getNotifications() { return notifications }
+
+export { PRIORITY_COLORS, PRIORITY_ICONS }

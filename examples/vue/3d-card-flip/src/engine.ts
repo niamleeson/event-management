@@ -1,9 +1,5 @@
-import { createEngine } from '@pulse/core'
-import type { Engine, EventType, TweenValue, SpringValue, Signal } from '@pulse/core'
-
+import { createEngine, type EventType } from '@pulse/core'
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Card data                                                         */
 /* ------------------------------------------------------------------ */
@@ -29,14 +25,14 @@ export interface CardAnimations {
   CardFlipDone: EventType<number>
   HoverIn: EventType<number>
   HoverOut: EventType<number>
-  flipTweens: TweenValue[]
-  unflipTweens: TweenValue[]
-  hoverTargets: Signal<number>[]
-  hoverSprings: SpringValue[]
+  flipTweens: any[]
+  unflipTweens: any[]
+  hoverTargets: any[]
+  hoverSprings: any[]
   flippedStates: boolean[]
 }
 
-function createCardAnimations(eng: Engine): CardAnimations {
+function createCardAnimations(eng: any): CardAnimations {
   const CardClicked = eng.event<number>('CardClicked')
   const CardFlipped = eng.event<{ index: number; flipped: boolean }>('CardFlipped')
   const CardFlipDone = eng.event<number>('CardFlipDone')
@@ -45,10 +41,10 @@ function createCardAnimations(eng: Engine): CardAnimations {
 
   const flipStarts: EventType[] = []
   const unflipStarts: EventType[] = []
-  const flipTweens: TweenValue[] = []
-  const unflipTweens: TweenValue[] = []
-  const hoverTargets: Signal<number>[] = []
-  const hoverSprings: SpringValue[] = []
+  const flipTweens: any[] = []
+  const unflipTweens: any[] = []
+  const hoverTargets: any[] = []
+  const hoverSprings: any[] = []
   const flippedStates: boolean[] = []
 
   for (let i = 0; i < 8; i++) {

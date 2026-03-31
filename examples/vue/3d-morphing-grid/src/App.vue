@@ -1,15 +1,24 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSignal, useTween } from '@pulse/vue'
+import { providePulse, useEmit, usePulse, useTween } from '@pulse/vue'
 import {
-  engine, GRID, CELL_COUNT, SHAPES, COLORS,
-  MorphToShape, currentShape, cellRX, cellRY, cellTZ,
+  engine,
+  GRID,
+  CELL_COUNT,
+  SHAPES,
+  COLORS,
+  MorphToShape,
+  currentShape,
+  cellRX,
+  cellRY,
+  cellTZ,
+  CurrentShapeChanged,
 } from './engine'
 import type { Shape } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const shape = useSignal(currentShape)
+const shape = usePulse(CurrentShapeChanged, currentShape)
 
 const rxVals = Array.from({ length: CELL_COUNT }, (_, i) => useTween(cellRX[i]))
 const ryVals = Array.from({ length: CELL_COUNT }, (_, i) => useTween(cellRY[i]))

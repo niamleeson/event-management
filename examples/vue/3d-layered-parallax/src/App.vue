@@ -1,18 +1,30 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { providePulse, useEmit, useSpring, useSignal, useTween } from '@pulse/vue'
+import { providePulse, useEmit, usePulse, useTween } from '@pulse/vue'
 import {
-  engine, LAYERS, MouseMoved, SceneEnter, ToggleDayNight,
-  tiltXSpring, tiltYSpring, isNight, nightAmount, layerEntrance,
+  engine,
+  LAYERS,
+  MouseMoved,
+  SceneEnter,
+  ToggleDayNight,
+  tiltXSpring,
+  tiltYSpring,
+  isNight,
+  nightAmount,
+  layerEntrance,
+  IsNightChanged,
+  TiltXSpringVal,
+  TiltYSpringVal,
+  NightAmountVal,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const tiltX = useSpring(tiltXSpring)
-const tiltY = useSpring(tiltYSpring)
-const night = useSignal(isNight)
-const nightVal = useTween(nightAmount)
+const tiltX = usePulse(TiltXSpringVal, tiltXSpring.value)
+const tiltY = usePulse(TiltYSpringVal, tiltYSpring.value)
+const night = usePulse(IsNightChanged, isNight)
+const nightVal = usePulse(NightAmountVal, nightAmount.value)
 const entrances = LAYERS.map((_, i) => useTween(layerEntrance[i]))
 
 function onMouseMove(e: MouseEvent) {

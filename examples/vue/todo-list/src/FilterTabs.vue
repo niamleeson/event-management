@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useSignal, useEmit } from '@pulse/vue'
-import { FilterChanged, activeFilter, type Filter } from './engine'
+import { usePulse, useEmit } from '@pulse/vue'
+import { FilterChanged, ActiveFilterChanged, getActiveFilter, type Filter } from './engine'
 
 const emit = useEmit()
-const filter = useSignal(activeFilter)
+const filter = usePulse(ActiveFilterChanged, getActiveFilter())
 const filters: Filter[] = ['all', 'active', 'completed']
 </script>
 

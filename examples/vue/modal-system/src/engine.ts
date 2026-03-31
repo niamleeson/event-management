@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, TweenValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -34,59 +30,50 @@ export const ModalOpened = engine.event<ModalConfig>('ModalOpened')
 export const ModalClosed = engine.event<number>('ModalClosed')
 
 /* ------------------------------------------------------------------ */
-/*  Signals                                                           */
+/*  State-changed events                                              */
+/* ------------------------------------------------------------------ */
+
+export const ModalStackChanged = engine.event<ModalConfig[]>('ModalStackChanged')
+export const BackdropOpacityChanged = engine.event<number>('BackdropOpacityChanged')
+
+/* ------------------------------------------------------------------ */
+/*  State                                                             */
 /* ------------------------------------------------------------------ */
 
 let nextModalId = 1
+let modalStack: ModalConfig[] = []
+let backdropOpacity = 0
 
-export const modalStack: Signal<ModalConfig[]> = engine.signal(
-  ModalOpened,
-  [] as ModalConfig[],
-  (prev, modal) => [...prev, modal],
-)
-engine.signalUpdate(modalStack, ModalClosed, (prev, id) => prev.filter(m => m.id !== id))
-
-/* ------------------------------------------------------------------ */
-/*  Entrance/exit tweens (pool of 10)                                 */
-/* ------------------------------------------------------------------ */
-
-export const scaleEntranceTweens: TweenValue[] = []
-export const fadeEntranceTweens: TweenValue[] = []
-const entranceStarts = []
-
-for (let i = 0; i < 10; i++) {
-  const start = engine.event(`ModalEntrance_${i}`)
-  entranceStarts.push(start)
-
-  scaleEntranceTweens.push(engine.tween({
-    start,
-    from: 0.8,
-    to: 1,
-    duration: 250,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-
-  fadeEntranceTweens.push(engine.tween({
-    start,
-    from: 0,
-    to: 1,
-    duration: 250,
-    easing: (t: number) => t,
-  }))
-}
-
-/* ------------------------------------------------------------------ */
-/*  Backdrop blur tween                                               */
-/* ------------------------------------------------------------------ */
-
-const BackdropStart = engine.event('BackdropStart')
-export const backdropOpacity = engine.tween({
-  start: BackdropStart,
-  from: () => backdropOpacity.value,
-  to: () => modalStack.value.length > 0 ? 1 : 0,
-  duration: 200,
-  easing: (t: number) => t,
+engine.on(ModalOpened, (modal) => {
+  modalStack = [...modalStack, modal]
+  engine.emit(ModalStackChanged, modalStack)
 })
+engine.on(ModalClosed, (id) => {
+  modalStack = modalStack.filter(m => m.id !== id)
+  engine.emit(ModalStackChanged, modalStack)
+})
+
+/* ------------------------------------------------------------------ */
+/*  Backdrop animation (CSS transition-friendly opacity)              */
+/* ------------------------------------------------------------------ */
+
+function animateBackdrop() {
+  const target = modalStack.length > 0 ? 1 : 0
+  const from = backdropOpacity
+  const duration = 200
+  let elapsed = 0
+  let last = performance.now()
+
+  function tick(now: number) {
+    elapsed += now - last
+    last = now
+    const p = Math.min(1, elapsed / duration)
+    backdropOpacity = from + (target - from) * p
+    engine.emit(BackdropOpacityChanged, backdropOpacity)
+    if (p < 1) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
 
 /* ------------------------------------------------------------------ */
 /*  Open/close logic                                                  */
@@ -95,21 +82,27 @@ export const backdropOpacity = engine.tween({
 engine.on(OpenModal, ({ title, content, size }) => {
   const modal: ModalConfig = { id: nextModalId++, title, content, size }
   engine.emit(ModalOpened, modal)
-
-  const idx = modalStack.value.length // new stack index
-  if (entranceStarts[idx]) engine.emit(entranceStarts[idx], undefined)
-  engine.emit(BackdropStart, undefined)
+  animateBackdrop()
 })
 
-engine.pipe(CloseModal, ModalClosed, (id) => id)
+engine.on(CloseModal, (id) => {
+  engine.emit(ModalClosed, id)
+})
 
 engine.on(ModalClosed, () => {
-  setTimeout(() => engine.emit(BackdropStart, undefined), 50)
+  setTimeout(() => animateBackdrop(), 50)
 })
 
-engine.pipeIf(CloseTopModal, CloseModal, () => {
-  const stack = modalStack.value
-  return stack.length > 0 ? stack[stack.length - 1].id : null
+engine.on(CloseTopModal, () => {
+  const stack = modalStack
+  if (stack.length > 0) {
+    engine.emit(CloseModal, stack[stack.length - 1].id)
+  }
 })
 
-// Escape key handling is done in the component
+/* ------------------------------------------------------------------ */
+/*  Initial values                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getModalStack() { return modalStack }
+export function getBackdropOpacity() { return backdropOpacity }

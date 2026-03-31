@@ -1,4 +1,4 @@
-import { createEngine, type EventType, type TweenValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -32,91 +32,65 @@ export const COLORS = ['#4361ee', '#7209b7', '#f72585', '#4cc9f0', '#2a9d8f', '#
 // Events
 // ---------------------------------------------------------------------------
 
-export const MorphCell = engine.event<{ index: number; shape: Shape }>('MorphCell')
 export const MorphAll = engine.event<Shape>('MorphAll')
 export const CycleNext = engine.event<void>('CycleNext')
 export const ToggleAutoCycle = engine.event<void>('ToggleAutoCycle')
 export const RandomizeColors = engine.event<void>('RandomizeColors')
-
-export const CellMorphStart: EventType<number>[] = []
-export const CellMorphDone: EventType<number>[] = []
-
-for (let i = 0; i < CELL_COUNT; i++) {
-  CellMorphStart.push(engine.event<number>(`CellMorphStart_${i}`))
-  CellMorphDone.push(engine.event<number>(`CellMorphDone_${i}`))
-}
+export const CellsChanged = engine.event<void>('CellsChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-const initialCells: CellState[] = Array.from({ length: CELL_COUNT }, (_, i) => ({
+let _cells: CellState[] = Array.from({ length: CELL_COUNT }, (_, i) => ({
   shape: SHAPES[i % SHAPES.length],
   color: COLORS[i % COLORS.length],
   scale: 1,
 }))
+let _currentShapeIndex = 0
+let _autoCycle = true
 
-export const cells = engine.signal<CellState[]>(
-  MorphCell, initialCells,
-  (prev, { index, shape }) => {
-    const next = [...prev]
-    next[index] = { ...next[index], shape }
-    return next
-  },
-)
+// Per-cell morph animation
+const _cellScale = new Float64Array(CELL_COUNT).fill(1)
+const _cellScaleStart = new Float64Array(CELL_COUNT)
+const _cellScaleActive = new Uint8Array(CELL_COUNT)
 
-engine.signalUpdate(cells, MorphAll, (prev, shape) =>
-  prev.map((c) => ({ ...c, shape })),
-)
-
-engine.signalUpdate(cells, RandomizeColors, (prev) =>
-  prev.map((c) => ({ ...c, color: COLORS[Math.floor(Math.random() * COLORS.length)] })),
-)
-
-export const currentShapeIndex = engine.signal<number>(
-  CycleNext, 0, (prev) => (prev + 1) % SHAPES.length,
-)
-
-export const autoCycle = engine.signal<boolean>(
-  ToggleAutoCycle, true, (prev) => !prev,
-)
+export function getCells(): CellState[] { return _cells }
+export function getCellScale(i: number): number { return _cellScale[i] }
+export function getAutoCycle(): boolean { return _autoCycle }
 
 // ---------------------------------------------------------------------------
-// Tweens — per-cell morph animation (scale down and back up)
+// Event handlers
 // ---------------------------------------------------------------------------
 
-export const cellScale: TweenValue[] = []
-
-for (let i = 0; i < CELL_COUNT; i++) {
-  cellScale.push(engine.tween({
-    start: CellMorphStart[i],
-    done: CellMorphDone[i],
-    from: 0.3,
-    to: 1,
-    duration: 400,
-    easing: (t: number) => {
-      // Elastic out
-      const c4 = (2 * Math.PI) / 3
-      return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1
-    },
-  }))
-}
-
-// ---------------------------------------------------------------------------
-// Staggered morph: CycleNext triggers per-cell morphs with stagger
-// ---------------------------------------------------------------------------
+engine.on(MorphAll, (shape: Shape) => {
+  _cells = _cells.map((c) => ({ ...c, shape }))
+  engine.emit(CellsChanged, undefined)
+})
 
 engine.on(CycleNext, () => {
-  const nextShape = SHAPES[currentShapeIndex.value]
+  _currentShapeIndex = (_currentShapeIndex + 1) % SHAPES.length
+  const nextShape = SHAPES[_currentShapeIndex]
   for (let i = 0; i < CELL_COUNT; i++) {
     const row = Math.floor(i / GRID_SIZE)
     const col = i % GRID_SIZE
-    const delay = (row + col) * 80 // diagonal stagger
+    const delay = (row + col) * 80
     setTimeout(() => {
-      engine.emit(CellMorphStart[i], i)
-      engine.emit(MorphCell, { index: i, shape: nextShape })
+      _cellScaleStart[i] = performance.now()
+      _cellScaleActive[i] = 1
+      _cells = _cells.map((c, idx) => idx === i ? { ...c, shape: nextShape } : c)
+      engine.emit(CellsChanged, undefined)
     }, delay)
   }
+})
+
+engine.on(ToggleAutoCycle, () => {
+  _autoCycle = !_autoCycle
+})
+
+engine.on(RandomizeColors, () => {
+  _cells = _cells.map((c) => ({ ...c, color: COLORS[Math.floor(Math.random() * COLORS.length)] }))
+  engine.emit(CellsChanged, undefined)
 })
 
 // ---------------------------------------------------------------------------
@@ -128,7 +102,7 @@ let cycleTimer: ReturnType<typeof setInterval> | null = null
 export function startAutoCycle() {
   if (cycleTimer) return
   cycleTimer = setInterval(() => {
-    if (autoCycle.value) {
+    if (_autoCycle) {
       engine.emit(CycleNext, undefined)
     }
   }, 2500)
@@ -141,5 +115,23 @@ export function stopAutoCycle() {
   }
 }
 
-// Start frame loop
-engine.startFrameLoop()
+// ---------------------------------------------------------------------------
+// Frame update
+// ---------------------------------------------------------------------------
+
+export function updateFrame(now: number): void {
+  for (let i = 0; i < CELL_COUNT; i++) {
+    if (_cellScaleActive[i]) {
+      const elapsed = now - _cellScaleStart[i]
+      const t = Math.min(1, elapsed / 400)
+      // Elastic out easing
+      const c4 = (2 * Math.PI) / 3
+      const e = t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1
+      _cellScale[i] = 0.3 + 0.7 * e
+      if (t >= 1) {
+        _cellScaleActive[i] = 0
+        _cellScale[i] = 1
+      }
+    }
+  }
+}

@@ -1,11 +1,9 @@
 import { useRef, useEffect } from 'react'
-import { useSignal, useEmit, useTween } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  messages,
-  typingUsers,
-  unreadCount,
-  messageSlideIn,
-  badgeBounce,
+  MessagesChanged,
+  TypingUsersChanged,
+  UnreadCountChanged,
   MessageSent,
   MessageRead,
   type Message,
@@ -210,7 +208,7 @@ const userColors: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 function PresenceBar() {
-  const typing = useSignal(typingUsers)
+  const typing = usePulse(TypingUsersChanged, [] as string[])
   const participants = ['You', 'Bot Alice', 'Bot Bob']
 
   return (
@@ -229,7 +227,7 @@ function PresenceBar() {
 }
 
 function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
-  const slideVal = useTween(messageSlideIn)
+  const slideVal = 0
   const isMine = msg.sender === 'You'
   const offset = isLast ? slideVal : 0
   const time = new Date(msg.timestamp)
@@ -255,7 +253,7 @@ function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
 }
 
 function TypingIndicator() {
-  const typing = useSignal(typingUsers)
+  const typing = usePulse(TypingUsersChanged, [] as string[])
 
   if (typing.length === 0) return null
 
@@ -281,7 +279,7 @@ function TypingIndicator() {
 }
 
 function MessageList() {
-  const msgs = useSignal(messages)
+  const msgs = usePulse(MessagesChanged, [] as Message[])
   const emit = useEmit()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -349,8 +347,8 @@ function ChatInput() {
 }
 
 function Header() {
-  const unread = useSignal(unreadCount)
-  const badgeScale = useTween(badgeBounce)
+  const unread = usePulse(UnreadCountChanged, 0)
+  const badgeScale = 1
 
   return (
     <div style={styles.header}>

@@ -6,7 +6,7 @@ import {
   type Accessor,
   type JSX,
 } from 'solid-js'
-import type { Engine, EventType, Signal, TweenValue, SpringValue } from '@pulse/core'
+import type { Engine, EventType } from '@pulse/core'
 
 // ---- Context ----
 
@@ -23,76 +23,32 @@ export function PulseProvider(props: { engine: Engine; children: JSX.Element }):
 /**
  * Access the Pulse engine from context.
  */
-export function usePulse(): Engine {
+export function useEngine(): Engine {
   const engine = useContext(PulseContext)
   if (!engine) {
-    throw new Error('usePulse must be used within a <PulseProvider>')
+    throw new Error('useEngine must be used within a <PulseProvider>')
   }
   return engine
 }
 
 /**
- * Subscribe to a Pulse Signal and return a Solid Accessor.
+ * Subscribe to a Pulse event and return a Solid Accessor.
  * Leverages SolidJS fine-grained reactivity — no component re-render.
  */
-export function useSignal<T>(signal: Signal<T>): Accessor<T> {
-  const [value, setValue] = solidSignal<T>(signal.value)
-
-  const unsub = signal.subscribe((next: T) => {
-    setValue(() => next)
-  })
-
+export function usePulse<T>(event: EventType<T>, initial: T): Accessor<T> {
+  const engine = useEngine()
+  const [val, setVal] = solidSignal<T>(initial)
+  const unsub = engine.on(event, (v: T) => setVal(() => v))
   onCleanup(unsub)
-
-  return value
-}
-
-/**
- * Subscribe to a Pulse TweenValue and return a Solid Accessor.
- */
-export function useTween(tween: TweenValue): Accessor<number> {
-  const [value, setValue] = solidSignal<number>(tween.value)
-
-  const unsub = tween.subscribe((next: number) => {
-    setValue(next)
-  })
-
-  onCleanup(unsub)
-
-  return value
-}
-
-/**
- * Subscribe to a Pulse SpringValue and return a Solid Accessor.
- */
-export function useSpring(spring: SpringValue): Accessor<number> {
-  const [value, setValue] = solidSignal<number>(spring.value)
-
-  const unsub = spring.subscribe((next: number) => {
-    setValue(next)
-  })
-
-  onCleanup(unsub)
-
-  return value
+  return val
 }
 
 /**
  * Returns a stable emit function bound to the engine.
  */
 export function useEmit(): <T>(type: EventType<T>, payload: T) => void {
-  const engine = usePulse()
+  const engine = useEngine()
   return <T>(type: EventType<T>, payload: T) => {
     engine.emit(type, payload)
   }
-}
-
-/**
- * Subscribe to events of a given type.
- * Automatically cleaned up when the component is unmounted.
- */
-export function useEvent<T>(type: EventType<T>, handler: (payload: T) => void): void {
-  const engine = usePulse()
-  const unsub = engine.on(type, handler)
-  onCleanup(unsub)
 }

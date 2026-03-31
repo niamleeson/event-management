@@ -1,19 +1,29 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { providePulse, useEmit, useSignal } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, TOTAL_ITEMS, PAGE_SIZE, ITEM_HEIGHT,
-  ScrollTo, SearchChanged, scrollTop, searchQuery, loadedPages, loadingPages,
+  engine,
+  TOTAL_ITEMS,
+  PAGE_SIZE,
+  ITEM_HEIGHT,
+  ScrollTo,
+  SearchChanged,
+  scrollTop,
+  searchQuery,
+  loadedPages,
+  loadingPages,
+  ScrollTopChanged,
+  SearchQueryChanged,
 } from './engine'
 import type { Item } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const top = useSignal(scrollTop)
-const query = useSignal(searchQuery)
-const pages = useSignal(loadedPages)
-const loading = useSignal(loadingPages)
+const top = usePulse(ScrollTopChanged, scrollTop)
+const query = usePulse(SearchQueryChanged, searchQuery)
+const pages = usePulse(LoadedPagesChanged, loadedPages)
+const loading = usePulse(LoadingPagesChanged, loadingPages)
 
 const VIEWPORT_HEIGHT = 600
 const BUFFER = 5

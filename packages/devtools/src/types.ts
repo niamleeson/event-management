@@ -18,20 +18,11 @@ export interface EngineDebugHooks {
     payload: any
     seq: number
   }) => void
-  onEventConsumed?: (
-    event: { type: { name: string }; payload: any; seq: number },
-    rule: { id: string; name: string },
-  ) => void
   onRuleFired?: (
-    rule: { id: string; name: string; mode: string },
+    rule: { id: string; name: string },
     inputs: any[],
     outputs: any[],
   ) => void
-  onTweenUpdate?: (tween: {
-    value: number
-    progress: number
-    active: boolean
-  }) => void
 }
 
 /**
@@ -60,20 +51,7 @@ export interface PulseEngine {
     { queue: Array<{ payload: any; seq: number }> }
   >
 
-  /** Get all signals */
-  getSignals(): Array<{ _eventType: { name: string }; value: any }>
-
-  /** Get all tween values */
-  getTweens(): Array<{ value: number; active: boolean; progress: number }>
-
-  /** Get all spring values */
-  getSprings(): Array<{
-    value: number
-    velocity: number
-    settled: boolean
-  }>
-
-  /** Get the DAG representation */
+  /** Get the DAG representation (built from runtime tracing) */
   getDAG(): {
     nodes: Array<{ id: string; name: string }>
     edges: Array<[{ id: string }, { id: string }]>

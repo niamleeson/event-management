@@ -13,11 +13,11 @@ export const engine = createEngine()
 export interface GanttTask {
   id: string
   name: string
-  start: number   // day offset from project start
-  duration: number // days
+  start: number
+  duration: number
   color: string
   dependencies: string[]
-  progress: number // 0-100
+  progress: number
 }
 
 export type ZoomLevel = 'day' | 'week' | 'month'
@@ -26,7 +26,7 @@ export type ZoomLevel = 'day' | 'week' | 'month'
 // Constants
 // ---------------------------------------------------------------------------
 
-export const DAY_WIDTH_BASE = 40 // pixels per day at default zoom
+export const DAY_WIDTH_BASE = 40
 export const TOTAL_DAYS = 60
 export const ROW_HEIGHT = 44
 
@@ -52,47 +52,21 @@ export const ZoomChanged = engine.event<ZoomLevel>('ZoomChanged')
 export const ScrollXChanged = engine.event<number>('ScrollXChanged')
 export const AddTask = engine.event<GanttTask>('AddTask')
 export const RemoveTask = engine.event<string>('RemoveTask')
+export const GanttChanged = engine.event<void>('GanttChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const tasks = engine.signal<GanttTask[]>(
-  TaskDragged, [...INITIAL_TASKS],
-  (prev, { id, newStart }) => {
-    const task = prev.find((t) => t.id === id)
-    if (!task) return prev
-    const delta = newStart - task.start
+let _tasks: GanttTask[] = [...INITIAL_TASKS]
+let _selectedTask: string | null = null
+let _zoomLevel: ZoomLevel = 'day'
+let _scrollX = 0
 
-    // Auto-shift dependent tasks
-    const next = prev.map((t) => {
-      if (t.id === id) return { ...t, start: Math.max(0, newStart) }
-      return t
-    })
-
-    // Cascade: shift tasks that depend on this task
-    return cascadeDependencies(next, id, delta)
-  },
-)
-
-engine.signalUpdate(tasks, TaskResized, (prev, { id, newDuration }) =>
-  prev.map((t) => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : t),
-)
-
-engine.signalUpdate(tasks, AddTask, (prev, task) => [...prev, task])
-engine.signalUpdate(tasks, RemoveTask, (prev, id) => prev.filter((t) => t.id !== id))
-
-export const selectedTask = engine.signal<string | null>(
-  TaskSelected, null, (_prev, id) => id,
-)
-
-export const zoomLevel = engine.signal<ZoomLevel>(
-  ZoomChanged, 'day', (_prev, level) => level,
-)
-
-export const scrollX = engine.signal<number>(
-  ScrollXChanged, 0, (_prev, x) => Math.max(0, x),
-)
+export function getTasks(): GanttTask[] { return _tasks }
+export function getSelectedTask(): string | null { return _selectedTask }
+export function getZoomLevel(): ZoomLevel { return _zoomLevel }
+export function getScrollX(): number { return _scrollX }
 
 // ---------------------------------------------------------------------------
 // Helper: cascade dependency shifts
@@ -110,7 +84,7 @@ function cascadeDependencies(taskList: GanttTask[], changedId: string, delta: nu
         const minStart = depTask.start + depTask.duration
         if (t.start < minStart) {
           result[i] = { ...t, start: minStart }
-          shift(t.id) // recurse
+          shift(t.id)
         }
       }
     }
@@ -119,6 +93,49 @@ function cascadeDependencies(taskList: GanttTask[], changedId: string, delta: nu
   shift(changedId)
   return result
 }
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(TaskDragged, ({ id, newStart }) => {
+  const task = _tasks.find((t) => t.id === id)
+  if (!task) return
+  const delta = newStart - task.start
+  _tasks = _tasks.map((t) => t.id === id ? { ...t, start: Math.max(0, newStart) } : t)
+  _tasks = cascadeDependencies(_tasks, id, delta)
+  engine.emit(GanttChanged, undefined)
+})
+
+engine.on(TaskResized, ({ id, newDuration }) => {
+  _tasks = _tasks.map((t) => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : t)
+  engine.emit(GanttChanged, undefined)
+})
+
+engine.on(AddTask, (task: GanttTask) => {
+  _tasks = [..._tasks, task]
+  engine.emit(GanttChanged, undefined)
+})
+
+engine.on(RemoveTask, (id: string) => {
+  _tasks = _tasks.filter((t) => t.id !== id)
+  engine.emit(GanttChanged, undefined)
+})
+
+engine.on(TaskSelected, (id: string | null) => {
+  _selectedTask = id
+  engine.emit(GanttChanged, undefined)
+})
+
+engine.on(ZoomChanged, (level: ZoomLevel) => {
+  _zoomLevel = level
+  engine.emit(GanttChanged, undefined)
+})
+
+engine.on(ScrollXChanged, (x: number) => {
+  _scrollX = Math.max(0, x)
+  engine.emit(GanttChanged, undefined)
+})
 
 // ---------------------------------------------------------------------------
 // Zoom helpers

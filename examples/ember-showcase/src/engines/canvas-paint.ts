@@ -65,105 +65,123 @@ export const AddLayer = engine.event<void>('AddLayer')
 export const RemoveLayer = engine.event<string>('RemoveLayer')
 export const SelectLayer = engine.event<string>('SelectLayer')
 export const ToggleLayerVisibility = engine.event<string>('ToggleLayerVisibility')
+export const PaintChanged = engine.event<void>('PaintChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const currentTool = engine.signal<Tool>(
-  SelectTool, 'brush', (_prev, tool) => tool,
-)
+let _currentTool: Tool = 'brush'
+let _currentColor = '#000000'
+let _currentSize = 4
+let _layers: PaintLayer[] = [{ id: 'layer-1', name: 'Layer 1', visible: true, opacity: 1 }]
+let _activeLayerId = 'layer-1'
+let _isDrawing = false
+let _currentStroke: DrawStroke | null = null
+let _strokes: DrawStroke[] = []
+let _redoStack: DrawStroke[] = []
 
-export const currentColor = engine.signal<string>(
-  SelectColor, '#000000', (_prev, color) => color,
-)
+export function getCurrentTool(): Tool { return _currentTool }
+export function getCurrentColor(): string { return _currentColor }
+export function getCurrentSize(): number { return _currentSize }
+export function getLayers(): PaintLayer[] { return _layers }
+export function getActiveLayerId(): string { return _activeLayerId }
+export function getIsDrawing(): boolean { return _isDrawing }
+export function getCurrentStroke(): DrawStroke | null { return _currentStroke }
+export function getStrokes(): DrawStroke[] { return _strokes }
 
-export const currentSize = engine.signal<number>(
-  SelectSize, 4, (_prev, size) => size,
-)
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
 
-export const layers = engine.signal<PaintLayer[]>(
-  AddLayer,
-  [{ id: 'layer-1', name: 'Layer 1', visible: true, opacity: 1 }],
-  (prev) => {
-    const num = prev.length + 1
-    return [...prev, { id: `layer-${Date.now()}`, name: `Layer ${num}`, visible: true, opacity: 1 }]
-  },
-)
-
-engine.signalUpdate(layers, RemoveLayer, (prev, id) =>
-  prev.length > 1 ? prev.filter((l) => l.id !== id) : prev,
-)
-
-engine.signalUpdate(layers, ToggleLayerVisibility, (prev, id) =>
-  prev.map((l) => l.id === id ? { ...l, visible: !l.visible } : l),
-)
-
-export const activeLayerId = engine.signal<string>(
-  SelectLayer, 'layer-1', (_prev, id) => id,
-)
-
-// Drawing state
-export const isDrawing = engine.signal<boolean>(
-  StartStroke, false, () => true,
-)
-engine.signalUpdate(isDrawing, EndStroke, () => false)
-
-// Current stroke being drawn
-export const currentStroke = engine.signal<DrawStroke | null>(
-  StartStroke, null, (_prev, point) => ({
-    id: `stroke-${Date.now()}`,
-    tool: currentTool.value,
-    color: currentTool.value === 'eraser' ? '#f0f2f5' : currentColor.value,
-    size: currentSize.value,
-    points: [point],
-    layerId: activeLayerId.value,
-  }),
-)
-
-engine.signalUpdate(currentStroke, ContinueStroke, (prev, point) => {
-  if (!prev) return prev
-  return { ...prev, points: [...prev.points, point] }
+engine.on(SelectTool, (tool: Tool) => {
+  _currentTool = tool
+  engine.emit(PaintChanged, undefined)
 })
 
-engine.signalUpdate(currentStroke, EndStroke, () => null)
+engine.on(SelectColor, (color: string) => {
+  _currentColor = color
+  engine.emit(PaintChanged, undefined)
+})
 
-// Completed strokes
-export const strokes = engine.signal<DrawStroke[]>(
-  EndStroke, [],
-  (prev) => {
-    const stroke = currentStroke.value
-    if (stroke && stroke.points.length > 1) {
-      return [...prev, stroke]
-    }
-    return prev
-  },
-)
+engine.on(SelectSize, (size: number) => {
+  _currentSize = size
+  engine.emit(PaintChanged, undefined)
+})
 
-engine.signalUpdate(strokes, ClearCanvas, () => [])
+engine.on(StartStroke, (point: DrawPoint) => {
+  _isDrawing = true
+  _currentStroke = {
+    id: `stroke-${Date.now()}`,
+    tool: _currentTool,
+    color: _currentTool === 'eraser' ? '#f0f2f5' : _currentColor,
+    size: _currentSize,
+    points: [point],
+    layerId: _activeLayerId,
+  }
+  engine.emit(PaintChanged, undefined)
+})
 
-// Undo/Redo
-export const redoStack = engine.signal<DrawStroke[]>(
-  UndoStroke, [], (prev) => {
-    const last = strokes.value[strokes.value.length - 1]
-    return last ? [...prev, last] : prev
-  },
-)
+engine.on(ContinueStroke, (point: DrawPoint) => {
+  if (_currentStroke) {
+    _currentStroke = { ..._currentStroke, points: [..._currentStroke.points, point] }
+    engine.emit(PaintChanged, undefined)
+  }
+})
 
-engine.signalUpdate(redoStack, RedoStroke, (prev) => prev.slice(0, -1))
-engine.signalUpdate(redoStack, EndStroke, () => []) // clear redo on new stroke
+engine.on(EndStroke, () => {
+  if (_currentStroke && _currentStroke.points.length > 1) {
+    _strokes = [..._strokes, _currentStroke]
+    _redoStack = []
+  }
+  _isDrawing = false
+  _currentStroke = null
+  engine.emit(PaintChanged, undefined)
+})
 
 engine.on(UndoStroke, () => {
-  const current = strokes.value
-  if (current.length > 0) {
-    strokes.set(current.slice(0, -1))
+  if (_strokes.length > 0) {
+    const last = _strokes[_strokes.length - 1]
+    _redoStack = [..._redoStack, last]
+    _strokes = _strokes.slice(0, -1)
+    engine.emit(PaintChanged, undefined)
   }
 })
 
 engine.on(RedoStroke, () => {
-  const redo = redoStack.value
-  if (redo.length > 0) {
-    const stroke = redo[redo.length - 1]
-    strokes.set([...strokes.value, stroke])
+  if (_redoStack.length > 0) {
+    const stroke = _redoStack[_redoStack.length - 1]
+    _strokes = [..._strokes, stroke]
+    _redoStack = _redoStack.slice(0, -1)
+    engine.emit(PaintChanged, undefined)
   }
+})
+
+engine.on(ClearCanvas, () => {
+  _strokes = []
+  _redoStack = []
+  engine.emit(PaintChanged, undefined)
+})
+
+engine.on(AddLayer, () => {
+  const num = _layers.length + 1
+  _layers = [..._layers, { id: `layer-${Date.now()}`, name: `Layer ${num}`, visible: true, opacity: 1 }]
+  engine.emit(PaintChanged, undefined)
+})
+
+engine.on(RemoveLayer, (id: string) => {
+  if (_layers.length > 1) {
+    _layers = _layers.filter((l) => l.id !== id)
+    engine.emit(PaintChanged, undefined)
+  }
+})
+
+engine.on(SelectLayer, (id: string) => {
+  _activeLayerId = id
+  engine.emit(PaintChanged, undefined)
+})
+
+engine.on(ToggleLayerVisibility, (id: string) => {
+  _layers = _layers.map((l) => l.id === id ? { ...l, visible: !l.visible } : l)
+  engine.emit(PaintChanged, undefined)
 })

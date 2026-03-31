@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { useSignal } from '@pulse/vue'
-import { currentMetrics, METRICS } from './engine'
+import { usePulse } from '@pulse/vue'
+import {
+  METRICS,
+  CurrentMetricsChanged,
+  getCurrentMetrics,
+} from './engine'
 
-const metrics = useSignal(currentMetrics)
+const metrics = usePulse(CurrentMetricsChanged, getCurrentMetrics())
 
 function getValue(name: string): number {
   return metrics.value[name]?.value ?? 0

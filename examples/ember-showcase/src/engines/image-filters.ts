@@ -58,9 +58,10 @@ export const UndoFilter = engine.event<void>('UndoFilter')
 export const RedoFilter = engine.event<void>('RedoFilter')
 export const ResetFilters = engine.event<void>('ResetFilters')
 export const ToggleSplitView = engine.event<void>('ToggleSplitView')
+export const FiltersChanged = engine.event<void>('FiltersChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
 const defaultFilters: FilterState[] = FILTER_DEFS.map((f) => ({
@@ -69,66 +70,71 @@ const defaultFilters: FilterState[] = FILTER_DEFS.map((f) => ({
   enabled: true,
 }))
 
-export const filters = engine.signal<FilterState[]>(
-  FilterValueChanged, [...defaultFilters],
-  (prev, { id, value }) => prev.map((f) => f.id === id ? { ...f, value } : f),
-)
+let _filters: FilterState[] = [...defaultFilters]
+let _splitView = false
+let _undoHistory: HistoryEntry[] = []
+let _redoHistory: HistoryEntry[] = []
 
-engine.signalUpdate(filters, FilterToggled, (prev, id) =>
-  prev.map((f) => f.id === id ? { ...f, enabled: !f.enabled } : f),
-)
+export function getFilters(): FilterState[] { return _filters }
+export function getSplitView(): boolean { return _splitView }
+export function getUndoHistory(): HistoryEntry[] { return _undoHistory }
+export function getRedoHistory(): HistoryEntry[] { return _redoHistory }
 
-engine.signalUpdate(filters, FilterReorder, (prev, { fromIndex, toIndex }) => {
-  const next = [...prev]
-  const [item] = next.splice(fromIndex, 1)
-  next.splice(toIndex, 0, item)
-  return next
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(FilterValueChanged, ({ id, value }) => {
+  _undoHistory = [..._undoHistory, { filters: _filters.map((f) => ({ ...f })), label: 'Filter change' }].slice(-30)
+  _filters = _filters.map((f) => f.id === id ? { ...f, value } : f)
+  engine.emit(FiltersChanged, undefined)
 })
 
-engine.signalUpdate(filters, ResetFilters, () => [...defaultFilters])
+engine.on(FilterToggled, (id: string) => {
+  _filters = _filters.map((f) => f.id === id ? { ...f, enabled: !f.enabled } : f)
+  engine.emit(FiltersChanged, undefined)
+})
 
-export const splitView = engine.signal<boolean>(
-  ToggleSplitView, false, (prev) => !prev,
-)
+engine.on(FilterReorder, ({ fromIndex, toIndex }) => {
+  const next = [..._filters]
+  const [item] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, item)
+  _filters = next
+  engine.emit(FiltersChanged, undefined)
+})
 
-// Undo/Redo history
-export const undoHistory = engine.signal<HistoryEntry[]>(
-  FilterValueChanged, [],
-  (prev, _change) => {
-    // Push current state before change
-    return [...prev, { filters: filters.value.map((f) => ({ ...f })), label: 'Filter change' }].slice(-30)
-  },
-)
+engine.on(ResetFilters, () => {
+  _filters = [...defaultFilters]
+  engine.emit(FiltersChanged, undefined)
+})
 
-export const redoHistory = engine.signal<HistoryEntry[]>(
-  UndoFilter, [],
-  (prev) => {
-    return [...prev, { filters: filters.value.map((f) => ({ ...f })), label: 'Undo' }].slice(-30)
-  },
-)
+engine.on(ToggleSplitView, () => {
+  _splitView = !_splitView
+  engine.emit(FiltersChanged, undefined)
+})
 
-// Undo action
 engine.on(UndoFilter, () => {
-  const history = undoHistory.value
-  if (history.length > 0) {
-    const prev = history[history.length - 1]
-    filters.set(prev.filters)
-    undoHistory.set(history.slice(0, -1))
+  if (_undoHistory.length > 0) {
+    _redoHistory = [..._redoHistory, { filters: _filters.map((f) => ({ ...f })), label: 'Undo' }].slice(-30)
+    const prev = _undoHistory[_undoHistory.length - 1]
+    _filters = prev.filters
+    _undoHistory = _undoHistory.slice(0, -1)
+    engine.emit(FiltersChanged, undefined)
   }
 })
 
-// Redo action
 engine.on(RedoFilter, () => {
-  const redo = redoHistory.value
-  if (redo.length > 0) {
-    const next = redo[redo.length - 1]
-    filters.set(next.filters)
-    redoHistory.set(redo.slice(0, -1))
+  if (_redoHistory.length > 0) {
+    _undoHistory = [..._undoHistory, { filters: _filters.map((f) => ({ ...f })), label: 'Redo' }].slice(-30)
+    const next = _redoHistory[_redoHistory.length - 1]
+    _filters = next.filters
+    _redoHistory = _redoHistory.slice(0, -1)
+    engine.emit(FiltersChanged, undefined)
   }
 })
 
 // ---------------------------------------------------------------------------
-// Helper: build CSS filter string
+// Helper
 // ---------------------------------------------------------------------------
 
 export function buildFilterCSS(filterList: FilterState[]): string {

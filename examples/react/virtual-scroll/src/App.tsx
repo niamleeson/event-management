@@ -1,13 +1,12 @@
 import { useRef, useCallback } from 'react'
-import { useSignal, useEmit } from '@pulse/react'
+import { usePulse, useEmit } from '@pulse/react'
 import {
-  items,
-  scrollPosition,
-  visibleRange,
-  filter,
-  sort,
-  loadingPages,
-  selectedItem,
+  ItemsChanged,
+  VisibleRangeChanged,
+  FilterStateChanged,
+  SortStateChanged,
+  LoadingPagesChanged,
+  SelectedItemChanged,
   ScrollChanged,
   FilterChanged,
   SortChanged,
@@ -16,6 +15,8 @@ import {
   ITEM_HEIGHT,
   VIEWPORT_HEIGHT,
   type SortDir,
+  type Item,
+  type VisibleRange,
 } from './engine'
 
 // ---------------------------------------------------------------------------
@@ -191,8 +192,8 @@ body { margin: 0; }
 
 function Toolbar() {
   const emit = useEmit()
-  const currentSort = useSignal(sort)
-  const currentFilter = useSignal(filter)
+  const currentSort = usePulse(SortStateChanged, 'asc' as SortDir)
+  const currentFilter = usePulse(FilterStateChanged, '')
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     emit(FilterChanged, e.target.value)
@@ -217,7 +218,7 @@ function Toolbar() {
           style={styles.sortBtn(true)}
           onClick={toggleSort}
         >
-          Sort: {currentSort === 'asc' ? 'A-Z ↑' : 'Z-A ↓'}
+          Sort: {currentSort === 'asc' ? 'A-Z \u2191' : 'Z-A \u2193'}
         </button>
       </div>
     </div>
@@ -225,10 +226,10 @@ function Toolbar() {
 }
 
 function StatsBar() {
-  const loadedItems = useSignal(items)
-  const loading = useSignal(loadingPages)
-  const range = useSignal(visibleRange)
-  const currentFilter = useSignal(filter)
+  const loadedItems = usePulse(ItemsChanged, new Map<number, Item>())
+  const loading = usePulse(LoadingPagesChanged, new Set<number>())
+  const range = usePulse(VisibleRangeChanged, { start: 0, end: Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) } as VisibleRange)
+  const currentFilter = usePulse(FilterStateChanged, '')
 
   const loadedCount = loadedItems.size
   const filtered = currentFilter
@@ -271,11 +272,11 @@ function SkeletonRow({ top }: { top: number }) {
 
 function VirtualList() {
   const emit = useEmit()
-  const allItems = useSignal(items)
-  const range = useSignal(visibleRange)
-  const selected = useSignal(selectedItem)
-  const currentFilter = useSignal(filter)
-  const currentSort = useSignal(sort)
+  const allItems = usePulse(ItemsChanged, new Map<number, Item>())
+  const range = usePulse(VisibleRangeChanged, { start: 0, end: Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) } as VisibleRange)
+  const selected = usePulse(SelectedItemChanged, null as string | null)
+  const currentFilter = usePulse(FilterStateChanged, '')
+  const currentSort = usePulse(SortStateChanged, 'asc' as SortDir)
   const viewportRef = useRef<HTMLDivElement>(null)
 
   const handleScroll = useCallback(() => {

@@ -1,18 +1,26 @@
 <script setup lang="ts">
 import { ref as vueRef, nextTick, watch } from 'vue'
-import { providePulse, useEmit, useSignal, useTween } from '@pulse/vue'
-import { engine, SendMessage, MarkRead, messages, typing, unreadCount, slideInTweens } from './engine'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
+import {
+  engine,
+  SendMessage,
+  MarkRead,
+  MessagesChanged,
+  TypingChanged,
+  UnreadCountChanged,
+  getMessages,
+  getTyping,
+  getUnreadCount,
+} from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const msgs = useSignal(messages)
-const typingState = useSignal(typing)
-const unread = useSignal(unreadCount)
+const msgs = usePulse(MessagesChanged, getMessages())
+const typingState = usePulse(TypingChanged, getTyping())
+const unread = usePulse(UnreadCountChanged, getUnreadCount())
 const inputText = vueRef('')
 const messagesEndRef = vueRef<HTMLDivElement | null>(null)
-
-const slideVals = Array.from({ length: 50 }, (_, i) => useTween(slideInTweens[i]))
 
 watch(msgs, () => {
   nextTick(() => {
@@ -72,12 +80,11 @@ const typingUsers = () => Object.entries(typingState.value).filter(([, v]) => v)
     <!-- Messages -->
     <div :style="{ flex: 1, overflow: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }">
       <div
-        v-for="(msg, i) in msgs"
+        v-for="msg in msgs"
         :key="msg.id"
         :style="{
           alignSelf: msg.sender === 'You' ? 'flex-end' : 'flex-start',
           maxWidth: '75%',
-          transform: `translateY(${slideVals[i % 50].value}px)`,
         }"
       >
         <div :style="{ fontSize: '11px', color: senderColors[msg.sender] || '#888', marginBottom: '4px', fontWeight: 600 }">

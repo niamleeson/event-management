@@ -1,20 +1,33 @@
 <script setup lang="ts">
-import { providePulse, useEmit, useSignal, useSpring } from '@pulse/vue'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
 import {
-  engine, COLS, CELL_SIZE, GAP,
-  DragStart, DragMove, DragEnd, ShuffleItems, AddItem, RemoveItem,
-  items, draggingId, ghostPos, posXSprings, posYSprings,
+  engine,
+  COLS,
+  CELL_SIZE,
+  GAP,
+  DragStart,
+  DragMove,
+  DragEnd,
+  ShuffleItems,
+  AddItem,
+  RemoveItem,
+  ItemsChanged,
+  DraggingIdChanged,
+  GhostPosChanged,
+  PositionsChanged,
+  getItems,
+  getDraggingId,
+  getGhostPos,
+  getPositions,
 } from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const itemList = useSignal(items)
-const dragId = useSignal(draggingId)
-const ghost = useSignal(ghostPos)
-
-const springXVals = Array.from({ length: 20 }, (_, i) => useSpring(posXSprings[i]))
-const springYVals = Array.from({ length: 20 }, (_, i) => useSpring(posYSprings[i]))
+const itemList = usePulse(ItemsChanged, getItems())
+const dragId = usePulse(DraggingIdChanged, getDraggingId())
+const ghost = usePulse(GhostPosChanged, getGhostPos())
+const pos = usePulse(PositionsChanged, getPositions())
 
 let containerRect: DOMRect | null = null
 
@@ -74,8 +87,8 @@ const gridWidth = COLS * (CELL_SIZE + GAP)
         @pointerdown="(e) => onPointerDown(e, item.id)"
         :style="{
           position: 'absolute',
-          left: `${springXVals[i].value}px`,
-          top: `${springYVals[i].value}px`,
+          left: `${pos.x[i] ?? 0}px`,
+          top: `${pos.y[i] ?? 0}px`,
           width: `${CELL_SIZE}px`,
           height: `${CELL_SIZE}px`,
           background: `linear-gradient(145deg, ${item.color}cc, ${item.color}88)`,
@@ -89,6 +102,7 @@ const gridWidth = COLS * (CELL_SIZE + GAP)
           opacity: dragId === item.id ? 0.5 : 1,
           boxShadow: `0 4px 16px ${item.color}44`,
           border: '1px solid rgba(255,255,255,0.1)',
+          transition: 'left 0.2s ease-out, top 0.2s ease-out',
         }"
       >
         <div :style="{ color: '#fff', fontSize: '14px', fontWeight: 600 }">{{ item.label }}</div>

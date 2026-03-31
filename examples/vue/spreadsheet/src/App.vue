@@ -1,16 +1,28 @@
 <script setup lang="ts">
 import { ref as vueRef, watch } from 'vue'
-import { providePulse, useSignal, useEmit, useEvent } from '@pulse/vue'
-import { engine, cells, selectedCell, CellEdited, CellSelected, FormulaError, colLabel, ROWS, COLS } from './engine'
+import { providePulse, useEmit, usePulse } from '@pulse/vue'
+import {
+  engine,
+  cells,
+  selectedCell,
+  CellEdited,
+  CellSelected,
+  FormulaError,
+  colLabel,
+  ROWS,
+  COLS,
+  CellsChanged,
+  SelectedCellChanged,
+} from './engine'
 
 providePulse(engine)
 
 const emit = useEmit()
-const grid = useSignal(cells)
-const sel = useSignal(selectedCell)
+const grid = usePulse(CellsChanged, cells)
+const sel = usePulse(SelectedCellChanged, selectedCell)
 const formulaInputRef = vueRef<HTMLInputElement | null>(null)
 
-useEvent(FormulaError, (payload) => {
+engine.on(FormulaError, (payload) => {
   console.warn(`Formula error at ${colLabel(payload.col)}${payload.row + 1}: ${payload.error}`)
 })
 

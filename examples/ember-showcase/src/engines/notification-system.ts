@@ -1,4 +1,4 @@
-import { createEngine, type EventType, type TweenValue } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -19,7 +19,7 @@ export interface Notification {
   message: string
   timestamp: number
   autoDismiss: boolean
-  duration: number // ms
+  duration: number
 }
 
 // ---------------------------------------------------------------------------
@@ -45,121 +45,87 @@ export const DismissNotification = engine.event<string>('DismissNotification')
 export const DismissAll = engine.event<void>('DismissAll')
 export const PauseAutoDismiss = engine.event<string>('PauseAutoDismiss')
 export const ResumeAutoDismiss = engine.event<string>('ResumeAutoDismiss')
-
-// Per-notification animation events
-export const NotifEnter: Record<string, EventType<void>> = {}
-export const NotifEnterDone: Record<string, EventType<void>> = {}
-export const NotifExit: Record<string, EventType<void>> = {}
-export const NotifExitDone: Record<string, EventType<void>> = {}
+export const NotificationsChanged = engine.event<void>('NotificationsChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const notifications = engine.signal<Notification[]>(
-  ShowNotification, [],
-  (prev, notif) => [notif, ...prev].slice(0, MAX_VISIBLE * 2),
-)
+let _notifications: Notification[] = []
+let _pausedNotifications = new Set<string>()
+let _totalShown = 0
+let _totalDismissed = 0
 
-engine.signalUpdate(notifications, DismissNotification, (prev, id) =>
-  prev.filter((n) => n.id !== id),
-)
-
-engine.signalUpdate(notifications, DismissAll, () => [])
-
-export const pausedNotifications = engine.signal<Set<string>>(
-  PauseAutoDismiss, new Set(),
-  (prev, id) => { const s = new Set(prev); s.add(id); return s },
-)
-engine.signalUpdate(pausedNotifications, ResumeAutoDismiss, (prev, id) => {
-  const s = new Set(prev); s.delete(id); return s
-})
-
-export const totalShown = engine.signal<number>(
-  ShowNotification, 0, (prev) => prev + 1,
-)
-
-export const totalDismissed = engine.signal<number>(
-  DismissNotification, 0, (prev) => prev + 1,
-)
+export function getNotifications(): Notification[] { return _notifications }
+export function getPausedNotifications(): Set<string> { return _pausedNotifications }
+export function getTotalShown(): number { return _totalShown }
+export function getTotalDismissed(): number { return _totalDismissed }
 
 // ---------------------------------------------------------------------------
-// Tweens — entrance/exit per notification (dynamic)
-// ---------------------------------------------------------------------------
-
-export const notifTweens: Record<string, { slideIn: TweenValue; opacity: TweenValue }> = {}
-
-export function createNotifTweens(id: string): { slideIn: TweenValue; opacity: TweenValue } {
-  const enterEvt = engine.event<void>(`NotifEnter_${id}`)
-  const enterDone = engine.event<void>(`NotifEnterDone_${id}`)
-  NotifEnter[id] = enterEvt
-  NotifEnterDone[id] = enterDone
-
-  const slideIn = engine.tween({
-    start: enterEvt,
-    done: enterDone,
-    from: -60,
-    to: 0,
-    duration: 300,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  })
-
-  const opacity = engine.tween({
-    start: enterEvt,
-    from: 0,
-    to: 1,
-    duration: 200,
-    easing: (t: number) => t,
-  })
-
-  notifTweens[id] = { slideIn, opacity }
-  return { slideIn, opacity }
-}
-
-// ---------------------------------------------------------------------------
-// Auto-dismiss logic
+// Auto-dismiss timers
 // ---------------------------------------------------------------------------
 
 const dismissTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 
-engine.on(ShowNotification, (notif) => {
-  // Create animation tweens
-  createNotifTweens(notif.id)
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
 
-  // Trigger entrance
-  setTimeout(() => {
-    if (NotifEnter[notif.id]) {
-      engine.emit(NotifEnter[notif.id], undefined)
-    }
-  }, 10)
+engine.on(ShowNotification, (notif: Notification) => {
+  _notifications = [notif, ..._notifications].slice(0, MAX_VISIBLE * 2)
+  _totalShown++
+  engine.emit(NotificationsChanged, undefined)
 
-  // Auto-dismiss
   if (notif.autoDismiss) {
     dismissTimers[notif.id] = setTimeout(() => {
-      if (!pausedNotifications.value.has(notif.id)) {
+      if (!_pausedNotifications.has(notif.id)) {
         engine.emit(DismissNotification, notif.id)
       }
     }, notif.duration)
   }
 })
 
-engine.on(PauseAutoDismiss, (id) => {
+engine.on(DismissNotification, (id: string) => {
+  _notifications = _notifications.filter((n) => n.id !== id)
+  _totalDismissed++
+  if (dismissTimers[id]) {
+    clearTimeout(dismissTimers[id])
+    delete dismissTimers[id]
+  }
+  engine.emit(NotificationsChanged, undefined)
+})
+
+engine.on(DismissAll, () => {
+  _totalDismissed += _notifications.length
+  _notifications = []
+  for (const id of Object.keys(dismissTimers)) {
+    clearTimeout(dismissTimers[id])
+    delete dismissTimers[id]
+  }
+  engine.emit(NotificationsChanged, undefined)
+})
+
+engine.on(PauseAutoDismiss, (id: string) => {
+  _pausedNotifications = new Set(_pausedNotifications)
+  _pausedNotifications.add(id)
   if (dismissTimers[id]) {
     clearTimeout(dismissTimers[id])
     delete dismissTimers[id]
   }
 })
 
-engine.on(ResumeAutoDismiss, (id) => {
-  const notif = notifications.value.find((n) => n.id === id)
+engine.on(ResumeAutoDismiss, (id: string) => {
+  _pausedNotifications = new Set(_pausedNotifications)
+  _pausedNotifications.delete(id)
+  const notif = _notifications.find((n) => n.id === id)
   if (notif?.autoDismiss) {
     dismissTimers[id] = setTimeout(() => {
       engine.emit(DismissNotification, id)
-    }, 2000) // shorter resume duration
+    }, 2000)
   }
 })
 
-// Helper to create a notification
+// Helper
 export function notify(type: NotificationType, title: string, message: string, autoDismiss = true): void {
   engine.emit(ShowNotification, {
     id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -171,6 +137,3 @@ export function notify(type: NotificationType, title: string, message: string, a
     duration: DEFAULT_DURATION,
   })
 }
-
-// Start frame loop for tweens
-engine.startFrameLoop()

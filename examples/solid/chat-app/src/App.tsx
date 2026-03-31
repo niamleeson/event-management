@@ -1,235 +1,384 @@
-import { For, Show, onMount, onCleanup } from 'solid-js'
-import { useSignal, useEmit, useTween } from '@pulse/solid'
-import type { Signal, TweenValue, EventType } from '@pulse/core'
-import { engine } from './engine'
+import { onMount } from 'solid-js'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  MessagesChanged,
+  TypingUsersChanged,
+  UnreadCountChanged,
+  MessageSent,
+  MessageRead,
+  type Message,
+} from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
-interface Message {
-  id: number
-  sender: string
-  text: string
-  time: number
-  read: boolean
-  color: string
+const styles = {
+  container: {
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    height: '100vh',
+    'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    background: '#efeae2',
+  },
+  header: {
+    background: '#075e54',
+    color: '#fff',
+    padding: '12px 20px',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'space-between',
+    'box-shadow': '0 1px 3px rgba(0,0,0,0.2)',
+  },
+  headerTitle: {
+    'font-size': 18,
+    'font-weight': 600,
+  },
+  headerParticipants: {
+    'font-size': 12,
+    opacity: 0.8,
+    'margin-top': 2,
+  },
+  badge: (scale: number) => ({
+    background: '#25d366',
+    color: '#fff',
+    'border-radius': '50%',
+    width: 24,
+    height: 24,
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'font-size': 12,
+    'font-weight': 700,
+    transform: `scale(${scale})`,
+  }),
+  messagesArea: {
+    flex: 1,
+    overflow: 'auto' as const,
+    padding: '16px 60px',
+    display: 'flex',
+    'flex-direction': 'column' as const,
+    gap: 4,
+    'background-image': 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23d4cfc4\' fill-opacity=\'0.3\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
+  },
+  messageBubble: (isMine: boolean, slideOffset: number) => ({
+    'max-width': '65%',
+    padding: '8px 14px',
+    'border-radius': isMine ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+    background: isMine ? '#dcf8c6' : '#fff',
+    'align-self': isMine ? 'flex-end' as const : 'flex-start' as const,
+    'box-shadow': '0 1px 1px rgba(0,0,0,0.1)',
+    position: 'relative' as const,
+    transform: `translateY(${slideOffset}px)`,
+    transition: 'transform 0.1s',
+  }),
+  senderName: {
+    'font-size': 11,
+    'font-weight': 700,
+    'margin-bottom': 2,
+    color: '#075e54',
+  },
+  messageText: {
+    'font-size': 14,
+    'line-height': 1.4,
+    color: '#303030',
+    'word-break': 'break-word' as const,
+  },
+  messageTime: {
+    'font-size': 10,
+    color: '#999',
+    'text-align': 'right' as const,
+    'margin-top': 4,
+    display: 'flex',
+    'justify-content': 'flex-end',
+    'align-items': 'center',
+    gap: 4,
+  },
+  checkmark: (read: boolean) => ({
+    color: read ? '#4fc3f7' : '#999',
+    'font-size': 12,
+  }),
+  typingIndicator: {
+    'align-self': 'flex-start' as const,
+    background: '#fff',
+    padding: '10px 16px',
+    'border-radius': '12px 12px 12px 4px',
+    'box-shadow': '0 1px 1px rgba(0,0,0,0.1)',
+    display: 'flex',
+    'align-items': 'center',
+    gap: 8,
+  },
+  typingDots: {
+    display: 'flex',
+    gap: 3,
+  },
+  typingDot: (delay: number) => ({
+    width: 7,
+    height: 7,
+    'border-radius': '50%',
+    background: '#999',
+    animation: `typingBounce 1.4s infinite ease-in-out both`,
+    animationDelay: `${delay}s`,
+  }),
+  typingName: {
+    'font-size': 12,
+    color: '#999',
+    'font-style': 'italic' as const,
+  },
+  inputArea: {
+    display: 'flex',
+    gap: 10,
+    padding: '10px 20px',
+    background: '#f0f0f0',
+    'border-top': '1px solid #ddd',
+  },
+  input: {
+    flex: 1,
+    padding: '10px 16px',
+    'font-size': 15,
+    border: 'none',
+    'border-radius': 24,
+    outline: 'none',
+    background: '#fff',
+    'box-shadow': '0 1px 2px rgba(0,0,0,0.08)',
+  },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    'border-radius': '50%',
+    border: 'none',
+    background: '#075e54',
+    color: '#fff',
+    'font-size': 18,
+    cursor: 'pointer',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+  },
+  presenceBar: {
+    display: 'flex',
+    gap: 12,
+    padding: '6px 20px',
+    background: '#f7f7f7',
+    'border-bottom': '1px solid #e0e0e0',
+    'font-size': 12,
+  },
+  presenceItem: {
+    display: 'flex',
+    'align-items': 'center',
+    gap: 4,
+  },
+  presenceDot: (color: string) => ({
+    width: 8,
+    height: 8,
+    'border-radius': '50%',
+    background: color,
+  }),
+  avatar: (color: string) => ({
+    width: 28,
+    height: 28,
+    'border-radius': '50%',
+    background: color,
+    color: '#fff',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'font-size': 12,
+    'font-weight': 700,
+    'flex-shrink': 0,
+  }),
 }
 
-/* ------------------------------------------------------------------ */
-/*  Bot config                                                        */
-/* ------------------------------------------------------------------ */
+const globalStyle = `
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+body { margin: 0; }
+`
 
-const BOTS = [
-  { name: 'Alice', color: '#6c5ce7', responses: ['Interesting point!', 'I agree completely.', 'Let me think about that...', 'Great idea!', 'That reminds me of something.', 'Could you elaborate?'] },
-  { name: 'Bob', color: '#00b894', responses: ['Sure thing!', 'I was just thinking the same.', 'Absolutely, good call.', 'Hmm, not sure about that.', 'Let me check on that.', 'Roger that!'] },
-]
+const userColors: Record<string, string> = {
+  'You': '#075e54',
+  'Bot Alice': '#e91e63',
+  'Bot Bob': '#ff9800',
+}
 
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Components
+// ---------------------------------------------------------------------------
 
-const SendMessage = engine.event<string>('SendMessage')
-const MessageAdded = engine.event<Message>('MessageAdded')
-const BotTyping = engine.event<{ bot: string; typing: boolean }>('BotTyping')
-const MarkRead = engine.event<number>('MarkRead')
-const MessageSlideStart = engine.event('MessageSlideStart')
+function PresenceBar() {
+  const typing = usePulse(TypingUsersChanged, [] as string[])
+  const participants = ['You', 'Bot Alice', 'Bot Bob']
 
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-let nextId = 0
-
-const messages = engine.signal<Message[]>(MessageAdded, [], (prev, msg) => [...prev, msg])
-
-const typingIndicators = engine.signal<Record<string, boolean>>(
-  BotTyping, {} as Record<string, boolean>,
-  (prev, { bot, typing }) => ({ ...prev, [bot]: typing }),
-)
-
-// Message slide-in tween
-const slideTween: TweenValue = engine.tween({
-  start: MessageSlideStart,
-  from: 30,
-  to: 0,
-  duration: 300,
-  easing: 'easeOutBack',
-})
-
-/* ------------------------------------------------------------------ */
-/*  Bot responder logic                                               */
-/* ------------------------------------------------------------------ */
-
-engine.on(SendMessage, (text) => {
-  const userMsg: Message = {
-    id: nextId++, sender: 'You', text, time: Date.now(), read: true, color: '#4361ee',
-  }
-  engine.emit(MessageAdded, userMsg)
-  engine.emit(MessageSlideStart, undefined)
-
-  // Each bot responds after a random delay
-  BOTS.forEach((bot) => {
-    const delay = 1000 + Math.random() * 2000
-    setTimeout(() => {
-      engine.emit(BotTyping, { bot: bot.name, typing: true })
-      setTimeout(() => {
-        engine.emit(BotTyping, { bot: bot.name, typing: false })
-        const response = bot.responses[Math.floor(Math.random() * bot.responses.length)]
-        const msg: Message = {
-          id: nextId++, sender: bot.name, text: response,
-          time: Date.now(), read: false, color: bot.color,
-        }
-        engine.emit(MessageAdded, msg)
-        engine.emit(MessageSlideStart, undefined)
-        // Mark as read after 1s
-        setTimeout(() => engine.emit(MarkRead, msg.id), 1000)
-      }, 800 + Math.random() * 1200)
-    }, delay)
-  })
-})
-
-engine.signalUpdate(messages, MarkRead, (prev, id) =>
-  prev.map(m => m.id === id ? { ...m, read: true } : m)
-)
-
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
-
-function TypingIndicator(props: { name: string; color: string }) {
   return (
-    <div style={{ display: 'flex', 'align-items': 'center', gap: '8px', padding: '8px 16px' }}>
-      <span style={{ color: props.color, 'font-size': '13px', 'font-weight': '600' }}>{props.name}</span>
-      <div style={{ display: 'flex', gap: '4px' }}>
-        <For each={[0, 1, 2]}>
-          {(i) => (
-            <div style={{
-              width: '6px', height: '6px', 'border-radius': '50%', background: props.color,
-              animation: `typing 1.2s infinite ${i * 0.2}s`,
-              opacity: '0.6',
-            }} />
+    <div style={styles.presenceBar}>
+      {participants.map(p => (
+        <div style={styles.presenceItem}>
+          <div style={styles.presenceDot(userColors[p] ?? '#999')} />
+          <span>{p}</span>
+          {typing().includes(p) && (
+            <span style={{ color: '#999', 'font-style': 'italic' }}> typing()...</span>
           )}
-        </For>
-      </div>
+        </div>
+      ))}
     </div>
   )
 }
 
-function MessageBubble(props: { msg: Message; isLast: boolean }) {
-  const slide = useTween(slideTween)
-  const isUser = () => props.msg.sender === 'You'
+function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
+  const slideVal = 0
+  const isMine = msg.sender === 'You'
+  const offset = isLast ? slideVal : 0
+  const time = new Date(msg.timestamp)
+  const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`
 
   return (
-    <div style={{
-      display: 'flex',
-      'flex-direction': 'column',
-      'align-items': isUser() ? 'flex-end' : 'flex-start',
-      padding: '4px 16px',
-      transform: props.isLast ? `translateY(${slide()}px)` : undefined,
-      opacity: props.isLast ? String(1 - slide() / 30) : '1',
-    }}>
-      <div style={{ 'font-size': '11px', color: props.msg.color, 'font-weight': '600', 'margin-bottom': '2px', padding: '0 4px' }}>
-        {props.msg.sender}
-      </div>
-      <div style={{
-        background: isUser() ? '#4361ee' : '#2d2d44',
-        color: '#fff', padding: '10px 16px', 'border-radius': '16px',
-        'max-width': '70%', 'font-size': '14px', 'line-height': '1.5',
-        'border-bottom-right-radius': isUser() ? '4px' : '16px',
-        'border-bottom-left-radius': isUser() ? '16px' : '4px',
-      }}>
-        {props.msg.text}
-      </div>
-      <div style={{ display: 'flex', 'align-items': 'center', gap: '6px', padding: '2px 4px' }}>
-        <span style={{ 'font-size': '10px', color: '#666' }}>
-          {new Date(props.msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-        <Show when={isUser()}>
-          <span style={{ 'font-size': '10px', color: props.msg.read ? '#00b894' : '#666' }}>
-            {props.msg.read ? '\u2713\u2713' : '\u2713'}
-          </span>
-        </Show>
+    <div style={{ display: 'flex', 'align-items': 'flex-end', gap: 6, 'align-self': isMine ? 'flex-end' : 'flex-start' }}>
+      {!isMine && (
+        <div style={styles.avatar(userColors[msg.sender] ?? '#999')}>
+          {msg.sender.charAt(4) || msg.sender.charAt(0)}
+        </div>
+      )}
+      <div style={styles.messageBubble(isMine, offset)}>
+        {!isMine && <div style={styles.senderName}>{msg.sender}</div>}
+        <div style={styles.messageText}>{msg.text}</div>
+        <div style={styles.messageTime}>
+          {timeStr}
+          {isMine && <span style={styles.checkmark(msg.read)}>{'✓✓'}</span>}
+        </div>
       </div>
     </div>
   )
 }
 
-export default function App() {
-  const emit = useEmit()
-  const msgs = useSignal(messages)
-  const typing = useSignal(typingIndicators)
-  let inputRef!: HTMLInputElement
-  let scrollRef!: HTMLDivElement
+function TypingIndicator() {
+  const typing = usePulse(TypingUsersChanged, [] as string[])
 
-  // Auto-scroll on new messages
-  engine.on(MessageAdded, () => {
-    setTimeout(() => { if (scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight }, 50)
+  if (typing().length === 0) return null
+
+  return (
+    <>
+      {typing().map(user => (
+        <div style={styles.typingIndicator}>
+          <div style={styles.avatar(userColors[user] ?? '#999')}>
+            {user.charAt(4) || user.charAt(0)}
+          </div>
+          <div>
+            <div style={styles.typingName}>{user}</div>
+            <div style={styles.typingDots}>
+              <div style={styles.typingDot(0)} />
+              <div style={styles.typingDot(0.2)} />
+              <div style={styles.typingDot(0.4)} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function MessageList() {
+  const msgs = usePulse(MessagesChanged, [] as Message[])
+  const emit = useEmit()
+  let containerRef = null
+
+  onMount(() => {
+    if (containerRef) {
+      containerRef.scrollTop = containerRef.scrollHeight
+    }
   })
+
+  // Mark messages as read when scrolled to bottom
+  onMount(() => {
+    const el = containerRef
+    if (!el) return
+    const handleScroll = () => {
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
+      if (isAtBottom) {
+        emit(MessageRead, 'all')
+      }
+    }
+    el.addEventListener('scroll', handleScroll)
+    return () => el.removeEventListener('scroll', handleScroll)
+  })
+
+  return (
+    <div ref={containerRef} style={styles.messagesArea}>
+      {msgs().map((msg, i) => (
+        <MessageBubble msg={msg} isLast={i === msgs().length - 1} />
+      ))}
+      <TypingIndicator />
+    </div>
+  )
+}
+
+function ChatInput() {
+  const emit = useEmit()
+  let inputRef = null
 
   const handleSend = () => {
-    const text = inputRef.value.trim()
+    const text = inputRef?.value.trim()
     if (!text) return
-    emit(SendMessage, text)
-    inputRef.value = ''
+    emit(MessageSent, { text, sender: 'You' })
+    if (inputRef) inputRef.value = ''
+  }
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSend()
+    }
   }
 
   return (
-    <div style={{
-      'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      height: '100vh', display: 'flex', 'flex-direction': 'column', background: '#1a1a2e',
-    }}>
-      <style>{`
-        @keyframes typing { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
-      `}</style>
-
-      {/* Header */}
-      <div style={{ background: '#16213e', padding: '16px 24px', display: 'flex', 'align-items': 'center', gap: '12px', 'border-bottom': '1px solid #2d2d44' }}>
-        <div style={{ width: '40px', height: '40px', 'border-radius': '50%', background: '#4361ee', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '18px', color: '#fff' }}>
-          \u2709
-        </div>
-        <div>
-          <div style={{ color: '#fff', 'font-size': '16px', 'font-weight': '600' }}>Team Chat</div>
-          <div style={{ color: '#888', 'font-size': '12px' }}>Alice, Bob, and You</div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div ref={scrollRef} style={{ flex: '1', overflow: 'auto', padding: '16px 0' }}>
-        <For each={msgs()}>
-          {(msg, i) => <MessageBubble msg={msg} isLast={i() === msgs().length - 1} />}
-        </For>
-
-        {/* Typing indicators */}
-        <For each={BOTS}>
-          {(bot) => (
-            <Show when={typing()[bot.name]}>
-              <TypingIndicator name={bot.name} color={bot.color} />
-            </Show>
-          )}
-        </For>
-      </div>
-
-      {/* Input */}
-      <div style={{ padding: '12px 16px', background: '#16213e', display: 'flex', gap: '12px', 'border-top': '1px solid #2d2d44' }}>
-        <input
-          ref={inputRef}
-          placeholder="Type a message..."
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSend() }}
-          style={{
-            flex: '1', padding: '12px 16px', background: '#2d2d44', border: 'none',
-            'border-radius': '24px', color: '#fff', 'font-size': '14px', outline: 'none',
-          }}
-        />
-        <button
-          onClick={handleSend}
-          style={{
-            background: '#4361ee', border: 'none', 'border-radius': '50%',
-            width: '44px', height: '44px', cursor: 'pointer', color: '#fff',
-            'font-size': '18px', display: 'flex', 'align-items': 'center', 'justify-content': 'center',
-          }}
-        >\u2191</button>
-      </div>
+    <div style={styles.inputArea}>
+      <input
+        ref={inputRef}
+        style={styles.input}
+        placeholder="Type a message..."
+        onKeyDown={handleKeyDown}
+      />
+      <button style={styles.sendBtn} onClick={handleSend}>
+        {'➤'}
+      </button>
     </div>
+  )
+}
+
+function Header() {
+  const unread = usePulse(UnreadCountChanged, 0)
+  const badgeScale = 1
+
+  return (
+    <div style={styles.header}>
+      <div>
+        <div style={styles.headerTitle}>Pulse Chat</div>
+        <div style={styles.headerParticipants}>You, Bot Alice, Bot Bob</div>
+      </div>
+      {unread() > 0 && (
+        <div style={styles.badge(badgeScale || 1)}>
+          {unread}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+export default function App() {
+  return (
+    <>
+      <style>{globalStyle}</style>
+      <div style={styles.container}>
+        <Header />
+        <PresenceBar />
+        <MessageList />
+        <ChatInput />
+      </div>
+    </>
   )
 }

@@ -6,7 +6,6 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
-// Error boundary: catch formula evaluation errors in rules
 engine.onError = (error, rule, _event) => {
   console.warn(`[Pulse] Error in ${rule.name}:`, error.message)
 }
@@ -15,36 +14,11 @@ engine.onError = (error, rule, _event) => {
 // Types
 // ---------------------------------------------------------------------------
 
-export interface CellData {
-  raw: string
-  computed: string
-  error?: string
-}
-
+export interface CellData { raw: string; computed: string; error?: string }
 export type Grid = CellData[][]
-
-export interface CellCoord {
-  row: number
-  col: number
-}
-
-export interface CellEditPayload {
-  row: number
-  col: number
-  value: string
-}
-
-export interface CellComputedPayload {
-  row: number
-  col: number
-  result: number | string
-}
-
-export interface FormulaErrorPayload {
-  row: number
-  col: number
-  error: string
-}
+export interface CellCoord { row: number; col: number }
+export interface CellEditPayload { row: number; col: number; value: string }
+export interface FormulaErrorPayload { row: number; col: number; error: string }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -53,9 +27,7 @@ export interface FormulaErrorPayload {
 const ROWS = 8
 const COLS = 8
 
-function colLabel(c: number): string {
-  return String.fromCharCode(65 + c)
-}
+function colLabel(c: number): string { return String.fromCharCode(65 + c) }
 
 function parseCellRef(ref: string): CellCoord | null {
   const match = ref.match(/^([A-H])([1-8])$/i)
@@ -69,15 +41,12 @@ function parseCellRef(ref: string): CellCoord | null {
 function parseRange(range: string): CellCoord[] | null {
   const parts = range.split(':')
   if (parts.length !== 2) return null
-  const start = parseCellRef(parts[0].trim())
-  const end = parseCellRef(parts[1].trim())
+  const start = parseCellRef(parts[0].trim()), end = parseCellRef(parts[1].trim())
   if (!start || !end) return null
   const coords: CellCoord[] = []
-  for (let r = Math.min(start.row, end.row); r <= Math.max(start.row, end.row); r++) {
-    for (let c = Math.min(start.col, end.col); c <= Math.max(start.col, end.col); c++) {
+  for (let r = Math.min(start.row, end.row); r <= Math.max(start.row, end.row); r++)
+    for (let c = Math.min(start.col, end.col); c <= Math.max(start.col, end.col); c++)
       coords.push({ row: r, col: c })
-    }
-  }
   return coords
 }
 
@@ -90,146 +59,81 @@ function getCellValue(grid: Grid, row: number, col: number): number {
 
 function evaluateFormula(formula: string, grid: Grid, selfRow: number, selfCol: number): number | string {
   const expr = formula.substring(1).trim()
-
-  // SUM function
   const sumMatch = expr.match(/^SUM\((.+)\)$/i)
-  if (sumMatch) {
-    const rangeCoords = parseRange(sumMatch[1])
-    if (!rangeCoords) throw new Error('Invalid range in SUM')
-    return rangeCoords.reduce((acc, c) => acc + getCellValue(grid, c.row, c.col), 0)
-  }
-
-  // AVG function
+  if (sumMatch) { const r = parseRange(sumMatch[1]); if (!r) throw new Error('Invalid range'); return r.reduce((a, c) => a + getCellValue(grid, c.row, c.col), 0) }
   const avgMatch = expr.match(/^AVG\((.+)\)$/i)
-  if (avgMatch) {
-    const rangeCoords = parseRange(avgMatch[1])
-    if (!rangeCoords || rangeCoords.length === 0) throw new Error('Invalid range in AVG')
-    const sum = rangeCoords.reduce((acc, c) => acc + getCellValue(grid, c.row, c.col), 0)
-    return sum / rangeCoords.length
-  }
-
-  // MIN function
+  if (avgMatch) { const r = parseRange(avgMatch[1]); if (!r || !r.length) throw new Error('Invalid range'); return r.reduce((a, c) => a + getCellValue(grid, c.row, c.col), 0) / r.length }
   const minMatch = expr.match(/^MIN\((.+)\)$/i)
-  if (minMatch) {
-    const rangeCoords = parseRange(minMatch[1])
-    if (!rangeCoords || rangeCoords.length === 0) throw new Error('Invalid range in MIN')
-    return Math.min(...rangeCoords.map(c => getCellValue(grid, c.row, c.col)))
-  }
-
-  // MAX function
+  if (minMatch) { const r = parseRange(minMatch[1]); if (!r || !r.length) throw new Error('Invalid range'); return Math.min(...r.map(c => getCellValue(grid, c.row, c.col))) }
   const maxMatch = expr.match(/^MAX\((.+)\)$/i)
-  if (maxMatch) {
-    const rangeCoords = parseRange(maxMatch[1])
-    if (!rangeCoords || rangeCoords.length === 0) throw new Error('Invalid range in MAX')
-    return Math.max(...rangeCoords.map(c => getCellValue(grid, c.row, c.col)))
-  }
-
-  // Simple arithmetic expression with cell references
+  if (maxMatch) { const r = parseRange(maxMatch[1]); if (!r || !r.length) throw new Error('Invalid range'); return Math.max(...r.map(c => getCellValue(grid, c.row, c.col))) }
   let resolved = expr.replace(/[A-H][1-8]/gi, (match) => {
     const ref = parseCellRef(match)
     if (!ref) return '0'
     if (ref.row === selfRow && ref.col === selfCol) throw new Error('Circular reference')
     return String(getCellValue(grid, ref.row, ref.col))
   })
-
-  // Evaluate safe arithmetic
   try {
-    // Only allow numbers, operators, parentheses, spaces, and decimal points
-    if (!/^[\d\s+\-*/.()]+$/.test(resolved)) {
-      throw new Error('Invalid formula expression')
-    }
+    if (!/^[\d\s+\-*/.()]+$/.test(resolved)) throw new Error('Invalid formula')
     const result = new Function(`return (${resolved})`)()
     if (typeof result !== 'number' || !isFinite(result)) throw new Error('Invalid result')
     return Math.round(result * 1000000) / 1000000
-  } catch {
-    throw new Error('Invalid formula')
-  }
+  } catch { throw new Error('Invalid formula') }
 }
 
 function makeEmptyGrid(): Grid {
-  return Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => ({ raw: '', computed: '' }))
-  )
+  return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => ({ raw: '', computed: '' })))
 }
 
 function recomputeGrid(grid: Grid): Grid {
-  const newGrid: Grid = grid.map(row => row.map(cell => ({ ...cell })))
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const raw = newGrid[r][c].raw
-      if (raw.startsWith('=')) {
-        try {
-          const result = evaluateFormula(raw, newGrid, r, c)
-          newGrid[r][c] = { raw, computed: String(result), error: undefined }
-        } catch (err: any) {
-          newGrid[r][c] = { raw, computed: '#ERR', error: err.message }
-        }
-      } else {
-        newGrid[r][c] = { raw, computed: raw, error: undefined }
-      }
-    }
+  const g: Grid = grid.map(r => r.map(c => ({ ...c })))
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const raw = g[r][c].raw
+    if (raw.startsWith('=')) {
+      try { const result = evaluateFormula(raw, g, r, c); g[r][c] = { raw, computed: String(result) } }
+      catch (e: any) { g[r][c] = { raw, computed: '#ERR', error: e.message } }
+    } else { g[r][c] = { raw, computed: raw } }
   }
-  return newGrid
+  return g
 }
 
 // ---------------------------------------------------------------------------
-// Event declarations
+// Events
 // ---------------------------------------------------------------------------
 
 export const CellEdited = engine.event<CellEditPayload>('CellEdited')
-export const CellComputed = engine.event<CellComputedPayload>('CellComputed')
 export const CellSelected = engine.event<CellCoord>('CellSelected')
 export const FormulaError = engine.event<FormulaErrorPayload>('FormulaError')
+export const CellsChanged = engine.event<Grid>('CellsChanged')
+export const SelectedCellChanged = engine.event<CellCoord>('SelectedCellChanged')
 
 // ---------------------------------------------------------------------------
-// Pipe: CellEdited -> CellComputed (with formula evaluation)
+// State
 // ---------------------------------------------------------------------------
 
-engine.pipe(CellEdited, [CellComputed, FormulaError], (payload: CellEditPayload) => {
-  // We trigger the grid recompute through the signal reducer below.
-  // The pipe computes the immediate cell result.
-  const currentGrid = cells.value
-  const tempGrid = currentGrid.map(row => row.map(cell => ({ ...cell })))
-  tempGrid[payload.row][payload.col] = { raw: payload.value, computed: payload.value }
+let cells = makeEmptyGrid()
+let selectedCell: CellCoord = { row: 0, col: 0 }
 
-  if (payload.value.startsWith('=')) {
-    try {
-      const result = evaluateFormula(payload.value, tempGrid, payload.row, payload.col)
-      return [
-        { row: payload.row, col: payload.col, result },
-        undefined,
-      ]
-    } catch (err: any) {
-      return [
-        undefined,
-        { row: payload.row, col: payload.col, error: err.message },
-      ]
-    }
+engine.on(CellEdited, (payload) => {
+  const newGrid = cells.map(r => r.map(c => ({ ...c })))
+  newGrid[payload.row][payload.col] = { raw: payload.value, computed: payload.value }
+  cells = recomputeGrid(newGrid)
+  engine.emit(CellsChanged, cells)
+
+  // Check for formula errors
+  const cell = cells[payload.row][payload.col]
+  if (cell.error) {
+    engine.emit(FormulaError, { row: payload.row, col: payload.col, error: cell.error })
   }
-  return [
-    { row: payload.row, col: payload.col, result: payload.value },
-    undefined,
-  ]
 })
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const cells = engine.signal<Grid>(CellEdited, makeEmptyGrid(), (prev, payload) => {
-  const newGrid = prev.map(row => row.map(cell => ({ ...cell })))
-  newGrid[payload.row][payload.col] = {
-    raw: payload.value,
-    computed: payload.value,
-  }
-  // Recompute all formula cells
-  return recomputeGrid(newGrid)
+engine.on(CellSelected, (coord) => {
+  selectedCell = coord
+  engine.emit(SelectedCellChanged, coord)
 })
 
-export const selectedCell = engine.signal<CellCoord>(
-  CellSelected,
-  { row: 0, col: 0 },
-  (_prev, coord) => coord,
-)
+// Emit initial state
+engine.emit(CellsChanged, cells)
+engine.emit(SelectedCellChanged, selectedCell)
 
 export { colLabel, ROWS, COLS }

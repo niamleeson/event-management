@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, SpringValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Face data                                                         */
 /* ------------------------------------------------------------------ */
@@ -32,22 +28,94 @@ export const SnapDone = engine.event('SnapDone')
 /*  Rotation signals + springs                                        */
 /* ------------------------------------------------------------------ */
 
-export const rotationXTarget: Signal<number> = engine.signal(DragMove, 0, (prev, { dy }) => prev + dy * 0.4)
-export const rotationYTarget: Signal<number> = engine.signal(DragMove, 0, (prev, { dx }) => prev + dx * 0.4)
+export let rotationXTarget = 0
+export const RotationXTargetChanged = engine.event('RotationXTargetChanged')
+engine.on(DragMove, (v: any) => { rotationXTarget = ((prev, { dy }) => prev + dy * 0.4)(rotationXTarget, v); engine.emit(RotationXTargetChanged, rotationXTarget) })
+export let rotationYTarget = 0
+export const RotationYTargetChanged = engine.event('RotationYTargetChanged')
+engine.on(DragMove, (v: any) => { rotationYTarget = ((prev, { dx }) => prev + dx * 0.4)(rotationYTarget, v); engine.emit(RotationYTargetChanged, rotationYTarget) })
 
-engine.signalUpdate(rotationXTarget, SnapToFace, (_prev, face) => {
+engine.on(SnapToFace, (v: any) => { rotationXTarget = ((_prev, face) => {
   const snaps: Record<number, number> = { 4: -90, 5: 90 }
   return snaps[face] ?? 0
-})
-engine.signalUpdate(rotationYTarget, SnapToFace, (_prev, face) => {
+})(rotationXTarget, v); engine.emit(RotationXTargetChanged, rotationXTarget) })
+engine.on(SnapToFace, (v: any) => { rotationYTarget = ((_prev, face) => {
   const snaps: Record<number, number> = { 0: 0, 1: -90, 2: -180, 3: -270 }
   return snaps[face] ?? 0
-})
+})(rotationYTarget, v); engine.emit(RotationYTargetChanged, rotationYTarget) })
 
-export const rotXSpring: SpringValue = engine.spring(rotationXTarget, { stiffness: 120, damping: 20 })
-export const rotYSpring: SpringValue = engine.spring(rotationYTarget, { stiffness: 120, damping: 20 })
+export let rotXSpring = { value: 0, velocity: 0, settled: true }
+export const RotXSpringVal = engine.event<number>('RotXSpringVal')
+{
+  const _sc = { stiffness: 120, damping: 20 }
+  let _sv = 0, _sa = false
+  function _ss() {
+    if (_sa) return; _sa = true
+    let _sl = performance.now()
+    function _st(now: number) {
+      if (!_sa) return
+      const dt = Math.min((now - _sl) / 1000, 0.064); _sl = now
+      const tgt = rotationXTarget
+      const tgtVal = typeof tgt === 'number' ? tgt : (tgt?.value ?? 0)
+      const dx = rotXSpring.value - tgtVal
+      const sf = -(_sc.stiffness ?? 170) * dx
+      const df = -(_sc.damping ?? 26) * _sv
+      _sv += (sf + df) * dt
+      rotXSpring.value += _sv * dt
+      rotXSpring.velocity = _sv
+      engine.emit(RotXSpringVal, rotXSpring.value)
+      const rt = _sc.restThreshold ?? 0.01
+      if (Math.abs(dx) < rt && Math.abs(_sv) < rt) {
+        rotXSpring.value = tgtVal; _sv = 0; _sa = false; rotXSpring.settled = true
+        engine.emit(RotXSpringVal, rotXSpring.value)
+        if (_sc.done) engine.emit(_sc.done, undefined)
+        return
+      }
+      rotXSpring.settled = false
+      requestAnimationFrame(_st)
+    }
+    requestAnimationFrame(_st)
+  }
+  engine.on(RotationXTargetChanged, () => _ss())
+}
+export let rotYSpring = { value: 0, velocity: 0, settled: true }
+export const RotYSpringVal = engine.event<number>('RotYSpringVal')
+{
+  const _sc = { stiffness: 120, damping: 20 }
+  let _sv = 0, _sa = false
+  function _ss() {
+    if (_sa) return; _sa = true
+    let _sl = performance.now()
+    function _st(now: number) {
+      if (!_sa) return
+      const dt = Math.min((now - _sl) / 1000, 0.064); _sl = now
+      const tgt = rotationYTarget
+      const tgtVal = typeof tgt === 'number' ? tgt : (tgt?.value ?? 0)
+      const dx = rotYSpring.value - tgtVal
+      const sf = -(_sc.stiffness ?? 170) * dx
+      const df = -(_sc.damping ?? 26) * _sv
+      _sv += (sf + df) * dt
+      rotYSpring.value += _sv * dt
+      rotYSpring.velocity = _sv
+      engine.emit(RotYSpringVal, rotYSpring.value)
+      const rt = _sc.restThreshold ?? 0.01
+      if (Math.abs(dx) < rt && Math.abs(_sv) < rt) {
+        rotYSpring.value = tgtVal; _sv = 0; _sa = false; rotYSpring.settled = true
+        engine.emit(RotYSpringVal, rotYSpring.value)
+        if (_sc.done) engine.emit(_sc.done, undefined)
+        return
+      }
+      rotYSpring.settled = false
+      requestAnimationFrame(_st)
+    }
+    requestAnimationFrame(_st)
+  }
+  engine.on(RotationYTargetChanged, () => _ss())
+}
 
-export const selectedFace: Signal<number> = engine.signal(FaceSelected, -1, (_prev, idx) => idx)
+export let selectedFace = -1
+export const SelectedFaceChanged = engine.event('SelectedFaceChanged')
+engine.on(FaceSelected, (v: any) => { selectedFace = ((_prev, idx) => idx)(selectedFace, v); engine.emit(SelectedFaceChanged, selectedFace) })
 
 /* ------------------------------------------------------------------ */
 /*  Snap logic                                                        */

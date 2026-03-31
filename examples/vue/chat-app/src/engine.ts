@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, TweenValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
@@ -46,53 +42,59 @@ export const MessageReceived = engine.event<Message>('MessageReceived')
 export const TypingStarted = engine.event<string>('TypingStarted')
 export const TypingStopped = engine.event<string>('TypingStopped')
 export const MarkRead = engine.event<number>('MarkRead')
-export const SlideInStart = engine.event<number>('SlideInStart')
-export const SlideInDone = engine.event<number>('SlideInDone')
 
 /* ------------------------------------------------------------------ */
-/*  Signals                                                           */
+/*  State-changed events                                              */
+/* ------------------------------------------------------------------ */
+
+export const MessagesChanged = engine.event<Message[]>('MessagesChanged')
+export const TypingChanged = engine.event<TypingState>('TypingChanged')
+export const UnreadCountChanged = engine.event<number>('UnreadCountChanged')
+
+/* ------------------------------------------------------------------ */
+/*  State                                                             */
 /* ------------------------------------------------------------------ */
 
 let nextId = 1
 function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
 
-export const messages: Signal<Message[]> = engine.signal(MessageReceived, [] as Message[], (prev, msg) => [...prev, msg])
+let messages: Message[] = []
+let typing: TypingState = {}
+let unreadCount = 0
 
-export const typing: Signal<TypingState> = engine.signal(TypingStarted, {} as TypingState, (prev, user) => ({ ...prev, [user]: true }))
-engine.signalUpdate(typing, TypingStopped, (prev, user) => ({ ...prev, [user]: false }))
+// Messages state
+engine.on(MessageReceived, (msg) => {
+  messages = [...messages, msg]
+  engine.emit(MessagesChanged, messages)
+})
 
-export const unreadCount: Signal<number> = engine.signal(MessageReceived, 0, (prev) => prev + 1)
-engine.signalUpdate(unreadCount, MarkRead, () => 0)
+// Typing state
+engine.on(TypingStarted, (user) => {
+  typing = { ...typing, [user]: true }
+  engine.emit(TypingChanged, typing)
+})
+engine.on(TypingStopped, (user) => {
+  typing = { ...typing, [user]: false }
+  engine.emit(TypingChanged, typing)
+})
+
+// Unread count state
+engine.on(MessageReceived, () => {
+  unreadCount = unreadCount + 1
+  engine.emit(UnreadCountChanged, unreadCount)
+})
+engine.on(MarkRead, () => {
+  unreadCount = 0
+  engine.emit(UnreadCountChanged, unreadCount)
+})
 
 /* ------------------------------------------------------------------ */
-/*  Slide-in tweens (pool of 50 reusable slots)                       */
-/* ------------------------------------------------------------------ */
-
-export const slideInTweens: TweenValue[] = []
-const slideStarts = []
-
-for (let i = 0; i < 50; i++) {
-  const start = engine.event(`SlideIn_${i}`)
-  slideStarts.push(start)
-  slideInTweens.push(engine.tween({
-    start,
-    from: 40,
-    to: 0,
-    duration: 300,
-    easing: (t: number) => 1 - Math.pow(1 - t, 3),
-  }))
-}
-
-/* ------------------------------------------------------------------ */
-/*  Message sending pipe                                              */
+/*  Message sending                                                   */
 /* ------------------------------------------------------------------ */
 
 engine.on(SendMessage, (text) => {
   const msg: Message = { id: nextId++, sender: 'You', text, time: now(), read: true }
   engine.emit(MessageReceived, msg)
-
-  const idx = (msg.id - 1) % 50
-  if (slideStarts[idx]) engine.emit(slideStarts[idx], undefined)
 
   // Bot auto-responses with typing indicators
   const bots = ['Alice Bot', 'Bob Bot']
@@ -105,8 +107,14 @@ engine.on(SendMessage, (text) => {
       const text = responses[Math.floor(Math.random() * responses.length)]
       const botMsg: Message = { id: nextId++, sender: bot, text, time: now(), read: false }
       engine.emit(MessageReceived, botMsg)
-      const bidx = (botMsg.id - 1) % 50
-      if (slideStarts[bidx]) engine.emit(slideStarts[bidx], undefined)
     }, delay)
   })
 })
+
+/* ------------------------------------------------------------------ */
+/*  Initial values                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getMessages() { return messages }
+export function getTyping() { return typing }
+export function getUnreadCount() { return unreadCount }

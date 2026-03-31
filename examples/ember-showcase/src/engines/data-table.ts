@@ -78,63 +78,81 @@ export const StatusFilterChanged = engine.event<string | null>('StatusFilterChan
 export const PageChanged = engine.event<number>('PageChanged')
 export const ToggleRowExpand = engine.event<number>('ToggleRowExpand')
 export const ColumnResized = engine.event<{ column: ColumnKey; width: number }>('ColumnResized')
+export const TableChanged = engine.event<void>('TableChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-export const sortState = engine.signal<SortState>(
-  SortChanged, { column: null, direction: null },
-  (prev, column) => {
-    if (prev.column === column) {
-      if (prev.direction === 'asc') return { column, direction: 'desc' as SortDirection }
-      if (prev.direction === 'desc') return { column: null, direction: null }
-    }
-    return { column, direction: 'asc' as SortDirection }
-  },
-)
+let _sortState: SortState = { column: null, direction: null }
+let _filterState: FilterState = { search: '', department: null, status: null }
+let _currentPage = 0
+let _expandedRows = new Set<number>()
+let _columnWidths: Record<ColumnKey, number> = { id: 60, name: 160, email: 200, department: 120, salary: 100, startDate: 110, status: 90 }
 
-export const filterState = engine.signal<FilterState>(
-  SearchChanged,
-  { search: '', department: null, status: null },
-  (prev, search) => ({ ...prev, search }),
-)
-
-engine.signalUpdate(filterState, DepartmentFilterChanged, (prev, dept) => ({ ...prev, department: dept }))
-engine.signalUpdate(filterState, StatusFilterChanged, (prev, status) => ({ ...prev, status }))
-
-export const currentPage = engine.signal<number>(
-  PageChanged, 0, (_prev, page) => page,
-)
-
-// Reset to page 0 when filters change
-engine.signalUpdate(currentPage, SearchChanged, () => 0)
-engine.signalUpdate(currentPage, DepartmentFilterChanged, () => 0)
-engine.signalUpdate(currentPage, StatusFilterChanged, () => 0)
-engine.signalUpdate(currentPage, SortChanged, () => 0)
-
-export const expandedRows = engine.signal<Set<number>>(
-  ToggleRowExpand, new Set(),
-  (prev, id) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  },
-)
-
-export const columnWidths = engine.signal<Record<ColumnKey, number>>(
-  ColumnResized,
-  { id: 60, name: 160, email: 200, department: 120, salary: 100, startDate: 110, status: 90 },
-  (prev, { column, width }) => ({ ...prev, [column]: Math.max(60, width) }),
-)
+export function getSortState(): SortState { return _sortState }
+export function getFilterState(): FilterState { return _filterState }
+export function getCurrentPage(): number { return _currentPage }
+export function getExpandedRows(): Set<number> { return _expandedRows }
+export function getColumnWidths(): Record<ColumnKey, number> { return _columnWidths }
 
 // ---------------------------------------------------------------------------
-// Computed: filtered + sorted + paginated rows
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(SortChanged, (column: ColumnKey) => {
+  if (_sortState.column === column) {
+    if (_sortState.direction === 'asc') _sortState = { column, direction: 'desc' }
+    else if (_sortState.direction === 'desc') _sortState = { column: null, direction: null }
+    else _sortState = { column, direction: 'asc' }
+  } else {
+    _sortState = { column, direction: 'asc' }
+  }
+  _currentPage = 0
+  engine.emit(TableChanged, undefined)
+})
+
+engine.on(SearchChanged, (search: string) => {
+  _filterState = { ..._filterState, search }
+  _currentPage = 0
+  engine.emit(TableChanged, undefined)
+})
+
+engine.on(DepartmentFilterChanged, (dept: string | null) => {
+  _filterState = { ..._filterState, department: dept }
+  _currentPage = 0
+  engine.emit(TableChanged, undefined)
+})
+
+engine.on(StatusFilterChanged, (status: string | null) => {
+  _filterState = { ..._filterState, status }
+  _currentPage = 0
+  engine.emit(TableChanged, undefined)
+})
+
+engine.on(PageChanged, (page: number) => {
+  _currentPage = page
+  engine.emit(TableChanged, undefined)
+})
+
+engine.on(ToggleRowExpand, (id: number) => {
+  _expandedRows = new Set(_expandedRows)
+  if (_expandedRows.has(id)) _expandedRows.delete(id)
+  else _expandedRows.add(id)
+  engine.emit(TableChanged, undefined)
+})
+
+engine.on(ColumnResized, ({ column, width }) => {
+  _columnWidths = { ..._columnWidths, [column]: Math.max(60, width) }
+  engine.emit(TableChanged, undefined)
+})
+
+// ---------------------------------------------------------------------------
+// Computed
 // ---------------------------------------------------------------------------
 
 export function getFilteredRows(): DataRow[] {
-  const { search, department, status } = filterState.value
+  const { search, department, status } = _filterState
   let rows = ALL_ROWS
 
   if (search) {
@@ -154,7 +172,7 @@ export function getFilteredRows(): DataRow[] {
     rows = rows.filter((r) => r.status === status)
   }
 
-  const { column, direction } = sortState.value
+  const { column, direction } = _sortState
   if (column && direction) {
     rows = [...rows].sort((a, b) => {
       const aVal = a[column]
@@ -169,7 +187,7 @@ export function getFilteredRows(): DataRow[] {
 
 export function getPageRows(): DataRow[] {
   const filtered = getFilteredRows()
-  const start = currentPage.value * PAGE_SIZE
+  const start = _currentPage * PAGE_SIZE
   return filtered.slice(start, start + PAGE_SIZE)
 }
 

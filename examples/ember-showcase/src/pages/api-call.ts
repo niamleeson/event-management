@@ -1,14 +1,20 @@
 import {
   engine,
-  searchQuery,
-  searchResults,
-  isSearching,
-  selectedUserId,
-  userDetails,
-  isLoadingDetails,
-  error,
+  getSearchQuery,
+  getSearchResults,
+  getIsSearching,
+  getSelectedUserId,
+  getUserDetails,
+  getIsLoadingDetails,
+  getError,
   SearchInput,
+  SearchDone,
+  SearchError,
+  SearchPending,
   UserSelected,
+  UserDetailsDone,
+  UserDetailsPending,
+  UserDetailsError,
   type User,
   type UserDetails as UserDetailsType,
 } from '../engines/api-call'
@@ -30,7 +36,6 @@ export function mount(container: HTMLElement): () => void {
 
   const unsubs: (() => void)[] = []
 
-  // Build static DOM
   const wrapper = document.createElement('div')
   wrapper.style.cssText = `max-width: 720px; margin: 40px auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 0 20px;`
   container.appendChild(wrapper)
@@ -60,7 +65,7 @@ export function mount(container: HTMLElement): () => void {
   const searchInput = document.createElement('input')
   searchInput.style.cssText = `width: 100%; padding: 14px 16px 14px 44px; font-size: 16px; border: 2px solid ${colors.border}; border-radius: 12px; outline: none; box-sizing: border-box; transition: border-color 0.2s;`
   searchInput.placeholder = 'Search users by name, email, or role...'
-  searchInput.value = searchQuery.value
+  searchInput.value = getSearchQuery()
   searchInput.addEventListener('input', (e) => {
     engine.emit(SearchInput, (e.target as HTMLInputElement).value)
   })
@@ -68,7 +73,6 @@ export function mount(container: HTMLElement): () => void {
   const spinner = document.createElement('div')
   spinner.style.cssText = `position: absolute; right: 16px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border: 2px solid ${colors.border}; border-top: 2px solid ${colors.primary}; border-radius: 50%; animation: spin 0.8s linear infinite; display: none;`
 
-  // Add spin keyframe
   const styleTag = document.createElement('style')
   styleTag.textContent = `@keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }`
   document.head.appendChild(styleTag)
@@ -78,11 +82,9 @@ export function mount(container: HTMLElement): () => void {
   searchBox.appendChild(spinner)
   wrapper.appendChild(searchBox)
 
-  // Results area
   const resultsArea = document.createElement('div')
   wrapper.appendChild(resultsArea)
 
-  // Details panel
   const detailsPanel = document.createElement('div')
   detailsPanel.style.cssText = `margin-top: 24px; padding: 24px; background: ${colors.card}; border-radius: 12px; border: 2px solid ${colors.border}; display: none;`
   wrapper.appendChild(detailsPanel)
@@ -91,9 +93,9 @@ export function mount(container: HTMLElement): () => void {
 
   function renderResults() {
     resultsArea.innerHTML = ''
-    const results = searchResults.value as User[]
-    const query = searchQuery.value
-    const loading = isSearching.value
+    const results = getSearchResults()
+    const query = getSearchQuery()
+    const loading = getIsSearching()
 
     if (loading && results.length === 0) {
       const loadingDiv = document.createElement('div')
@@ -122,7 +124,7 @@ export function mount(container: HTMLElement): () => void {
     const grid = document.createElement('div')
     grid.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 16px;'
 
-    const selected = selectedUserId.value
+    const selected = getSelectedUserId()
 
     for (const user of results) {
       const isSelected = selected === user.id
@@ -147,13 +149,13 @@ export function mount(container: HTMLElement): () => void {
 
       card.addEventListener('click', () => engine.emit(UserSelected, user.id))
       card.addEventListener('mouseenter', () => {
-        if (selectedUserId.value !== user.id) {
+        if (getSelectedUserId() !== user.id) {
           card.style.borderColor = colors.primary
           card.style.transform = 'translateY(-2px)'
         }
       })
       card.addEventListener('mouseleave', () => {
-        if (selectedUserId.value !== user.id) {
+        if (getSelectedUserId() !== user.id) {
           card.style.borderColor = colors.border
           card.style.transform = 'translateY(0)'
         }
@@ -166,7 +168,7 @@ export function mount(container: HTMLElement): () => void {
   }
 
   function renderDetailsPanel() {
-    const selected = selectedUserId.value
+    const selected = getSelectedUserId()
     if (!selected) {
       detailsPanel.style.display = 'none'
       return
@@ -174,12 +176,12 @@ export function mount(container: HTMLElement): () => void {
 
     detailsPanel.style.display = 'block'
 
-    if (isLoadingDetails.value) {
+    if (getIsLoadingDetails()) {
       detailsPanel.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; padding: 40px; color: ${colors.muted};">Loading user details...</div>`
       return
     }
 
-    const details = userDetails.value as UserDetailsType | null
+    const details = getUserDetails()
     if (!details) {
       detailsPanel.style.display = 'none'
       return
@@ -216,30 +218,33 @@ export function mount(container: HTMLElement): () => void {
     `
   }
 
-  // Subscribe to signals
-  unsubs.push(searchQuery.subscribe((q) => {
-    searchInput.value = q
-  }))
-  unsubs.push(isSearching.subscribe(() => {
-    spinner.style.display = isSearching.value ? 'block' : 'none'
+  // Subscribe
+  unsubs.push(engine.on(SearchPending, () => {
+    spinner.style.display = 'block'
     renderResults()
   }))
-  unsubs.push(searchResults.subscribe(() => renderResults()))
-  unsubs.push(error.subscribe(() => {
-    const err = error.value
+  unsubs.push(engine.on(SearchDone, () => {
+    spinner.style.display = 'none'
+    renderResults()
+  }))
+  unsubs.push(engine.on(SearchError, () => {
+    spinner.style.display = 'none'
+    const err = getError()
     if (err) {
       errorBanner.textContent = err
       errorBanner.style.display = 'block'
     } else {
       errorBanner.style.display = 'none'
     }
+    renderResults()
   }))
-  unsubs.push(selectedUserId.subscribe(() => {
+  unsubs.push(engine.on(UserSelected, () => {
     renderResults()
     renderDetailsPanel()
   }))
-  unsubs.push(userDetails.subscribe(() => renderDetailsPanel()))
-  unsubs.push(isLoadingDetails.subscribe(() => renderDetailsPanel()))
+  unsubs.push(engine.on(UserDetailsPending, () => renderDetailsPanel()))
+  unsubs.push(engine.on(UserDetailsDone, () => renderDetailsPanel()))
+  unsubs.push(engine.on(UserDetailsError, () => renderDetailsPanel()))
 
   // Initial render
   renderResults()

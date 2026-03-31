@@ -1,5 +1,4 @@
-import { createEngine, createSignal } from '@pulse/core'
-import type { Signal } from '@pulse/core'
+import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
 // Engine
@@ -52,6 +51,14 @@ export const StockSelected = engine.event<string>('StockSelected')
 // Internal
 const FlashClear = engine.event<string>('FlashClear')
 
+// State-changed events for React subscriptions
+export const PricesChanged = engine.event<Map<string, StockState>>('PricesChanged')
+export const AlertsChanged = engine.event<AlertData[]>('AlertsChanged')
+export const WatchlistChanged = engine.event<string[]>('WatchlistChanged')
+export const TimeframeStateChanged = engine.event<Timeframe>('TimeframeStateChanged')
+export const IsLiveChanged = engine.event<boolean>('IsLiveChanged')
+export const SelectedStockChanged = engine.event<string>('SelectedStockChanged')
+
 // ---------------------------------------------------------------------------
 // Stock symbols
 // ---------------------------------------------------------------------------
@@ -70,7 +77,7 @@ const BASE_PRICES: Record<string, number> = {
 }
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
 function initPrices(): Map<string, StockState> {
@@ -89,41 +96,12 @@ function initPrices(): Map<string, StockState> {
   return m
 }
 
-export const prices: Signal<Map<string, StockState>> = createSignal(initPrices())
-engine['_signals'].push(prices)
-
-export const alerts: Signal<AlertData[]> = createSignal<AlertData[]>([])
-engine['_signals'].push(alerts)
-
-export const watchlist = engine.signal<string[]>(
-  WatchlistAdd,
-  ['AAPL', 'GOOGL', 'NVDA', 'TSLA'],
-  (prev, symbol) => prev.includes(symbol) ? prev : [...prev, symbol],
-)
-
-engine.signalUpdate(watchlist, WatchlistRemove, (prev, symbol) =>
-  prev.filter((s) => s !== symbol),
-)
-
-export const timeframe = engine.signal<Timeframe>(
-  TimeframeChanged,
-  '1m',
-  (_prev, tf) => tf,
-)
-
-export const isLive = engine.signal<boolean>(
-  TickerPaused,
-  true,
-  () => false,
-)
-
-engine.signalUpdate(isLive, TickerResumed, () => true)
-
-export const selectedStock = engine.signal<string>(
-  StockSelected,
-  'AAPL',
-  (_prev, sym) => sym,
-)
+let prices: Map<string, StockState> = initPrices()
+let alerts: AlertData[] = []
+let watchlist: string[] = ['AAPL', 'GOOGL', 'NVDA', 'TSLA']
+let timeframe: Timeframe = '1m'
+let isLive = true
+let selectedStock = 'AAPL'
 
 // ---------------------------------------------------------------------------
 // Pipe: PriceUpdate -> conditional AlertTriggered
@@ -131,14 +109,13 @@ export const selectedStock = engine.signal<string>(
 
 let alertCounter = 0
 
-engine.pipeIf(PriceUpdate, AlertTriggered, (data) => {
+engine.on(PriceUpdate, (data) => {
   if (Math.abs(data.change) > 5) {
-    return {
+    engine.emit(AlertTriggered, {
       symbol: data.symbol,
       message: `${data.symbol} ${data.change > 0 ? 'surged' : 'dropped'} ${Math.abs(data.change).toFixed(2)}%`,
-    }
+    })
   }
-  return null
 })
 
 // ---------------------------------------------------------------------------
@@ -146,7 +123,7 @@ engine.pipeIf(PriceUpdate, AlertTriggered, (data) => {
 // ---------------------------------------------------------------------------
 
 engine.on(PriceUpdate, (data) => {
-  const current = new Map(prices.value)
+  const current = new Map(prices)
   const stock = current.get(data.symbol)
   if (!stock) return
 
@@ -161,18 +138,20 @@ engine.on(PriceUpdate, (data) => {
     flashDirection: direction,
     flashTime: Date.now(),
   })
-  prices.set(current)
+  prices = current
+  engine.emit(PricesChanged, prices)
 
   // Clear flash after 800ms
   setTimeout(() => engine.emit(FlashClear, data.symbol), 800)
 })
 
 engine.on(FlashClear, (symbol) => {
-  const current = new Map(prices.value)
+  const current = new Map(prices)
   const stock = current.get(symbol)
   if (!stock) return
   current.set(symbol, { ...stock, flashDirection: null })
-  prices.set(current)
+  prices = current
+  engine.emit(PricesChanged, prices)
 })
 
 // ---------------------------------------------------------------------------
@@ -182,11 +161,53 @@ engine.on(FlashClear, (symbol) => {
 engine.on(AlertTriggered, ({ symbol, message }) => {
   const id = `alert-${++alertCounter}`
   const alert: AlertData = { id, symbol, message, timestamp: Date.now() }
-  alerts.set([alert, ...alerts.value].slice(0, 20))
+  alerts = [alert, ...alerts].slice(0, 20)
+  engine.emit(AlertsChanged, alerts)
 })
 
 engine.on(AlertDismissed, (id) => {
-  alerts.set(alerts.value.filter((a) => a.id !== id))
+  alerts = alerts.filter((a) => a.id !== id)
+  engine.emit(AlertsChanged, alerts)
+})
+
+// ---------------------------------------------------------------------------
+// Watchlist handlers
+// ---------------------------------------------------------------------------
+
+engine.on(WatchlistAdd, (symbol) => {
+  if (!watchlist.includes(symbol)) {
+    watchlist = [...watchlist, symbol]
+    engine.emit(WatchlistChanged, watchlist)
+  }
+})
+
+engine.on(WatchlistRemove, (symbol) => {
+  watchlist = watchlist.filter((s) => s !== symbol)
+  engine.emit(WatchlistChanged, watchlist)
+})
+
+// ---------------------------------------------------------------------------
+// Other handlers
+// ---------------------------------------------------------------------------
+
+engine.on(TimeframeChanged, (tf) => {
+  timeframe = tf
+  engine.emit(TimeframeStateChanged, timeframe)
+})
+
+engine.on(TickerPaused, () => {
+  isLive = false
+  engine.emit(IsLiveChanged, isLive)
+})
+
+engine.on(TickerResumed, () => {
+  isLive = true
+  engine.emit(IsLiveChanged, isLive)
+})
+
+engine.on(StockSelected, (sym) => {
+  selectedStock = sym
+  engine.emit(SelectedStockChanged, selectedStock)
 })
 
 // ---------------------------------------------------------------------------
@@ -198,9 +219,9 @@ let tickerInterval: ReturnType<typeof setInterval> | null = null
 function startTicker() {
   if (tickerInterval) return
   tickerInterval = setInterval(() => {
-    if (!isLive.value) return
+    if (!isLive) return
     for (const sym of SYMBOLS) {
-      const stock = prices.value.get(sym)
+      const stock = prices.get(sym)
       if (!stock) continue
       // Random walk
       const volatility = sym === 'TSLA' ? 0.03 : sym === 'NVDA' ? 0.025 : 0.015
@@ -217,9 +238,3 @@ function startTicker() {
 }
 
 startTicker()
-
-// ---------------------------------------------------------------------------
-// Start frame loop
-// ---------------------------------------------------------------------------
-
-engine.startFrameLoop()

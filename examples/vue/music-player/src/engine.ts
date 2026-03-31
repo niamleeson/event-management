@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
-import type { Signal, TweenValue } from '@pulse/core'
-
 export const engine = createEngine()
-engine.startFrameLoop()
-
 /* ------------------------------------------------------------------ */
 /*  Playlist data                                                     */
 /* ------------------------------------------------------------------ */
@@ -41,17 +37,23 @@ export const VisualizerUpdated = engine.event('VisualizerUpdated')
 /*  Signals                                                           */
 /* ------------------------------------------------------------------ */
 
-export const currentTrack: Signal<number> = engine.signal(SelectTrack, 0, (_prev, idx) => idx)
-engine.signalUpdate(currentTrack, NextTrack, (prev) => (prev + 1) % PLAYLIST.length)
-engine.signalUpdate(currentTrack, PrevTrack, (prev) => (prev - 1 + PLAYLIST.length) % PLAYLIST.length)
+export let currentTrack = 0
+export const CurrentTrackChanged = engine.event('CurrentTrackChanged')
+engine.on(SelectTrack, (v: any) => { currentTrack = ((_prev, idx) => idx)(currentTrack, v); engine.emit(CurrentTrackChanged, currentTrack) })
+engine.on(NextTrack, (v: any) => { currentTrack = ((prev) => (prev + 1) % PLAYLIST.length)(currentTrack, v); engine.emit(CurrentTrackChanged, currentTrack) })
+engine.on(PrevTrack, (v: any) => { currentTrack = ((prev) => (prev - 1 + PLAYLIST.length) % PLAYLIST.length)(currentTrack, v); engine.emit(CurrentTrackChanged, currentTrack) })
 
-export const isPlaying: Signal<boolean> = engine.signal(Play, false, () => true)
-engine.signalUpdate(isPlaying, Pause, () => false)
+export let isPlaying = false
+export const IsPlayingChanged = engine.event('IsPlayingChanged')
+engine.on(Play, (v: any) => { isPlaying = (() => true)(isPlaying, v); engine.emit(IsPlayingChanged, isPlaying) })
+engine.on(Pause, (v: any) => { isPlaying = (() => false)(isPlaying, v); engine.emit(IsPlayingChanged, isPlaying) })
 
-export const progress: Signal<number> = engine.signal(Tick, 0, (_prev, val) => val)
-engine.signalUpdate(progress, SelectTrack, () => 0)
-engine.signalUpdate(progress, NextTrack, () => 0)
-engine.signalUpdate(progress, PrevTrack, () => 0)
+export let progress = 0
+export const ProgressChanged = engine.event('ProgressChanged')
+engine.on(Tick, (v: any) => { progress = ((_prev, val) => val)(progress, v); engine.emit(ProgressChanged, progress) })
+engine.on(SelectTrack, (v: any) => { progress = (() => 0)(progress, v); engine.emit(ProgressChanged, progress) })
+engine.on(NextTrack, (v: any) => { progress = (() => 0)(progress, v); engine.emit(ProgressChanged, progress) })
+engine.on(PrevTrack, (v: any) => { progress = (() => 0)(progress, v); engine.emit(ProgressChanged, progress) })
 
 /* ------------------------------------------------------------------ */
 /*  Visualizer bars (32 bars, driven by frame)                        */
@@ -61,7 +63,7 @@ export const visualizerBars: number[] = new Array(32).fill(0)
 let beatPhase = 0
 
 engine.on(engine.frame, ({ dt }) => {
-  if (!isPlaying.value) {
+  if (!isPlaying) {
     for (let i = 0; i < 32; i++) {
       visualizerBars[i] *= 0.95
     }
@@ -70,8 +72,8 @@ engine.on(engine.frame, ({ dt }) => {
   }
 
   const dtSec = dt / 1000
-  const track = PLAYLIST[currentTrack.value]
-  const newProgress = Math.min(1, progress.value + dtSec / track.duration)
+  const track = PLAYLIST[currentTrack]
+  const newProgress = Math.min(1, progress + dtSec / track.duration)
   engine.emit(Tick, newProgress)
 
   if (newProgress >= 1) {
@@ -103,24 +105,49 @@ engine.on(engine.frame, ({ dt }) => {
 /* ------------------------------------------------------------------ */
 
 const ProgressAnimStart = engine.event('ProgressAnimStart')
-engine.pipe(Play, ProgressAnimStart, () => undefined)
+engine.on(Play, (v: any) => { engine.emit(ProgressAnimStart, (() => undefined)(v)) })
 
-export const progressTween = engine.tween({
+export let progressTween = { value: 0, active: false }
+export const ProgressTweenVal = engine.event<number>('ProgressTweenVal')
+{
+  const _tc = {
   start: ProgressAnimStart,
-  from: () => progress.value,
+  from: () => progress,
   to: 1,
   duration: () => {
-    const track = PLAYLIST[currentTrack.value]
-    return (1 - progress.value) * track.duration * 1000
+    const track = PLAYLIST[currentTrack]
+    return (1 - progress) * track.duration * 1000
   },
   easing: (t: number) => t,
-})
+}
+  const _te = typeof _tc.easing === 'function' ? _tc.easing : ((t: number) => t)
+  engine.on(_tc.start, () => {
+    const f = typeof _tc.from === 'function' ? _tc.from() : _tc.from
+    const t = typeof _tc.to === 'function' ? _tc.to() : _tc.to
+    const d = typeof _tc.duration === 'function' ? _tc.duration() : _tc.duration
+    let el = 0; progressTween.active = true
+    let last = performance.now()
+    function tick(now: number) {
+      if (!progressTween.active) return
+      el += now - last; last = now
+      const p = Math.min(1, el / d)
+      progressTween.value = f + (t - f) * _te(p)
+      engine.emit(ProgressTweenVal, progressTween.value)
+      if (p >= 1) { progressTween.active = false; if (_tc.done) engine.emit(_tc.done, undefined) }
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  if (_tc.cancel) { const cc = Array.isArray(_tc.cancel) ? _tc.cancel : [_tc.cancel]; cc.forEach((e: any) => engine.on(e, () => { progressTween.active = false })) }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Album art spin signal                                             */
 /* ------------------------------------------------------------------ */
 
-export const albumRotation: Signal<number> = engine.signal(VisualizerUpdated, 0, (prev) => {
-  if (!isPlaying.value) return prev
+export let albumRotation = 0
+export const AlbumRotationChanged = engine.event('AlbumRotationChanged')
+engine.on(VisualizerUpdated, (v: any) => { albumRotation = ((prev) => {
+  if (!isPlaying) return prev
   return prev + 0.5
-})
+})(albumRotation, v); engine.emit(AlbumRotationChanged, albumRotation) })

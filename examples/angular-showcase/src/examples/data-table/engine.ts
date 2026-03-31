@@ -1,194 +1,55 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface TableRow {
-  id: number
-  name: string
-  email: string
-  role: string
-  department: string
-  salary: number
-  startDate: string
-  status: 'active' | 'inactive' | 'pending'
-}
-
+export interface TableRow { id: number; name: string; email: string; role: string; department: string; salary: number; startDate: string; status: 'active' | 'inactive' | 'pending' }
 export type SortDir = 'asc' | 'desc' | null
 export type ColumnKey = keyof TableRow
-
-export interface SortConfig {
-  column: ColumnKey
-  direction: SortDir
-}
-
-export interface FilterConfig {
-  column: ColumnKey
-  value: string
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
+export interface SortConfig { column: ColumnKey; direction: SortDir }
+export interface FilterConfig { column: ColumnKey; value: string }
 export const PAGE_SIZE = 20
-
-export const COLUMNS: { key: ColumnKey; label: string; resizable: boolean; width: number }[] = [
-  { key: 'id', label: 'ID', resizable: false, width: 60 },
-  { key: 'name', label: 'Name', resizable: true, width: 160 },
-  { key: 'email', label: 'Email', resizable: true, width: 220 },
-  { key: 'role', label: 'Role', resizable: true, width: 120 },
-  { key: 'department', label: 'Department', resizable: true, width: 130 },
-  { key: 'salary', label: 'Salary', resizable: true, width: 100 },
-  { key: 'status', label: 'Status', resizable: false, width: 90 },
+export const COLUMNS: { key: ColumnKey; label: string; width: number }[] = [
+  { key: 'id', label: 'ID', width: 60 }, { key: 'name', label: 'Name', width: 160 },
+  { key: 'email', label: 'Email', width: 220 }, { key: 'role', label: 'Role', width: 120 },
+  { key: 'department', label: 'Department', width: 130 }, { key: 'salary', label: 'Salary', width: 100 },
+  { key: 'status', label: 'Status', width: 90 },
 ]
 
-// Generate 1000 rows
-const DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Sales', 'HR', 'Finance', 'Product', 'Legal']
+const DEPTS = ['Engineering', 'Design', 'Marketing', 'Sales', 'HR', 'Finance', 'Product', 'Legal']
 const ROLES = ['Developer', 'Designer', 'Manager', 'Lead', 'VP', 'Analyst', 'Coordinator', 'Director']
-const FIRST_NAMES = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
-const LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Wilson', 'Moore']
-const STATUSES: ('active' | 'inactive' | 'pending')[] = ['active', 'inactive', 'pending']
-
-function generateRows(count: number): TableRow[] {
-  return Array.from({ length: count }, (_, i) => ({
-    id: i + 1,
-    name: `${FIRST_NAMES[i % FIRST_NAMES.length]} ${LAST_NAMES[Math.floor(i / FIRST_NAMES.length) % LAST_NAMES.length]}`,
-    email: `user${i + 1}@example.com`,
-    role: ROLES[i % ROLES.length],
-    department: DEPARTMENTS[i % DEPARTMENTS.length],
-    salary: 50000 + Math.floor(Math.random() * 100000),
-    startDate: `202${Math.floor(Math.random() * 4)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
-    status: STATUSES[i % STATUSES.length],
-  }))
-}
-
-const ALL_ROWS = generateRows(1000)
-
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
+const FIRST = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
+const LAST = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Wilson', 'Moore']
+const STS: ('active' | 'inactive' | 'pending')[] = ['active', 'inactive', 'pending']
+const ALL_ROWS: TableRow[] = Array.from({ length: 1000 }, (_, i) => ({
+  id: i + 1, name: FIRST[i % FIRST.length] + ' ' + LAST[Math.floor(i / FIRST.length) % LAST.length],
+  email: 'user' + (i + 1) + '@example.com', role: ROLES[i % ROLES.length], department: DEPTS[i % DEPTS.length],
+  salary: 50000 + Math.floor(Math.random() * 100000),
+  startDate: '202' + Math.floor(Math.random() * 4) + '-' + String(Math.floor(Math.random() * 12) + 1).padStart(2, '0') + '-' + String(Math.floor(Math.random() * 28) + 1).padStart(2, '0'),
+  status: STS[i % STS.length],
+}))
 
 export const SetSort = engine.event<SortConfig>('SetSort')
 export const SetFilter = engine.event<FilterConfig>('SetFilter')
 export const ClearFilters = engine.event<void>('ClearFilters')
 export const SetPage = engine.event<number>('SetPage')
-export const ToggleRowExpand = engine.event<number>('ToggleRowExpand')
-export const ResizeColumn = engine.event<{ column: ColumnKey; width: number }>('ResizeColumn')
-export const DataLoaded = engine.event<TableRow[]>('DataLoaded')
-export const LoadPage = engine.event<number>('LoadPage')
+export const SortChanged = engine.event<SortConfig | null>('SortChanged')
+export const FiltersChanged = engine.event<Record<string, string>>('FiltersChanged')
+export const PageChanged = engine.event<number>('PageChanged')
+export const DataChanged = engine.event<{ rows: TableRow[]; total: number }>('DataChanged')
 
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
+let sort: SortConfig | null = null, filters: Record<string, string> = {}, currentPage = 0
 
-export const sort = engine.signal<SortConfig | null>(
-  SetSort,
-  null,
-  (_prev, config) => config.direction ? config : null,
-)
-
-export const filters = engine.signal<Record<string, string>>(
-  SetFilter,
-  {},
-  (prev, { column, value }) => value ? { ...prev, [column]: value } : (() => { const n = { ...prev }; delete n[column]; return n })(),
-)
-engine.signalUpdate(filters, ClearFilters, () => ({}))
-
-export const currentPage = engine.signal<number>(SetPage, 0, (_prev, page) => page)
-// Reset page on sort/filter change
-engine.signalUpdate(currentPage, SetSort, () => 0)
-engine.signalUpdate(currentPage, SetFilter, () => 0)
-engine.signalUpdate(currentPage, ClearFilters, () => 0)
-
-export const expandedRows = engine.signal<Set<number>>(
-  ToggleRowExpand,
-  new Set(),
-  (prev, id) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  },
-)
-
-export const columnWidths = engine.signal<Record<string, number>>(
-  ResizeColumn,
-  Object.fromEntries(COLUMNS.map((c) => [c.key, c.width])),
-  (prev, { column, width }) => ({ ...prev, [column]: Math.max(50, width) }),
-)
-
-export const isLoading = engine.signal<boolean>(LoadPage, false, () => true)
-engine.signalUpdate(isLoading, DataLoaded, () => false)
-
-// ---------------------------------------------------------------------------
-// Async: simulated page load
-// ---------------------------------------------------------------------------
-
-engine.async(LoadPage, {
-  done: DataLoaded,
-  strategy: 'latest',
-  do: async (page: number, { signal }) => {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 200 + Math.random() * 300)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
-    return ALL_ROWS
-  },
-})
-
-// ---------------------------------------------------------------------------
-// Derived: filtered + sorted + paginated data
-// ---------------------------------------------------------------------------
-
-export function getProcessedData(): { rows: TableRow[]; total: number } {
+function recompute() {
   let data = [...ALL_ROWS]
-
-  // Apply filters
-  const f = filters.value
-  for (const [col, val] of Object.entries(f)) {
-    const lower = val.toLowerCase()
-    data = data.filter((row) => {
-      const cellVal = String(row[col as ColumnKey]).toLowerCase()
-      return cellVal.includes(lower)
-    })
+  for (const [col, val] of Object.entries(filters)) { const l = val.toLowerCase(); data = data.filter((r) => String(r[col as ColumnKey]).toLowerCase().includes(l)) }
+  if (sort && sort.direction) {
+    const s = sort
+    data.sort((a, b) => { const av = a[s.column], bv = b[s.column]; let cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv)); return s.direction === 'desc' ? -cmp : cmp })
   }
-
-  // Apply sort
-  const s = sort.value
-  if (s && s.direction) {
-    data.sort((a, b) => {
-      const aVal = a[s.column]
-      const bVal = b[s.column]
-      let cmp = 0
-      if (typeof aVal === 'number' && typeof bVal === 'number') cmp = aVal - bVal
-      else cmp = String(aVal).localeCompare(String(bVal))
-      return s.direction === 'desc' ? -cmp : cmp
-    })
-  }
-
-  const total = data.length
-  const page = currentPage.value
-  const start = page * PAGE_SIZE
-  const rows = data.slice(start, start + PAGE_SIZE)
-
-  return { rows, total }
+  engine.emit(DataChanged, { rows: data.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE), total: data.length })
 }
 
-// Trigger initial load
-engine.pipe(SetPage, LoadPage, () => currentPage.value)
-engine.pipe(SetSort, LoadPage, () => 0)
-engine.pipe(SetFilter, LoadPage, () => 0)
-
-// Start frame loop
-engine.startFrameLoop()
+engine.on(SetSort, (cfg) => { sort = cfg.direction ? cfg : null; currentPage = 0; engine.emit(SortChanged, sort); engine.emit(PageChanged, 0); recompute() })
+engine.on(SetFilter, ({ column, value }) => { if (value) filters = { ...filters, [column]: value }; else { const f = { ...filters }; delete f[column]; filters = f }; currentPage = 0; engine.emit(FiltersChanged, filters); engine.emit(PageChanged, 0); recompute() })
+engine.on(ClearFilters, () => { filters = {}; currentPage = 0; engine.emit(FiltersChanged, {}); engine.emit(PageChanged, 0); recompute() })
+engine.on(SetPage, (page) => { currentPage = page; engine.emit(PageChanged, page); recompute() })
+setTimeout(() => recompute(), 0)

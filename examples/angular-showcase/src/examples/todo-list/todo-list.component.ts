@@ -7,10 +7,10 @@ import {
   TodoRemoved,
   TodoToggled,
   FilterChanged,
-  todoList,
-  activeFilter,
-  validationError,
-  currentText,
+  TodosChanged,
+  ActiveFilterChanged,
+  ValidationChanged,
+  InputTextChanged,
   type Todo,
   type Filter,
   type ValidationResult,
@@ -24,7 +24,7 @@ import {
     <div class="container">
       <div class="header">
         <h1 class="title">Pulse Todos</h1>
-        <p class="subtitle">All state managed through Pulse events and signals</p>
+        <p class="subtitle">All state managed through Pulse events</p>
       </div>
 
       <div class="input-row">
@@ -221,10 +221,10 @@ import {
   `],
 })
 export class TodoListComponent implements OnInit, OnDestroy {
-  todos: WritableSignal<Todo[]>
-  filter: WritableSignal<Filter>
-  validation: WritableSignal<ValidationResult>
-  inputText: WritableSignal<string>
+  todos = this.pulse.use(TodosChanged, [] as Todo[])
+  filter = this.pulse.use(ActiveFilterChanged, 'all' as Filter)
+  validation = this.pulse.use(ValidationChanged, { valid: false, error: null } as ValidationResult)
+  inputText = this.pulse.use(InputTextChanged, '')
 
   filters: Filter[] = ['all', 'active', 'completed']
 
@@ -240,12 +240,7 @@ export class TodoListComponent implements OnInit, OnDestroy {
     return this.todos().filter((t) => !t.completed).length
   })
 
-  constructor(private pulse: PulseService) {
-    this.todos = pulse.signal(todoList)
-    this.filter = pulse.signal(activeFilter)
-    this.validation = pulse.signal(validationError)
-    this.inputText = pulse.signal(currentText)
-  }
+  constructor(private pulse: PulseService) {}
 
   ngOnInit(): void {
     ;(window as any).__pulseEngine = engine

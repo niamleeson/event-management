@@ -1,274 +1,330 @@
-import { For, Show, onMount, onCleanup } from 'solid-js'
-import { useSignal, useEmit, useSpring } from '@pulse/solid'
-import type { Signal, SpringValue } from '@pulse/core'
-import { engine } from './engine'
+import { onMount } from 'solid-js'
+import { usePulse, useEmit } from '@pulse/solid'
+import {
+  ItemsChanged,
+  DragStateChanged,
+  EnteringIdsChanged,
+  ExitingIdsChanged,
+  DragStart,
+  DragMove,
+  DragEnd,
+  DragOver,
+  ShuffleAll,
+  AddItem,
+  RemoveItem,
+  type GridItem,
+  type DragState,
+} from './engine'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-interface GridItem {
-  id: number
-  label: string
-  color: string
-}
-
-/* ------------------------------------------------------------------ */
-/*  Constants                                                         */
-/* ------------------------------------------------------------------ */
-
-const COLS = 4
-const CELL_SIZE = 140
+const COLUMNS = 4
+const ITEM_SIZE = 120
 const GAP = 12
 
-function getPosition(index: number): { x: number; y: number } {
-  return {
-    x: (index % COLS) * (CELL_SIZE + GAP),
-    y: Math.floor(index / COLS) * (CELL_SIZE + GAP),
-  }
-}
+// ---------------------------------------------------------------------------
+// GridCard
+// ---------------------------------------------------------------------------
 
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
-
-const DragItemStart = engine.event<number>('DragItemStart')
-const DragItemMove = engine.event<{ id: number; x: number; y: number }>('DragItemMove')
-const DragItemEnd = engine.event<number>('DragItemEnd')
-const ShuffleItems = engine.event('ShuffleItems')
-const AddItem = engine.event('AddItem')
-const RemoveItem = engine.event<number>('RemoveItem')
-const Reorder = engine.event<{ fromIdx: number; toIdx: number }>('Reorder')
-
-/* ------------------------------------------------------------------ */
-/*  Data                                                              */
-/* ------------------------------------------------------------------ */
-
-const COLORS = ['#6c5ce7', '#0984e3', '#00b894', '#e17055', '#d63031', '#fdcb6e', '#a29bfe', '#00cec9', '#ff6b6b', '#54a0ff', '#5f27cd', '#01a3a4']
-let nextItemId = 12
-
-const INITIAL_ITEMS: GridItem[] = Array.from({ length: 12 }, (_, i) => ({
-  id: i, label: `Item ${i + 1}`, color: COLORS[i % COLORS.length],
-}))
-
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-const items = engine.signal<GridItem[]>(Reorder, INITIAL_ITEMS, (prev, { fromIdx, toIdx }) => {
-  const next = [...prev]
-  const [item] = next.splice(fromIdx, 1)
-  next.splice(toIdx, 0, item)
-  return next
-})
-
-engine.signalUpdate(items, ShuffleItems, (prev) => {
-  const shuffled = [...prev]
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-  }
-  return shuffled
-})
-
-engine.signalUpdate(items, AddItem, (prev) => {
-  nextItemId++
-  return [...prev, { id: nextItemId, label: `Item ${nextItemId}`, color: COLORS[nextItemId % COLORS.length] }]
-})
-
-engine.signalUpdate(items, RemoveItem, (prev, id) => prev.filter(item => item.id !== id))
-
-const draggingId = engine.signal<number>(DragItemStart, -1, (_prev, id) => id)
-engine.signalUpdate(draggingId, DragItemEnd, () => -1)
-
-const dragPos = engine.signal<{ x: number; y: number }>(DragItemMove, { x: 0, y: 0 }, (_prev, { x, y }) => ({ x, y }))
-
-// Per-item spring positions
-const positionTargets: Map<number, { x: Signal<number>; y: Signal<number> }> = new Map()
-const positionSprings: Map<number, { x: SpringValue; y: SpringValue }> = new Map()
-
-function ensureSpring(id: number, targetX: number, targetY: number) {
-  if (!positionTargets.has(id)) {
-    const xt = engine.signal(Reorder, targetX, () => targetX)
-    const yt = engine.signal(Reorder, targetY, () => targetY)
-    positionTargets.set(id, { x: xt, y: yt })
-    positionSprings.set(id, {
-      x: engine.spring(xt, { stiffness: 200, damping: 22 }),
-      y: engine.spring(yt, { stiffness: 200, damping: 22 }),
-    })
-  }
-}
-
-// Update spring targets when items reorder
-function updatePositions() {
-  const currentItems = items.value
-  currentItems.forEach((item, idx) => {
-    const pos = getPosition(idx)
-    const targets = positionTargets.get(item.id)
-    if (targets) {
-      targets.x._set(pos.x)
-      targets.y._set(pos.y)
-    }
-  })
-}
-
-engine.on(Reorder, updatePositions)
-engine.on(ShuffleItems, () => setTimeout(updatePositions, 10))
-engine.on(AddItem, () => setTimeout(updatePositions, 10))
-engine.on(RemoveItem, () => setTimeout(updatePositions, 10))
-
-// Determine drop target during drag
-engine.on(DragItemMove, ({ id, x, y }) => {
-  const currentItems = items.value
-  const dragIdx = currentItems.findIndex(i => i.id === id)
-  if (dragIdx < 0) return
-
-  const col = Math.round(x / (CELL_SIZE + GAP))
-  const row = Math.round(y / (CELL_SIZE + GAP))
-  const targetIdx = Math.min(currentItems.length - 1, Math.max(0, row * COLS + col))
-
-  if (targetIdx !== dragIdx) {
-    engine.emit(Reorder, { fromIdx: dragIdx, toIdx: targetIdx })
-  }
-})
-
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
-
-function DraggableItem(props: { item: GridItem; index: number }) {
+function GridCard({
+  item,
+  index,
+  isDragging,
+  isOver,
+  isEntering,
+  isExiting,
+}: {
+  item: { id: string; color: string; label: string }
+  index: number
+  isDragging: boolean
+  isOver: boolean
+  isEntering: boolean
+  isExiting: boolean
+}) {
   const emit = useEmit()
-  const isDragging = useSignal(draggingId)
-  const dp = useSignal(dragPos)
 
-  const pos = () => getPosition(props.index)
-  const isActive = () => isDragging() === props.item.id
-
-  // Use springs for position if available
-  const sp = positionSprings.get(props.item.id)
-  const springX = sp ? useSpring(sp.x) : () => pos().x
-  const springY = sp ? useSpring(sp.y) : () => pos().y
-
-  const x = () => isActive() ? dp().x : springX()
-  const y = () => isActive() ? dp().y : springY()
-
-  let startPos = { x: 0, y: 0 }
-  let offsetX = 0
-  let offsetY = 0
-
-  const onPointerDown = (e: PointerEvent) => {
-    const rect = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect()
-    offsetX = e.clientX - rect.left - pos().x
-    offsetY = e.clientY - rect.top - pos().y
-    startPos = { x: e.clientX - rect.left - offsetX, y: e.clientY - rect.top - offsetY }
-
-    emit(DragItemStart, props.item.id)
-    emit(DragItemMove, { id: props.item.id, x: startPos.x, y: startPos.y })
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-
-    const move = (ev: PointerEvent) => {
-      const rx = ev.clientX - rect.left - offsetX
-      const ry = ev.clientY - rect.top - offsetY
-      emit(DragItemMove, { id: props.item.id, x: rx, y: ry })
+  const handleMouseDown = 
+    (e: MouseEvent) => {
+      const rect = e.currentTarget.getBoundingClientRect()
+      emit(DragStart, {
+        index,
+        x: e.clientX,
+        y: e.clientY,
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top,
+      })
     }
-    const up = () => {
-      emit(DragItemEnd, props.item.id)
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+  const handleMouseEnter = () => {
+    emit(DragOver, { index })
   }
 
   return (
     <div
-      onPointerDown={onPointerDown}
+      onMouseDown={handleMouseDown}
+      onMouseEnter={handleMouseEnter}
       style={{
-        position: 'absolute',
-        left: `${x()}px`,
-        top: `${y()}px`,
-        width: `${CELL_SIZE}px`,
-        height: `${CELL_SIZE}px`,
-        background: `linear-gradient(135deg, ${props.item.color}cc, ${props.item.color}66)`,
-        'border-radius': '16px',
+        width: ITEM_SIZE,
+        height: ITEM_SIZE,
+        'border-radius': 16,
+        background: `linear-gradient(135deg, ${item.color}, ${item.color}cc)`,
         display: 'flex',
-        'flex-direction': 'column',
         'align-items': 'center',
         'justify-content': 'center',
-        gap: '8px',
-        cursor: isActive() ? 'grabbing' : 'grab',
-        'z-index': isActive() ? '100' : '1',
-        'box-shadow': isActive()
-          ? `0 12px 40px ${props.item.color}44`
-          : `0 4px 12px rgba(0,0,0,0.3)`,
-        transform: isActive() ? 'scale(1.05)' : 'scale(1)',
-        opacity: isActive() ? '0.9' : '1',
-        transition: isActive() ? 'none' : 'box-shadow 0.2s, transform 0.2s',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        opacity: isDragging ? 0.3 : isExiting ? 0 : 1,
+        transform: isOver && !isDragging
+          ? 'scale(0.92)'
+          : isEntering
+            ? 'scale(1)'
+            : isExiting
+              ? 'scale(0.5)'
+              : 'scale(1)',
+        transition: isDragging
+          ? 'none'
+          : 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease',
+        'box-shadow': isOver && !isDragging
+          ? `0 0 0 3px ${item.color}60, 0 4px 16px rgba(0,0,0,0.2)`
+          : '0 4px 12px rgba(0,0,0,0.15)',
+        position: 'relative',
         'user-select': 'none',
-        border: `1px solid ${props.item.color}88`,
+        animation: isEntering ? 'pop-in 0.4s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
       }}
     >
-      <div style={{ 'font-size': '28px', 'font-weight': '700', color: '#fff' }}>
-        {props.item.label.split(' ')[1]}
-      </div>
-      <div style={{ 'font-size': '11px', color: 'rgba(255,255,255,0.7)', 'text-transform': 'uppercase', 'letter-spacing': '1px' }}>
-        {props.item.label}
-      </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); emit(RemoveItem, props.item.id) }}
+      <span
         style={{
-          position: 'absolute', top: '6px', right: '6px', background: 'rgba(0,0,0,0.3)',
-          border: 'none', color: '#fff', width: '20px', height: '20px', 'border-radius': '50%',
-          cursor: 'pointer', 'font-size': '10px', display: 'flex', 'align-items': 'center', 'justify-content': 'center',
+          'font-size': 28,
+          'font-weight': 800,
+          color: 'rgba(255,255,255,0.9)',
+          'text-shadow': '0 2px 4px rgba(0,0,0,0.2)',
         }}
-      >\u2715</button>
+      >
+        {item.label}
+      </span>
+
+      {/* Remove button on hover (using CSS :hover via wrapper) */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          emit(RemoveItem, index)
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          width: 22,
+          height: 22,
+          'border-radius': '50%',
+          border: 'none',
+          background: 'rgba(0,0,0,0.3)',
+          color: 'rgba(255,255,255,0.8)',
+          'font-size': 12,
+          cursor: 'pointer',
+          display: 'flex',
+          'align-items': 'center',
+          'justify-content': 'center',
+          opacity: 0,
+          transition: 'opacity 0.2s',
+        }}
+        className="remove-btn"
+      >
+        \u2715
+      </button>
     </div>
   )
 }
 
-export default function App() {
-  const emit = useEmit()
-  const allItems = useSignal(items)
+// ---------------------------------------------------------------------------
+// DragGhost
+// ---------------------------------------------------------------------------
 
-  // Initialize springs
-  onMount(() => {
-    allItems().forEach((item, idx) => {
-      const pos = getPosition(idx)
-      ensureSpring(item.id, pos.x, pos.y)
-    })
-  })
+function DragGhost() {
+  const ds = usePulse(DragStateChanged, { active: false, dragIndex: -1, overIndex: -1, startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0 } as DragState)
+  const itemList = usePulse(ItemsChanged, [] as GridItem[])
 
-  const gridWidth = () => COLS * (CELL_SIZE + GAP) - GAP
-  const gridHeight = () => Math.ceil(allItems().length / COLS) * (CELL_SIZE + GAP) - GAP
+  if (!ds().active || ds().dragIndex < 0 || ds().dragIndex >= itemList().length) return null
+
+  const item = itemList()[ds().dragIndex]
 
   return (
-    <div style={{ display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      <h1 style={{ 'font-size': '28px', 'font-weight': '300', 'letter-spacing': '2px', 'margin-bottom': '24px' }}>
+    <div
+      style={{
+        position: 'fixed',
+        left: ds.currentX - ds().offsetX,
+        top: ds.currentY - ds().offsetY,
+        width: ITEM_SIZE,
+        height: ITEM_SIZE,
+        'border-radius': 16,
+        background: `linear-gradient(135deg, ${item.color}, ${item.color}cc)`,
+        display: 'flex',
+        'align-items': 'center',
+        'justify-content': 'center',
+        cursor: 'grabbing',
+        'z-index': 9999,
+        'pointer-events': 'none',
+        'box-shadow': `0 16px 40px rgba(0,0,0,0.35), 0 0 0 2px ${item.color}`,
+        transform: 'scale(1.08) rotate(2deg)',
+        transition: 'transform 0.15s ease',
+      }}
+    >
+      <span
+        style={{
+          'font-size': 28,
+          'font-weight': 800,
+          color: 'rgba(255,255,255,0.9)',
+          'text-shadow': '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+      >
+        {item.label}
+      </span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+export default function App() {
+  const emit = useEmit()
+  const itemList = usePulse(ItemsChanged, [] as GridItem[])
+  const ds = usePulse(DragStateChanged, { active: false, dragIndex: -1, overIndex: -1, startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0 } as DragState)
+  const entering = usePulse(EnteringIdsChanged, new Set<string>())
+  const exiting = usePulse(ExitingIdsChanged, new Set<string>())
+
+  // Global mouse move/up handlers for drag
+  onMount(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (ds().active) {
+        emit(DragMove, { x: e.clientX, y: e.clientY })
+      }
+    }
+    const handleUp = () => {
+      if (ds().active) {
+        emit(DragEnd, undefined)
+      }
+    }
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  })
+
+  return (
+    <div
+      style={{
+        'min-height': '100vh',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+        'font-family':
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        padding: 40,
+        display: 'flex',
+        'flex-direction': 'column',
+        'align-items': 'center',
+      }}
+    >
+      <h1
+        style={{
+          'font-size': 32,
+          'font-weight': 800,
+          color: '#f1f5f9',
+          'margin-bottom': 8,
+        }}
+      >
         Sortable Grid
       </h1>
-
-      <div style={{ display: 'flex', gap: '12px', 'margin-bottom': '32px' }}>
-        <button
-          onClick={() => emit(ShuffleItems, undefined)}
-          style={{ padding: '10px 24px', 'border-radius': '8px', border: 'none', background: '#6c5ce7', color: '#fff', cursor: 'pointer', 'font-size': '14px', 'font-weight': '500' }}
-        >Shuffle</button>
-        <button
-          onClick={() => { emit(AddItem, undefined); const newItem = items.value[items.value.length - 1]; if (newItem) { const pos = getPosition(items.value.length - 1); ensureSpring(newItem.id, pos.x, pos.y) } }}
-          style={{ padding: '10px 24px', 'border-radius': '8px', border: 'none', background: '#00b894', color: '#fff', cursor: 'pointer', 'font-size': '14px', 'font-weight': '500' }}
-        >+ Add Item</button>
-      </div>
-
-      <div style={{
-        position: 'relative', width: `${gridWidth()}px`, height: `${gridHeight() + 20}px`,
-      }}>
-        <For each={allItems()}>
-          {(item, i) => <DraggableItem item={item} index={i()} />}
-        </For>
-      </div>
-
-      <p style={{ color: 'rgba(255,255,255,0.3)', 'font-size': '13px', 'margin-top': '32px' }}>
-        Drag items to reorder &middot; Spring-animated positions &middot; {allItems().length} items
+      <p style={{ color: '#64748b', 'font-size': 14, 'margin-bottom': 32 }}>
+        Drag items to reorder. Items animate to new positions.
       </p>
+
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: 10, 'margin-bottom': 32 }}>
+        <button
+          onClick={() => emit(ShuffleAll, undefined)}
+          style={{
+            padding: '10px 24px',
+            'border-radius': 10,
+            border: '1px solid #6366f140',
+            background: '#6366f120',
+            color: '#818cf8',
+            'font-size': 14,
+            'font-weight': 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#6366f135'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#6366f120'
+          }}
+        >
+          Shuffle All
+        </button>
+        <button
+          onClick={() => emit(AddItem, undefined)}
+          style={{
+            padding: '10px 24px',
+            'border-radius': 10,
+            border: '1px solid #22c55e40',
+            background: '#22c55e20',
+            color: '#4ade80',
+            'font-size': 14,
+            'font-weight': 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#22c55e35'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#22c55e20'
+          }}
+        >
+          Add Item
+        </button>
+      </div>
+
+      {/* Grid */}
+      <div
+        style={{
+          display: 'grid',
+          'grid-template-columns': `repeat(${COLUMNS}, ${ITEM_SIZE}px)`,
+          gap: GAP,
+        }}
+      >
+        {itemList().map((item, index) => (
+          <GridCard
+            item={item}
+            index={index}
+            isDragging={ds().active && ds().dragIndex === index}
+            isOver={ds().active && ds().overIndex === index && ds().dragIndex !== index}
+            isEntering={entering().has(item.id)}
+            isExiting={exiting().has(item.id)}
+          />
+        ))}
+      </div>
+
+      {/* Drag ghost */}
+      <DragGhost />
+
+      {/* Item count */}
+      <p style={{ color: '#475569', 'font-size': 13, 'margin-top': 24 }}>
+        {itemList().length} items
+      </p>
+
+      <style>{`
+        @keyframes pop-in {
+          from { transform: scale(0); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .remove-btn { opacity: 0 !important; }
+        div:hover > .remove-btn { opacity: 1 !important; }
+      `}</style>
     </div>
   )
 }
