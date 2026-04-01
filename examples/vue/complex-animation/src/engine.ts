@@ -1,3 +1,11 @@
+// DAG
+// PageLoaded ──→ CardEnter[i] (staggered)
+// CardEntered[i] (join all) ──→ AllCardsEntered
+// AllCardsEntered ──→ WelcomeFadeStart
+//                 └──→ AllEnteredChanged
+// HoverCard[i] ──→ HoverSignalChanged
+// UnhoverCard[i] ──→ HoverSignalChanged
+
 import { createEngine, type EventType } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -178,8 +186,14 @@ const ScaleVal = engine.event<number>('ScaleVal')
   // Hover shadow: spring-driven for smooth tracking
   let hoverSignal = 0
 const HoverSignalChanged = engine.event('HoverSignalChanged')
-engine.on(HoverCard[i], (v: any) => { hoverSignal = (() => 20)(hoverSignal, v); engine.emit(HoverSignalChanged, hoverSignal) })
-  engine.on(UnhoverCard[i], (v: any) => { hoverSignal = (() => 0)(hoverSignal, v); engine.emit(HoverSignalChanged, hoverSignal) })
+engine.on(HoverCard[i], [HoverSignalChanged], (_payload, setSignal) => {
+  hoverSignal = 20
+  setSignal(hoverSignal)
+})
+  engine.on(UnhoverCard[i], [HoverSignalChanged], (_payload, setSignal) => {
+  hoverSignal = 0
+  setSignal(hoverSignal)
+})
   let shadow = { value: 0, velocity: 0, settled: true }
 const ShadowVal = engine.event<number>('ShadowVal')
 {
@@ -239,7 +253,9 @@ const ShadowVal = engine.event<number>('ShadowVal')
 }
 
 // After all cards enter, trigger welcome fade
-engine.on(AllCardsEntered, (v: any) => { engine.emit(WelcomeFadeStart, (() => undefined)(v)) })
+engine.on(AllCardsEntered, [WelcomeFadeStart], (_payload, setFade) => {
+  setFade(undefined)
+})
 
 // ---------------------------------------------------------------------------
 // Welcome message tween
@@ -314,6 +330,12 @@ export const WelcomeTranslateYVal = engine.event<number>('WelcomeTranslateYVal')
 
 export let allEntered = false
 export const AllEnteredChanged = engine.event('AllEnteredChanged')
-engine.on(AllCardsEntered, (v: any) => { allEntered = (() => true)(allEntered, v); engine.emit(AllEnteredChanged, allEntered) })
+engine.on(AllCardsEntered, [AllEnteredChanged], (_payload, setEntered) => {
+  allEntered = true
+  setEntered(allEntered)
+})
 
 // Start the frame loop for animations
+
+export function startLoop() {}
+export function stopLoop() {}

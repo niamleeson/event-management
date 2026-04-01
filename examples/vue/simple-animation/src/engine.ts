@@ -1,3 +1,9 @@
+// DAG
+// Increment ──→ CountChanged
+//           └──→ AnimValuesChanged (via anim loop)
+// Decrement ──→ CountChanged
+//           └──→ AnimValuesChanged (via anim loop)
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -75,9 +81,9 @@ function startAnimLoop() {
   animFrame = requestAnimationFrame(tick)
 }
 
-engine.on(Increment, () => {
+engine.on(Increment, [CountChanged], (_payload, setCount) => {
   count += 1
-  engine.emit(CountChanged, count)
+  setCount(count)
   countAnimFrom = animatedCount
   countAnimTarget = count
   countAnimElapsed = 0
@@ -91,9 +97,9 @@ engine.on(Increment, () => {
   startAnimLoop()
 })
 
-engine.on(Decrement, () => {
+engine.on(Decrement, [CountChanged], (_payload, setCount) => {
   count -= 1
-  engine.emit(CountChanged, count)
+  setCount(count)
   countAnimFrom = animatedCount
   countAnimTarget = count
   countAnimElapsed = 0
@@ -112,3 +118,6 @@ export function getAnimValues() { return { animatedCount, colorIntensity, bounce
 
 
 export { count, animatedCount, colorIntensity, bounceScale }
+
+export function startLoop() {}
+export function stopLoop() {}

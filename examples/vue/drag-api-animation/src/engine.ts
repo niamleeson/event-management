@@ -1,3 +1,24 @@
+// DAG
+// CardMoved ──→ SavePending
+//           └──→ CardsChanged
+//           └──→ SaveDone / SaveError (async)
+// SaveDone ──→ FlashSuccess
+//          └──→ CardStatusesChanged
+// SaveError ──→ ShakeError
+//           └──→ CardStatusesChanged
+//           └──→ SaveRetry (delayed)
+// SaveRetry ──→ CardMoved
+// FlashSuccessDone + SaveDone ──→ CardSettled (join)
+// CardSettled ──→ CardStatusesChanged
+// SavePending ──→ CardStatusesChanged
+// DragStart ──→ DragStateChanged
+//           └──→ DragPositionChanged
+// DragEnd ──→ DragStateChanged
+// DragMove ──→ DragPositionChanged
+// UndoRequested ──→ UndoComplete
+//               └──→ CardMoved
+// UndoComplete ──→ CardsChanged
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -111,18 +132,18 @@ let cardStatuses: Record<string, CardStatus> = {}
 // ---------------------------------------------------------------------------
 
 // CardMoved triggers async save
-engine.on(CardMoved, (move) => {
-  engine.emit(SavePending, move.cardId)
+engine.on(CardMoved, [SavePending], (move, setPending) => {
+  setPending(move.cardId)
 })
 
 // SaveDone -> success flash animation
-engine.on(SaveDone, (result) => {
-  engine.emit(FlashSuccess, result.cardId)
+engine.on(SaveDone, [FlashSuccess], (result, setFlash) => {
+  setFlash(result.cardId)
 })
 
 // SaveError -> error shake animation
-engine.on(SaveError, (result) => {
-  engine.emit(ShakeError, result.cardId)
+engine.on(SaveError, [ShakeError], (result, setShake) => {
+  setShake(result.cardId)
 })
 
 // SaveError -> auto-retry after 2s
@@ -162,10 +183,10 @@ engine.on(SaveError, (result: SaveResult) => {
 }
 
 // Retry save: re-emit the move for the card that failed
-engine.on(SaveRetry, (cardId) => {
+engine.on(SaveRetry, [CardMoved], (cardId, setMoved) => {
   const card = cards.find((c) => c.id === cardId)
   if (card) {
-    engine.emit(CardMoved, { cardId, fromColumn: card.column, toColumn: card.column })
+    setMoved({ cardId, fromColumn: card.column, toColumn: card.column })
   }
 })
 
@@ -203,7 +224,7 @@ engine.on(CardMoved, (move: MoveInfo) => {
   undoHistory.set(move.cardId, move)
 })
 
-engine.on(UndoRequested, (cardId: string) => {
+engine.on(UndoRequested, [UndoComplete, CardMoved], (cardId: string, setUndo, setMoved) => {
   const lastMove = undoHistory.get(cardId)
   if (lastMove) {
     const reverseMove: MoveInfo = {
@@ -212,8 +233,8 @@ engine.on(UndoRequested, (cardId: string) => {
       toColumn: lastMove.fromColumn,
     }
     undoHistory.delete(cardId)
-    engine.emit(UndoComplete, reverseMove)
-    engine.emit(CardMoved, reverseMove)
+    setUndo(reverseMove)
+    setMoved(reverseMove)
   }
 })
 
@@ -222,51 +243,51 @@ engine.on(UndoRequested, (cardId: string) => {
 // ---------------------------------------------------------------------------
 
 // Cards state
-engine.on(CardMoved, (move) => {
+engine.on(CardMoved, [CardsChanged], (move, setCards) => {
   cards = cards.map((c) => (c.id === move.cardId ? { ...c, column: move.toColumn } : c))
-  engine.emit(CardsChanged, cards)
+  setCards(cards)
 })
-engine.on(UndoComplete, (move) => {
+engine.on(UndoComplete, [CardsChanged], (move, setCards) => {
   cards = cards.map((c) => (c.id === move.cardId ? { ...c, column: move.toColumn } : c))
-  engine.emit(CardsChanged, cards)
+  setCards(cards)
 })
 
 // Drag state
-engine.on(DragStart, (info) => {
+engine.on(DragStart, [DragStateChanged], (info, setState) => {
   dragState = info
-  engine.emit(DragStateChanged, dragState)
+  setState(dragState)
 })
-engine.on(DragEnd, () => {
+engine.on(DragEnd, [DragStateChanged], (_payload, setState) => {
   dragState = null
-  engine.emit(DragStateChanged, dragState)
+  setState(dragState)
 })
 
 // Drag position
-engine.on(DragMove, (pos) => {
+engine.on(DragMove, [DragPositionChanged], (pos, setPos) => {
   dragPosition = pos
-  engine.emit(DragPositionChanged, dragPosition)
+  setPos(dragPosition)
 })
-engine.on(DragStart, (info) => {
+engine.on(DragStart, [DragPositionChanged], (info, setPos) => {
   dragPosition = { x: info.startX, y: info.startY }
-  engine.emit(DragPositionChanged, dragPosition)
+  setPos(dragPosition)
 })
 
 // Card statuses
-engine.on(SavePending, (cardId) => {
+engine.on(SavePending, [CardStatusesChanged], (cardId, setStatuses) => {
   cardStatuses = { ...cardStatuses, [cardId]: 'saving' as CardStatus }
-  engine.emit(CardStatusesChanged, cardStatuses)
+  setStatuses(cardStatuses)
 })
-engine.on(SaveDone, (result) => {
+engine.on(SaveDone, [CardStatusesChanged], (result, setStatuses) => {
   cardStatuses = { ...cardStatuses, [result.cardId]: 'saved' as CardStatus }
-  engine.emit(CardStatusesChanged, cardStatuses)
+  setStatuses(cardStatuses)
 })
-engine.on(SaveError, (result) => {
+engine.on(SaveError, [CardStatusesChanged], (result, setStatuses) => {
   cardStatuses = { ...cardStatuses, [result.cardId]: 'error' as CardStatus }
-  engine.emit(CardStatusesChanged, cardStatuses)
+  setStatuses(cardStatuses)
 })
-engine.on(CardSettled, (cardId) => {
+engine.on(CardSettled, [CardStatusesChanged], (cardId, setStatuses) => {
   cardStatuses = { ...cardStatuses, [cardId]: 'settled' as CardStatus }
-  engine.emit(CardStatusesChanged, cardStatuses)
+  setStatuses(cardStatuses)
 })
 
 // ---------------------------------------------------------------------------
@@ -277,3 +298,6 @@ export function getCards() { return cards }
 export function getDragState() { return dragState }
 export function getDragPosition() { return dragPosition }
 export function getCardStatuses() { return cardStatuses }
+
+export function startLoop() {}
+export function stopLoop() {}

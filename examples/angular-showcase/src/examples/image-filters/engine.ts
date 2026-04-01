@@ -1,3 +1,17 @@
+// DAG
+// UpdateFilter ──→ FilterValuesChanged
+// ReorderFilters ──→ FilterOrderChanged
+// ToggleSplit ──→ SplitViewChanged
+// ResetAll ──→ FilterValuesChanged
+// PushHistory ──→ CanUndoChanged
+//             └──→ CanRedoChanged
+// Undo ──→ FilterValuesChanged
+//      └──→ CanUndoChanged
+//      └──→ CanRedoChanged
+// Redo ──→ FilterValuesChanged
+//      └──→ CanUndoChanged
+//      └──→ CanRedoChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -36,28 +50,31 @@ let splitView = false
 const undoStack: FilterState[][] = []
 const redoStack: FilterState[][] = []
 
-engine.on(UpdateFilter, ({ id, value }) => { filterValues = { ...filterValues, [id]: value }; engine.emit(FilterValuesChanged, filterValues) })
-engine.on(ReorderFilters, (order) => { filterOrder = order; engine.emit(FilterOrderChanged, order) })
-engine.on(ToggleSplit, () => { splitView = !splitView; engine.emit(SplitViewChanged, splitView) })
-engine.on(ResetAll, () => { filterValues = Object.fromEntries(FILTERS.map((f) => [f.id, f.default])); engine.emit(FilterValuesChanged, filterValues) })
+engine.on(UpdateFilter, [FilterValuesChanged], ({ id, value }, setValues) => { filterValues = { ...filterValues, [id]: value }; setValues(filterValues) })
+engine.on(ReorderFilters, [FilterOrderChanged], (order, setOrder) => { filterOrder = order; setOrder(order) })
+engine.on(ToggleSplit, [SplitViewChanged], (_payload, setSplit) => { splitView = !splitView; setSplit(splitView) })
+engine.on(ResetAll, [FilterValuesChanged], (_payload, setValues) => { filterValues = Object.fromEntries(FILTERS.map((f) => [f.id, f.default])); setValues(filterValues) })
 
-engine.on(PushHistory, () => {
+engine.on(PushHistory, [CanUndoChanged, CanRedoChanged], (_payload, setCanUndo, setCanRedo) => {
   undoStack.push(Object.entries(filterValues).map(([id, value]) => ({ id, value }))); redoStack.length = 0
-  engine.emit(CanUndoChanged, true); engine.emit(CanRedoChanged, false)
+  setCanUndo(true); setCanRedo(false)
 })
 
-engine.on(Undo, () => {
+engine.on(Undo, [FilterValuesChanged, CanUndoChanged, CanRedoChanged], (_payload, setValues, setCanUndo, setCanRedo) => {
   if (undoStack.length === 0) return
   redoStack.push(Object.entries(filterValues).map(([id, value]) => ({ id, value })))
   const snapshot = undoStack.pop()!
   filterValues = Object.fromEntries(snapshot.map((f) => [f.id, f.value]))
-  engine.emit(FilterValuesChanged, filterValues); engine.emit(CanUndoChanged, undoStack.length > 0); engine.emit(CanRedoChanged, true)
+  setValues(filterValues); setCanUndo(undoStack.length > 0); setCanRedo(true)
 })
 
-engine.on(Redo, () => {
+engine.on(Redo, [FilterValuesChanged, CanUndoChanged, CanRedoChanged], (_payload, setValues, setCanUndo, setCanRedo) => {
   if (redoStack.length === 0) return
   undoStack.push(Object.entries(filterValues).map(([id, value]) => ({ id, value })))
   const snapshot = redoStack.pop()!
   filterValues = Object.fromEntries(snapshot.map((f) => [f.id, f.value]))
-  engine.emit(FilterValuesChanged, filterValues); engine.emit(CanUndoChanged, true); engine.emit(CanRedoChanged, redoStack.length > 0)
+  setValues(filterValues); setCanUndo(true); setCanRedo(redoStack.length > 0)
 })
+
+export function startLoop() {}
+export function stopLoop() {}

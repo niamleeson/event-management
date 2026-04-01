@@ -2,6 +2,22 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// NotifyInfo ────┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// NotifySuccess ─┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// NotifyWarning ─┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// NotifyError ───┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// DismissNotification ┬──→ NotificationsChanged
+//                     └──→ NotificationCountChanged
+// DismissAll ──→ DismissNotification (per notification)
+// ---------------------------------------------------------------------------
+
 export type NotificationType = 'info' | 'success' | 'warning' | 'error'
 export interface NotificationData { title: string; message: string }
 export interface Notification { id: string; type: NotificationType; title: string; message: string; timestamp: number; entering: boolean; exiting: boolean }
@@ -27,9 +43,10 @@ function sortByPriority(items: Notification[]): Notification[] {
 
 function emitState() { engine.emit(NotificationsChanged, [...notifications]); engine.emit(NotificationCountChanged, notifications.length) }
 
-function addNotification(type: NotificationType, data: NotificationData) {
+function addNotification(type: NotificationType, data: NotificationData, setNotifs: (v: Notification[]) => void, setCount: (v: number) => void) {
   const notif: Notification = { id: `notif-${++nextId}`, type, title: data.title, message: data.message, timestamp: Date.now(), entering: true, exiting: false }
-  notifications = sortByPriority([...notifications, notif]); emitState()
+  notifications = sortByPriority([...notifications, notif])
+  setNotifs([...notifications]); setCount(notifications.length)
   setTimeout(() => { notifications = notifications.map(n => n.id === notif.id ? { ...n, entering: false } : n); emitState() }, 50)
   const delays: Record<NotificationType, number | null> = { info: 5000, success: 5000, warning: 10000, error: null }
   const delay = delays[type]
@@ -42,9 +59,17 @@ function startExit(id: string) {
   setTimeout(() => { notifications = notifications.filter(n => n.id !== id); emitState() }, 400)
 }
 
-engine.on(NotifyInfo, (d) => addNotification('info', d))
-engine.on(NotifySuccess, (d) => addNotification('success', d))
-engine.on(NotifyWarning, (d) => addNotification('warning', d))
-engine.on(NotifyError, (d) => addNotification('error', d))
-engine.on(DismissNotification, (id) => startExit(id))
+engine.on(NotifyInfo, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('info', d, setNotifs, setCount))
+engine.on(NotifySuccess, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('success', d, setNotifs, setCount))
+engine.on(NotifyWarning, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('warning', d, setNotifs, setCount))
+engine.on(NotifyError, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('error', d, setNotifs, setCount))
+engine.on(DismissNotification, [NotificationsChanged, NotificationCountChanged], (id, setNotifs, setCount) => {
+  if (!notifications.find(n => n.id === id && !n.exiting)) return
+  notifications = notifications.map(n => n.id === id ? { ...n, exiting: true } : n)
+  setNotifs([...notifications]); setCount(notifications.length)
+  setTimeout(() => { notifications = notifications.filter(n => n.id !== id); emitState() }, 400)
+})
 engine.on(DismissAll, () => { for (const n of notifications) if (!n.exiting) startExit(n.id) })
+
+export function startLoop() {}
+export function stopLoop() {}

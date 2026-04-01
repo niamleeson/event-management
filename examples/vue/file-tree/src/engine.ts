@@ -1,3 +1,10 @@
+// DAG
+// ToggleFolder ──→ ExpandedFoldersChanged
+// SelectFile ──→ SelectedFileChanged
+// SearchChanged ──→ SearchQueryChanged
+// KeyNav ──→ SelectFile
+//        └──→ ToggleFolder
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -89,22 +96,22 @@ let expandedFolders = new Set<string>(['root', 'src'])
 let selectedFile = ''
 let searchQuery = ''
 
-engine.on(ToggleFolder, (id) => {
+engine.on(ToggleFolder, [ExpandedFoldersChanged], (id, setExpanded) => {
   const next = new Set(expandedFolders)
   if (next.has(id)) next.delete(id)
   else next.add(id)
   expandedFolders = next
-  engine.emit(ExpandedFoldersChanged, expandedFolders)
+  setExpanded(expandedFolders)
 })
 
-engine.on(SelectFile, (id) => {
+engine.on(SelectFile, [SelectedFileChanged], (id, setSelected) => {
   selectedFile = id
-  engine.emit(SelectedFileChanged, selectedFile)
+  setSelected(selectedFile)
 })
 
-engine.on(SearchChanged, (q) => {
+engine.on(SearchChanged, [SearchQueryChanged], (q, setQuery) => {
   searchQuery = q
-  engine.emit(SearchQueryChanged, searchQuery)
+  setQuery(searchQuery)
 })
 
 /* ------------------------------------------------------------------ */
@@ -174,3 +181,6 @@ export function getSelectedFile() { return selectedFile }
 export function getSearchQuery() { return searchQuery }
 
 export { FILE_TREE, FILE_ICONS, getBreadcrumbs }
+
+export function startLoop() {}
+export function stopLoop() {}

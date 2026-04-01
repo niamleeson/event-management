@@ -1,191 +1,165 @@
+// DAG
+// MetricReceived ──→ CurrentMetricsChanged
+//                └──→ ChartDataChanged
+//                └──→ AlertsChanged (via threshold breach)
+// AlertDismissed ──→ AlertsChanged
+// FeedToggled ──→ FeedRunningChanged
+
 import { createEngine } from '@pulse/core'
-import type { Engine, EventType, Signal, TweenValue } from '@pulse/core'
+
+// ---------------------------------------------------------------------------
+// Engine
+// ---------------------------------------------------------------------------
+
+export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface MetricUpdate {
-  cpu: number
-  memory: number
-  requests: number
-  errors: number
-}
-
-export interface Alert {
-  id: number
-  message: string
-  severity: 'warning' | 'critical'
+export interface Metric {
+  name: string
+  value: number
+  unit: string
   timestamp: number
 }
 
-// ---------------------------------------------------------------------------
-// Engine + Events
-// ---------------------------------------------------------------------------
+export interface Alert {
+  id: string
+  metric: string
+  value: number
+  threshold: number
+  timestamp: number
+  message: string
+}
 
-export const engine: Engine = createEngine()
-
-export const MetricReceived: EventType<MetricUpdate> = engine.event('MetricReceived')
-export const CpuHigh: EventType<number> = engine.event('CpuHigh')
-export const MemoryHigh: EventType<number> = engine.event('MemoryHigh')
-export const ErrorSpike: EventType<number> = engine.event('ErrorSpike')
-export const CriticalAlert: EventType<Alert> = engine.event('CriticalAlert')
-export const DismissAlert: EventType<number> = engine.event('DismissAlert')
-export const ToggleStream: EventType<void> = engine.event('ToggleStream')
-export const AnimateMetric: EventType<void> = engine.event('AnimateMetric')
-
-// ---------------------------------------------------------------------------
-// Threshold detection pipes
-// ---------------------------------------------------------------------------
-
-engine.pipe(MetricReceived, CpuHigh, (m: MetricUpdate) => {
-  return m.cpu > 85 ? m.cpu : null!
-})
-
-engine.pipe(MetricReceived, MemoryHigh, (m: MetricUpdate) => {
-  return m.memory > 90 ? m.memory : null!
-})
-
-engine.pipe(MetricReceived, ErrorSpike, (m: MetricUpdate) => {
-  return m.errors > 50 ? m.errors : null!
-})
+export interface ChartDataPoint {
+  timestamp: number
+  value: number
+}
 
 // ---------------------------------------------------------------------------
-// Join: when CPU high AND memory high at the same time -> critical alert
+// Constants
 // ---------------------------------------------------------------------------
 
-let alertId = 0
+export const METRICS = [
+  { name: 'CPU Usage', unit: '%', threshold: 80, baseValue: 45 },
+  { name: 'Memory', unit: '%', threshold: 85, baseValue: 62 },
+  { name: 'Latency', unit: 'ms', threshold: 200, baseValue: 120 },
+  { name: 'Requests/s', unit: 'req/s', threshold: 1000, baseValue: 650 },
+]
 
-engine.join([CpuHigh, MemoryHigh], CriticalAlert, {
-  do: (cpu: number, memory: number) => ({
-    id: ++alertId,
-    message: `Critical: CPU at ${cpu.toFixed(0)}% AND Memory at ${memory.toFixed(0)}%`,
-    severity: 'critical' as const,
-    timestamp: Date.now(),
-  }),
-})
+const ROLLING_WINDOW = 30
 
 // ---------------------------------------------------------------------------
-// Metric animation on each update
+// Event declarations
 // ---------------------------------------------------------------------------
 
-engine.pipe(MetricReceived, AnimateMetric, () => undefined)
+export const MetricReceived = engine.event<Metric>('MetricReceived')
+export const AlertDismissed = engine.event<string>('AlertDismissed')
+export const FeedToggled = engine.event<boolean>('FeedToggled')
+
+// State change events
+export const CurrentMetricsChanged = engine.event<Record<string, Metric>>('CurrentMetricsChanged')
+export const AlertsChanged = engine.event<Alert[]>('AlertsChanged')
+export const ChartDataChanged = engine.event<Record<string, ChartDataPoint[]>>('ChartDataChanged')
+export const FeedRunningChanged = engine.event<boolean>('FeedRunningChanged')
 
 // ---------------------------------------------------------------------------
-// Tweens for animated metric bars
+// State
 // ---------------------------------------------------------------------------
 
-export const cpuTween: TweenValue = engine.tween({
-  start: AnimateMetric,
-  from: () => cpuTween.value,
-  to: () => cpuSig.value,
-  duration: 400,
-  easing: 'easeOut',
-})
-
-export const memoryTween: TweenValue = engine.tween({
-  start: AnimateMetric,
-  from: () => memoryTween.value,
-  to: () => memorySig.value,
-  duration: 400,
-  easing: 'easeOut',
-})
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const cpuSig: Signal<number> = engine.signal<number>(
-  MetricReceived,
-  0,
-  (_prev, m) => m.cpu,
+let currentMetrics: Record<string, Metric> = {}
+let alerts: Alert[] = []
+let chartData: Record<string, ChartDataPoint[]> = Object.fromEntries(
+  METRICS.map((m) => [m.name, []])
 )
+let feedRunning = true
+let breachCount = 0
+let lastBreachTime = 0
+let lastChartUpdate = 0
 
-export const memorySig: Signal<number> = engine.signal<number>(
-  MetricReceived,
-  0,
-  (_prev, m) => m.memory,
-)
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
 
-export const requestsSig: Signal<number> = engine.signal<number>(
-  MetricReceived,
-  0,
-  (_prev, m) => m.requests,
-)
+engine.on(MetricReceived, [CurrentMetricsChanged, ChartDataChanged, AlertsChanged], (metric, setMetrics, setChart, setAlerts) => {
+  // Update current metrics
+  currentMetrics = { ...currentMetrics, [metric.name]: metric }
+  setMetrics({ ...currentMetrics })
 
-export const errorsSig: Signal<number> = engine.signal<number>(
-  MetricReceived,
-  0,
-  (_prev, m) => m.errors,
-)
-
-export const alertsSig: Signal<Alert[]> = engine.signal<Alert[]>(
-  CriticalAlert,
-  [],
-  (prev, alert) => [alert, ...prev].slice(0, 10),
-)
-engine.signalUpdate(alertsSig, DismissAlert, (prev, id) =>
-  prev.filter((a) => a.id !== id),
-)
-
-// Also generate single-metric alerts
-engine.on(CpuHigh, (cpu) => {
-  const alert: Alert = {
-    id: ++alertId,
-    message: `Warning: CPU at ${cpu.toFixed(0)}%`,
-    severity: 'warning',
-    timestamp: Date.now(),
+  // Throttled chart update (max once per second)
+  const now = Date.now()
+  if (now - lastChartUpdate >= 1000) {
+    lastChartUpdate = now
+    const existing = chartData[metric.name] ?? []
+    const next = [...existing, { timestamp: metric.timestamp, value: metric.value }].slice(-ROLLING_WINDOW)
+    chartData = { ...chartData, [metric.name]: next }
+    setChart({ ...chartData })
   }
-  engine.emit(CriticalAlert, alert)
-})
 
-engine.on(ErrorSpike, (errors) => {
-  const alert: Alert = {
-    id: ++alertId,
-    message: `Warning: Error rate spiked to ${errors}/s`,
-    severity: 'warning',
-    timestamp: Date.now(),
-  }
-  engine.emit(CriticalAlert, alert)
-})
-
-export const metricHistorySig: Signal<MetricUpdate[]> = engine.signal<MetricUpdate[]>(
-  MetricReceived,
-  [],
-  (prev, m) => [...prev.slice(-29), m],
-)
-
-export const streamActiveSig: Signal<boolean> = engine.signal<boolean>(
-  ToggleStream,
-  false,
-  (prev) => !prev,
-)
-
-// ---------------------------------------------------------------------------
-// Mock WebSocket stream
-// ---------------------------------------------------------------------------
-
-let streamInterval: ReturnType<typeof setInterval> | null = null
-
-export function startMockStream(): void {
-  if (streamInterval) return
-  streamInterval = setInterval(() => {
-    const metric: MetricUpdate = {
-      cpu: 40 + Math.random() * 55,
-      memory: 50 + Math.random() * 45,
-      requests: Math.floor(100 + Math.random() * 400),
-      errors: Math.floor(Math.random() * 80),
+  // Threshold breach detection
+  const config = METRICS.find((m) => m.name === metric.name)
+  if (config && metric.value > config.threshold) {
+    breachCount++
+    if (breachCount >= 3 && now - lastBreachTime > 10000) {
+      lastBreachTime = now
+      breachCount = 0
+      const alert: Alert = {
+        id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        metric: metric.name,
+        value: metric.value,
+        threshold: config.threshold,
+        timestamp: Date.now(),
+        message: `${metric.name} exceeded threshold ${config.threshold}${config.unit} (current: ${metric.value.toFixed(1)}${config.unit})`,
+      }
+      alerts = [alert, ...alerts].slice(0, 20)
+      setAlerts([...alerts])
     }
-    engine.emit(MetricReceived, metric)
+  }
+})
+
+engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
+  alerts = alerts.filter((a) => a.id !== id)
+  setAlerts([...alerts])
+})
+
+engine.on(FeedToggled, [FeedRunningChanged], (running, setRunning) => {
+  feedRunning = running
+  setRunning(running)
+})
+
+// ---------------------------------------------------------------------------
+// Mock WebSocket data feed
+// ---------------------------------------------------------------------------
+
+let feedInterval: ReturnType<typeof setInterval> | null = null
+
+export function startFeed() {
+  if (feedInterval) return
+  feedInterval = setInterval(() => {
+    if (!feedRunning) return
+    for (const config of METRICS) {
+      const spike = Math.random() < 0.15 ? config.threshold * 0.4 : 0
+      const noise = (Math.random() - 0.5) * config.baseValue * 0.3
+      const value = Math.max(0, config.baseValue + noise + spike)
+
+      engine.emit(MetricReceived, {
+        name: config.name,
+        value,
+        unit: config.unit,
+        timestamp: Date.now(),
+      })
+    }
   }, 1000)
 }
 
-export function stopMockStream(): void {
-  if (streamInterval) {
-    clearInterval(streamInterval)
-    streamInterval = null
+export function stopFeed() {
+  if (feedInterval) {
+    clearInterval(feedInterval)
+    feedInterval = null
   }
 }
 
-// Start frame loop for tweens
-engine.startFrameLoop()
+export function startLoop() { startFeed() }
+export function stopLoop() { stopFeed() }

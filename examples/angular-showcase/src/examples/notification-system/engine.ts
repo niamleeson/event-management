@@ -1,3 +1,7 @@
+// DAG
+// AddNotification ──→ NotificationsChanged
+// DismissNotification ──→ NotificationsChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -17,10 +21,13 @@ export const NotificationsChanged = engine.event<Notification[]>('NotificationsC
 
 let notifications: Notification[] = []
 
-engine.on(AddNotification, (data) => {
+engine.on(AddNotification, [NotificationsChanged], (data, setNotifications) => {
   const notif: Notification = { ...data, id: `notif-${++nextId}`, timestamp: Date.now() }
-  notifications = [...notifications, notif]; engine.emit(NotificationsChanged, notifications)
+  notifications = [...notifications, notif]; setNotifications(notifications)
   if (data.autoDismiss) setTimeout(() => engine.emit(DismissNotification, notif.id), AUTO_DISMISS_MS)
 })
 
-engine.on(DismissNotification, (id) => { notifications = notifications.filter((n) => n.id !== id); engine.emit(NotificationsChanged, notifications) })
+engine.on(DismissNotification, [NotificationsChanged], (id, setNotifications) => { notifications = notifications.filter((n) => n.id !== id); setNotifications(notifications) })
+
+export function startLoop() {}
+export function stopLoop() {}

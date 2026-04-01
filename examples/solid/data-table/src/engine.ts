@@ -1,6 +1,18 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// FilterChanged ──→ PageChanged
+// SearchChanged ──→ PageChanged
+// SortChanged   ──→ (triggers simulated load)
+// PageChanged   ──→ (triggers simulated load)
+// RowSelected   ──→ (toggles selection)
+// RowExpanded   ──→ (toggles expansion)
+// SelectAll     ──→ (toggles all visible)
+// DeselectAll   ──→ (clears selection)
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -256,6 +268,8 @@ engine.on(SearchChanged, () => {
 })
 
 // ---------------------------------------------------------------------------
-// Start frame loop
+// Start/stop frame loop
 // ---------------------------------------------------------------------------
 
+export function startLoop() {}
+export function stopLoop() {}

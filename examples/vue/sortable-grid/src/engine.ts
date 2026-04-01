@@ -1,3 +1,17 @@
+// DAG
+// DragStart ──→ DraggingIdChanged
+//           └──→ GhostPosChanged
+// DragMove ──→ GhostPosChanged
+//          └──→ ItemsChanged (reorder)
+//          └──→ PositionsChanged (reorder)
+// DragEnd ──→ DraggingIdChanged
+// ShuffleItems ──→ ItemsChanged
+//              └──→ PositionsChanged
+// AddItem ──→ ItemsChanged
+//         └──→ PositionsChanged
+// RemoveItem ──→ ItemsChanged
+//            └──→ PositionsChanged
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -71,30 +85,30 @@ function computePositions(): { x: number[]; y: number[] } {
 let positions = computePositions()
 
 // Dragging id state
-engine.on(DragStart, ({ id }) => {
+engine.on(DragStart, [DraggingIdChanged], ({ id }, setDragging) => {
   draggingId = id
-  engine.emit(DraggingIdChanged, draggingId)
+  setDragging(draggingId)
 })
-engine.on(DragEnd, () => {
+engine.on(DragEnd, [DraggingIdChanged], (_payload, setDragging) => {
   draggingId = -1
-  engine.emit(DraggingIdChanged, draggingId)
+  setDragging(draggingId)
 })
 
 // Ghost position state
-engine.on(DragMove, (pos) => {
+engine.on(DragMove, [GhostPosChanged], (pos, setGhost) => {
   ghostPos = pos
-  engine.emit(GhostPosChanged, ghostPos)
+  setGhost(ghostPos)
 })
-engine.on(DragStart, ({ x, y }) => {
+engine.on(DragStart, [GhostPosChanged], ({ x, y }, setGhost) => {
   ghostPos = { x, y }
-  engine.emit(GhostPosChanged, ghostPos)
+  setGhost(ghostPos)
 })
 
 /* ------------------------------------------------------------------ */
 /*  Drag reorder logic                                                */
 /* ------------------------------------------------------------------ */
 
-engine.on(DragMove, ({ x, y }) => {
+engine.on(DragMove, [ItemsChanged, PositionsChanged], ({ x, y }, setItems, setPositions) => {
   if (draggingId < 0) return
   const col = Math.min(COLS - 1, Math.max(0, Math.round(x / (CELL_SIZE + GAP))))
   const row = Math.max(0, Math.round(y / (CELL_SIZE + GAP)))
@@ -105,9 +119,9 @@ engine.on(DragMove, ({ x, y }) => {
     const [moved] = next.splice(currentIdx, 1)
     next.splice(targetIdx, 0, moved)
     items = next
-    engine.emit(ItemsChanged, items)
+    setItems(items)
     positions = computePositions()
-    engine.emit(PositionsChanged, positions)
+    setPositions(positions)
   }
 })
 
@@ -115,35 +129,35 @@ engine.on(DragMove, ({ x, y }) => {
 /*  Shuffle                                                           */
 /* ------------------------------------------------------------------ */
 
-engine.on(ShuffleItems, () => {
+engine.on(ShuffleItems, [ItemsChanged, PositionsChanged], (_payload, setItems, setPositions) => {
   const shuffled = [...items]
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
   }
   items = shuffled
-  engine.emit(ItemsChanged, items)
+  setItems(items)
   positions = computePositions()
-  engine.emit(PositionsChanged, positions)
+  setPositions(positions)
 })
 
 /* ------------------------------------------------------------------ */
 /*  Add / Remove                                                      */
 /* ------------------------------------------------------------------ */
 
-engine.on(AddItem, () => {
+engine.on(AddItem, [ItemsChanged, PositionsChanged], (_payload, setItems, setPositions) => {
   if (items.length >= 20) return
   items = [...items, makeItem()]
-  engine.emit(ItemsChanged, items)
+  setItems(items)
   positions = computePositions()
-  engine.emit(PositionsChanged, positions)
+  setPositions(positions)
 })
 
-engine.on(RemoveItem, (id) => {
+engine.on(RemoveItem, [ItemsChanged, PositionsChanged], (id, setItems, setPositions) => {
   items = items.filter(it => it.id !== id)
-  engine.emit(ItemsChanged, items)
+  setItems(items)
   positions = computePositions()
-  engine.emit(PositionsChanged, positions)
+  setPositions(positions)
 })
 
 /* ------------------------------------------------------------------ */
@@ -156,3 +170,6 @@ export function getGhostPos() { return ghostPos }
 export function getPositions() { return positions }
 
 export { COLS, CELL_SIZE, GAP }
+
+export function startLoop() {}
+export function stopLoop() {}

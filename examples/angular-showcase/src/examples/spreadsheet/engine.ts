@@ -1,3 +1,7 @@
+// DAG
+// CellEdited ──→ CellsChanged
+// SelectCell ──→ SelectedCellChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -51,10 +55,10 @@ function cascadeUpdate(id: CellId) {
   if (deps) for (const dep of deps) cascadeUpdate(dep)
 }
 
-engine.on(CellEdited, ({ id, raw }) => {
+engine.on(CellEdited, [CellsChanged], ({ id, raw }, setCells) => {
   const result = evaluateCell(raw, cells)
   cells = { ...cells, [id]: { raw, computed: result.value, error: result.error } }
-  engine.emit(CellsChanged, cells)
+  setCells(cells)
   if (raw.startsWith('=')) {
     const refs = raw.toUpperCase().match(/[A-H][1-8]/g) || []
     for (const ref of refs) { if (!dependencyMap.has(ref)) dependencyMap.set(ref, new Set()); dependencyMap.get(ref)!.add(id) }
@@ -63,4 +67,7 @@ engine.on(CellEdited, ({ id, raw }) => {
   if (deps) for (const dep of deps) cascadeUpdate(dep)
 })
 
-engine.on(SelectCell, (id) => engine.emit(SelectedCellChanged, id))
+engine.on(SelectCell, [SelectedCellChanged], (id, setSelected) => setSelected(id))
+
+export function startLoop() {}
+export function stopLoop() {}

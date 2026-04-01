@@ -2,6 +2,19 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// LocalEdit ──┬──→ DocumentChanged
+//             ├──→ CursorsChanged
+//             └──→ EditHistoryChanged
+// RemoteEdit ─┬──→ HasConflictChanged
+//             ├──→ DocumentChanged
+//             ├──→ CursorsChanged
+//             └──→ EditHistoryChanged
+// CursorMoved ──→ CursorsChanged
+// ---------------------------------------------------------------------------
+
 export interface User { id: string; name: string; color: string; avatar: string }
 export interface EditPayload { pos: number; text: string; type: 'insert' | 'delete' }
 export interface RemoteEditPayload extends EditPayload { user: string }
@@ -33,29 +46,30 @@ function applyEdit(text: string, payload: EditPayload): string {
   const dl = payload.text.length; return text.slice(0, Math.max(0, payload.pos - dl)) + text.slice(payload.pos)
 }
 
-function addHistory(user: string, type: 'insert' | 'delete', text: string, pos: number) {
+function buildHistoryEntry(user: string, type: 'insert' | 'delete', text: string, pos: number) {
   editHistory = [{ id: crypto.randomUUID(), user, type, text: text.length > 20 ? text.slice(0, 20) + '...' : text, pos, timestamp: Date.now() }, ...editHistory].slice(0, 50)
-  engine.emit(EditHistoryChanged, [...editHistory])
 }
 
-engine.on(LocalEdit, (p) => {
-  doc = applyEdit(doc, p); engine.emit(DocumentChanged, doc)
+engine.on(LocalEdit, [DocumentChanged, CursorsChanged, EditHistoryChanged], (p, setDoc, setCursors, setHistory) => {
+  doc = applyEdit(doc, p); setDoc(doc)
   const np = p.type === 'insert' ? p.pos + p.text.length : Math.max(0, p.pos - p.text.length)
-  cursors = new Map(cursors); cursors.set('local', np); engine.emit(CursorsChanged, cursors)
-  addHistory('You', p.type, p.text, p.pos)
+  cursors = new Map(cursors); cursors.set('local', np); setCursors(cursors)
+  buildHistoryEntry('You', p.type, p.text, p.pos)
+  setHistory([...editHistory])
 })
 
-engine.on(RemoteEdit, (p) => {
+engine.on(RemoteEdit, [HasConflictChanged, DocumentChanged, CursorsChanged, EditHistoryChanged], (p, setConflict, setDoc, setCursors, setHistory) => {
   const localPos = cursors.get('local') ?? 0
-  if (Math.abs(p.pos - localPos) < 5) { engine.emit(HasConflictChanged, true); setTimeout(() => engine.emit(HasConflictChanged, false), 1000) }
-  doc = applyEdit(doc, p); engine.emit(DocumentChanged, doc)
+  if (Math.abs(p.pos - localPos) < 5) { setConflict(true); setTimeout(() => engine.emit(HasConflictChanged, false), 1000) }
+  doc = applyEdit(doc, p); setDoc(doc)
   const np = p.type === 'insert' ? p.pos + p.text.length : Math.max(0, p.pos - p.text.length)
-  cursors = new Map(cursors); cursors.set(p.user, np); engine.emit(CursorsChanged, cursors)
+  cursors = new Map(cursors); cursors.set(p.user, np); setCursors(cursors)
   const userName = allUsers.find(u => u.id === p.user)?.name ?? p.user
-  addHistory(userName, p.type, p.text, p.pos)
+  buildHistoryEntry(userName, p.type, p.text, p.pos)
+  setHistory([...editHistory])
 })
 
-engine.on(CursorMoved, (p) => { cursors = new Map(cursors); cursors.set(p.user, p.pos); engine.emit(CursorsChanged, cursors) })
+engine.on(CursorMoved, [CursorsChanged], (p, setCursors) => { cursors = new Map(cursors); cursors.set(p.user, p.pos); setCursors(cursors) })
 
 const botPhrases = ['Hello! ','Nice work. ','I agree. ','TODO: fix this. ','Updated. ','Looks good! ','Reviewing... ','Changed! ','Done. ','See above. ']
 
@@ -76,3 +90,6 @@ function simulateBot(botId: string) {
 
 simulateBot('bot-alice')
 simulateBot('bot-bob')
+
+export function startLoop() {}
+export function stopLoop() {}

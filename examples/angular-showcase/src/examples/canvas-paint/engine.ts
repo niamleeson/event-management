@@ -1,3 +1,21 @@
+// DAG
+// SetTool ──→ ToolChanged
+// SetColor ──→ ColorChanged
+// SetSize ──→ SizeChanged
+// StrokeStart ──→ LiveStrokeChanged
+// StrokeMove ──→ LiveStrokeChanged
+// StrokeEnd ──→ LiveStrokeChanged
+//           └──→ StrokesChanged
+//           └──→ CanUndoChanged
+//           └──→ CanRedoChanged
+// UndoDraw ──→ StrokesChanged
+//          └──→ CanUndoChanged
+//          └──→ CanRedoChanged
+// RedoDraw ──→ StrokesChanged
+//          └──→ CanUndoChanged
+//          └──→ CanRedoChanged
+// ClearCanvas ──→ StrokesChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -30,28 +48,37 @@ let currentTool: Tool = 'brush', currentColor = '#4361ee', brushSize = 4, active
 let strokes: DrawStroke[] = [], currentStroke: DrawStroke | null = null, strokeId = 0
 const undoHistory: DrawStroke[] = [], redoHistory: DrawStroke[] = []
 
-engine.on(SetTool, (t) => { currentTool = t; engine.emit(ToolChanged, t) })
-engine.on(SetColor, (c) => { currentColor = c; engine.emit(ColorChanged, c) })
-engine.on(SetSize, (s) => { brushSize = s; engine.emit(SizeChanged, s) })
-engine.on(StrokeStart, (point) => {
+engine.on(SetTool, [ToolChanged], (t, setTool) => { currentTool = t; setTool(t) })
+engine.on(SetColor, [ColorChanged], (c, setColor) => { currentColor = c; setColor(c) })
+engine.on(SetSize, [SizeChanged], (s, setSize) => { brushSize = s; setSize(s) })
+
+engine.on(StrokeStart, [LiveStrokeChanged], (point, setLive) => {
   currentStroke = { id: ++strokeId, tool: currentTool, color: currentTool === 'eraser' ? '#ffffff' : currentColor, size: currentTool === 'eraser' ? brushSize * 3 : brushSize, points: [point], layer: activeLayer }
-  engine.emit(LiveStrokeChanged, currentStroke)
+  setLive(currentStroke)
 })
-engine.on(StrokeMove, (point) => { if (!currentStroke) return; currentStroke = { ...currentStroke, points: [...currentStroke.points, point] }; engine.emit(LiveStrokeChanged, currentStroke) })
-engine.on(StrokeEnd, () => {
+
+engine.on(StrokeMove, [LiveStrokeChanged], (point, setLive) => { if (!currentStroke) return; currentStroke = { ...currentStroke, points: [...currentStroke.points, point] }; setLive(currentStroke) })
+
+engine.on(StrokeEnd, [LiveStrokeChanged, StrokesChanged, CanUndoChanged, CanRedoChanged], (_payload, setLive, setStrokes, setCanUndo, setCanRedo) => {
   if (currentStroke) { strokes = [...strokes, currentStroke]; undoHistory.push(currentStroke); redoHistory.length = 0 }
   currentStroke = null
-  engine.emit(LiveStrokeChanged, null); engine.emit(StrokesChanged, strokes)
-  engine.emit(CanUndoChanged, undoHistory.length > 0); engine.emit(CanRedoChanged, false)
+  setLive(null); setStrokes(strokes)
+  setCanUndo(undoHistory.length > 0); setCanRedo(false)
 })
-engine.on(UndoDraw, () => {
+
+engine.on(UndoDraw, [StrokesChanged, CanUndoChanged, CanRedoChanged], (_payload, setStrokes, setCanUndo, setCanRedo) => {
   if (undoHistory.length === 0) return
   const entry = undoHistory.pop()!; redoHistory.push(entry); strokes = strokes.filter((s) => s.id !== entry.id)
-  engine.emit(StrokesChanged, strokes); engine.emit(CanUndoChanged, undoHistory.length > 0); engine.emit(CanRedoChanged, true)
+  setStrokes(strokes); setCanUndo(undoHistory.length > 0); setCanRedo(true)
 })
-engine.on(RedoDraw, () => {
+
+engine.on(RedoDraw, [StrokesChanged, CanUndoChanged, CanRedoChanged], (_payload, setStrokes, setCanUndo, setCanRedo) => {
   if (redoHistory.length === 0) return
   const entry = redoHistory.pop()!; undoHistory.push(entry); strokes = [...strokes, entry]
-  engine.emit(StrokesChanged, strokes); engine.emit(CanUndoChanged, true); engine.emit(CanRedoChanged, redoHistory.length > 0)
+  setStrokes(strokes); setCanUndo(true); setCanRedo(redoHistory.length > 0)
 })
-engine.on(ClearCanvas, () => { strokes = []; engine.emit(StrokesChanged, strokes) })
+
+engine.on(ClearCanvas, [StrokesChanged], (_payload, setStrokes) => { strokes = []; setStrokes(strokes) })
+
+export function startLoop() {}
+export function stopLoop() {}

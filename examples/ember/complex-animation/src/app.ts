@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking'
 import { TrackedSignal, TrackedTween } from '@pulse/ember'
 import {
   pulse,
+  startLoop,
   cardTweens,
   allEntered,
   isAnimating,
@@ -62,6 +63,7 @@ export default class StaggeredCardsApp extends Component {
 
   constructor(owner: unknown, args: Record<string, unknown>) {
     super(owner, args)
+    startLoop()
 
     this.trackedCards = cardTweens.map((ct) => {
       const opacity = pulse.createTween(ct.opacity)

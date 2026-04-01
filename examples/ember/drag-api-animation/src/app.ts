@@ -3,6 +3,7 @@ import { action } from '@ember/object'
 import { TrackedSignal, TrackedSpring, TrackedTween } from '@pulse/ember'
 import {
   pulse,
+  startLoop,
   boardCards,
   dragState,
   dragPosition,
@@ -51,6 +52,7 @@ export default class KanbanApp extends Component {
 
   constructor(owner: unknown, args: Record<string, unknown>) {
     super(owner, args)
+    startLoop()
     this.cards = pulse.createSignal(boardCards)
     this.drag = pulse.createSignal(dragState)
     this.position = pulse.createSignal(dragPosition)

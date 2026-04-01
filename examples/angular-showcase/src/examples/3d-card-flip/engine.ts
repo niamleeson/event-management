@@ -1,3 +1,8 @@
+// DAG
+// FlipCard[i] ──→ FlipRotationChanged[i]
+// HoverCard[i] ──→ HoverScaleChanged[i]
+// UnhoverCard[i] ──→ HoverScaleChanged[i]
+
 import { createEngine, type EventType } from '@pulse/core'
 
 export const engine = createEngine()
@@ -63,3 +68,6 @@ for (let i = 0; i < CARD_COUNT; i++) {
     springTo(1.08, 1, 300, 22, (v) => engine.emit(HoverScaleChanged[i], { index: i, value: v }))
   })
 }
+
+export function startLoop() {}
+export function stopLoop() {}

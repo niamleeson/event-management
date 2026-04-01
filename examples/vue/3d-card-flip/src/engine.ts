@@ -1,3 +1,9 @@
+// DAG
+// CardClicked ──→ flipStarts[i] / unflipStarts[i]
+//             └──→ CardFlipped
+// flipDone[i] ──→ CardFlipDone
+// unflipDone[i] ──→ CardFlipDone
+
 import { createEngine, type EventType } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -78,8 +84,8 @@ function createCardAnimations(eng: any): CardAnimations {
     })
     unflipTweens.push(uft)
 
-    eng.on(flipDone, () => eng.emit(CardFlipDone, i))
-    eng.on(unflipDone, () => eng.emit(CardFlipDone, i))
+    eng.on(flipDone, [CardFlipDone], (_payload, setDone) => setDone(i))
+    eng.on(unflipDone, [CardFlipDone], (_payload, setDone) => setDone(i))
 
     const ht = eng.signal(HoverIn, 1.0 as number, (prev, idx) => idx === i ? 1.05 : prev)
     eng.signalUpdate(ht, HoverOut, (prev, idx) => idx === i ? 1.0 : prev)
@@ -91,7 +97,7 @@ function createCardAnimations(eng: any): CardAnimations {
     flippedStates.push(false)
   }
 
-  eng.on(CardClicked, (index) => {
+  eng.on(CardClicked, [CardFlipped], (index, setFlipped) => {
     const isFlipped = flippedStates[index]
     if (isFlipped) {
       eng.emit(unflipStarts[index], undefined)
@@ -99,10 +105,13 @@ function createCardAnimations(eng: any): CardAnimations {
       eng.emit(flipStarts[index], undefined)
     }
     flippedStates[index] = !isFlipped
-    eng.emit(CardFlipped, { index, flipped: !isFlipped })
+    setFlipped({ index, flipped: !isFlipped })
   })
 
   return { CardClicked, CardFlipped, CardFlipDone, HoverIn, HoverOut, flipTweens, unflipTweens, hoverTargets, hoverSprings, flippedStates }
 }
 
 export const anims = createCardAnimations(engine)
+
+export function startLoop() {}
+export function stopLoop() {}

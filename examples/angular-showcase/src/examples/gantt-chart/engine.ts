@@ -1,3 +1,9 @@
+// DAG
+// MoveTask ──→ TasksChanged
+// ResizeTask ──→ TasksChanged
+// ZoomChange ──→ ZoomChanged
+// SelectTask ──→ SelectedTaskChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -41,19 +47,22 @@ function autoShift(taskId: string) {
   }
 }
 
-engine.on(MoveTask, ({ id, start }) => {
+engine.on(MoveTask, [TasksChanged], ({ id, start }, setTasks) => {
   const task = tasks.find((t) => t.id === id); if (!task) return
   const clamped = Math.max(0, Math.min(DAYS - task.duration, start))
   tasks = tasks.map((t) => t.id === id ? { ...t, start: clamped } : t)
-  autoShift(id); engine.emit(TasksChanged, tasks)
+  autoShift(id); setTasks(tasks)
 })
 
-engine.on(ResizeTask, ({ id, duration }) => {
+engine.on(ResizeTask, [TasksChanged], ({ id, duration }, setTasks) => {
   const task = tasks.find((t) => t.id === id); if (!task) return
   const clamped = Math.max(1, Math.min(DAYS - task.start, duration))
   tasks = tasks.map((t) => t.id === id ? { ...t, duration: clamped } : t)
-  autoShift(id); engine.emit(TasksChanged, tasks)
+  autoShift(id); setTasks(tasks)
 })
 
-engine.on(ZoomChange, (z) => engine.emit(ZoomChanged, z))
-engine.on(SelectTask, (id) => engine.emit(SelectedTaskChanged, id))
+engine.on(ZoomChange, [ZoomChanged], (z, setZoom) => setZoom(z))
+engine.on(SelectTask, [SelectedTaskChanged], (id, setSelected) => setSelected(id))
+
+export function startLoop() {}
+export function stopLoop() {}

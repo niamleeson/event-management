@@ -1,232 +1,185 @@
+// DAG
+// FieldUpdated ──→ FieldValuesChanged
+//              └──→ FieldErrorsChanged
+// NextStep ──→ CurrentStepChanged
+//          └──→ StepDirectionChanged
+//          └──→ FieldUpdated (validation trigger)
+//          └──→ ShakeCountChanged
+//          └──→ FormSubmitted
+// PrevStep ──→ CurrentStepChanged
+//          └──→ StepDirectionChanged
+// FormSubmitted ──→ IsSubmittingChanged
+//               └──→ SubmitResultChanged
+
 import { createEngine } from '@pulse/core'
-import type { Engine, EventType, Signal, TweenValue } from '@pulse/core'
+
+// ---------------------------------------------------------------------------
+// Engine
+// ---------------------------------------------------------------------------
+
+export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface PersonalInfo {
+export type StepId = 0 | 1 | 2
+
+export interface FieldUpdate {
+  step: StepId
+  field: string
+  value: string
+}
+
+export interface FieldValidation {
+  step: StepId
+  field: string
+  valid: boolean
+  error: string | null
+}
+
+export interface FormData {
   firstName: string
   lastName: string
   email: string
-}
-
-export interface AddressInfo {
+  phone: string
   street: string
   city: string
   state: string
   zip: string
 }
 
-export interface PreferencesInfo {
-  newsletter: boolean
-  theme: 'light' | 'dark'
-  notifications: boolean
+// ---------------------------------------------------------------------------
+// Field definitions per step
+// ---------------------------------------------------------------------------
+
+export const STEP_FIELDS: Record<StepId, string[]> = {
+  0: ['firstName', 'lastName', 'email', 'phone'],
+  1: ['street', 'city', 'state', 'zip'],
+  2: [],
 }
 
-export interface FormData {
-  personal: PersonalInfo
-  address: AddressInfo
-  preferences: PreferencesInfo
-}
+export const STEP_LABELS: string[] = ['Personal Info', 'Address', 'Review & Submit']
 
-export interface StepValidation {
-  step: number
-  valid: boolean
-  errors: string[]
-}
+// ---------------------------------------------------------------------------
+// Validation rules
+// ---------------------------------------------------------------------------
 
-export interface SubmitResult {
-  success: boolean
-  message: string
+function validateField(field: string, value: string): { valid: boolean; error: string | null } {
+  switch (field) {
+    case 'firstName':
+    case 'lastName':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (value.trim().length < 2) return { valid: false, error: 'At least 2 characters' }
+      return { valid: true, error: null }
+    case 'email':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { valid: false, error: 'Invalid email' }
+      return { valid: true, error: null }
+    case 'phone':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (!/^\+?[\d\s()-]{7,}$/.test(value)) return { valid: false, error: 'Invalid phone number' }
+      return { valid: true, error: null }
+    case 'street':
+    case 'city':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      return { valid: true, error: null }
+    case 'state':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (value.trim().length < 2) return { valid: false, error: 'At least 2 characters' }
+      return { valid: true, error: null }
+    case 'zip':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (!/^\d{5}(-\d{4})?$/.test(value.trim())) return { valid: false, error: 'Invalid zip (e.g. 12345)' }
+      return { valid: true, error: null }
+    default:
+      return { valid: true, error: null }
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Engine + Events
+// Event declarations
 // ---------------------------------------------------------------------------
 
-export const engine: Engine = createEngine()
+export const FieldUpdated = engine.event<FieldUpdate>('FieldUpdated')
+export const NextStep = engine.event<void>('NextStep')
+export const PrevStep = engine.event<void>('PrevStep')
+export const FormSubmitted = engine.event<FormData>('FormSubmitted')
 
-// Field updates
-export const PersonalUpdated: EventType<Partial<PersonalInfo>> = engine.event('PersonalUpdated')
-export const AddressUpdated: EventType<Partial<AddressInfo>> = engine.event('AddressUpdated')
-export const PreferencesUpdated: EventType<Partial<PreferencesInfo>> = engine.event('PreferencesUpdated')
-
-// Navigation
-export const NextStep: EventType<void> = engine.event('NextStep')
-export const PrevStep: EventType<void> = engine.event('PrevStep')
-export const GoToStep: EventType<number> = engine.event('GoToStep')
-
-// Validation
-export const ValidateStep: EventType<number> = engine.event('ValidateStep')
-export const StepValidated: EventType<StepValidation> = engine.event('StepValidated')
-
-// Submission
-export const SubmitForm: EventType<FormData> = engine.event('SubmitForm')
-export const SubmitPending: EventType<FormData> = engine.event('SubmitPending')
-export const SubmitDone: EventType<SubmitResult> = engine.event('SubmitDone')
-export const SubmitError: EventType<Error> = engine.event('SubmitError')
-
-// Step transition animation
-export const StepTransition: EventType<void> = engine.event('StepTransition')
-export const TransitionDone: EventType<void> = engine.event('TransitionDone')
+// State change events
+export const CurrentStepChanged = engine.event<StepId>('CurrentStepChanged')
+export const StepDirectionChanged = engine.event<'next' | 'prev'>('StepDirectionChanged')
+export const FieldValuesChanged = engine.event<FormData>('FieldValuesChanged')
+export const FieldErrorsChanged = engine.event<Record<string, string | null>>('FieldErrorsChanged')
+export const IsSubmittingChanged = engine.event<boolean>('IsSubmittingChanged')
+export const SubmitResultChanged = engine.event<{ success: boolean } | null>('SubmitResultChanged')
+export const ShakeCountChanged = engine.event<number>('ShakeCountChanged')
 
 // ---------------------------------------------------------------------------
-// Validation pipe
+// State
 // ---------------------------------------------------------------------------
 
-engine.pipe(ValidateStep, StepValidated, (step: number): StepValidation => {
-  const personal = personalSig.value
-  const address = addressSig.value
+let currentStep: StepId = 0
+let fieldValues: FormData = {
+  firstName: '', lastName: '', email: '', phone: '',
+  street: '', city: '', state: '', zip: '',
+}
+let fieldErrors: Record<string, string | null> = {}
+let shakeCount = 0
 
-  if (step === 0) {
-    const errors: string[] = []
-    if (!personal.firstName.trim()) errors.push('First name is required')
-    if (!personal.lastName.trim()) errors.push('Last name is required')
-    if (!personal.email.trim()) errors.push('Email is required')
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personal.email)) {
-      errors.push('Email format is invalid')
-    }
-    return { step, valid: errors.length === 0, errors }
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+engine.on(FieldUpdated, [FieldValuesChanged, FieldErrorsChanged], (update, setValues, setErrors) => {
+  fieldValues = { ...fieldValues, [update.field]: update.value }
+  setValues({ ...fieldValues })
+
+  const result = validateField(update.field, update.value)
+  fieldErrors = { ...fieldErrors, [update.field]: result.error }
+  setErrors({ ...fieldErrors })
+})
+
+engine.on(NextStep, [CurrentStepChanged, StepDirectionChanged, ShakeCountChanged], async (_payload, setStep, setDir, setShake) => {
+  if (currentStep >= 2) {
+    engine.emit(FormSubmitted, fieldValues)
+    return
   }
 
-  if (step === 1) {
-    const errors: string[] = []
-    if (!address.street.trim()) errors.push('Street is required')
-    if (!address.city.trim()) errors.push('City is required')
-    if (!address.state.trim()) errors.push('State is required')
-    if (!address.zip.trim()) errors.push('ZIP code is required')
-    else if (!/^\d{5}(-\d{4})?$/.test(address.zip)) {
-      errors.push('ZIP code format is invalid')
+  const fields = STEP_FIELDS[currentStep]
+  const allValid = fields.every((field) => {
+    const val = fieldValues[field as keyof FormData]
+    return fieldErrors[field] === null && val?.trim()
+  })
+
+  if (allValid) {
+    currentStep = (currentStep + 1) as StepId
+    setStep(currentStep)
+    setDir('next')
+  } else {
+    for (const field of fields) {
+      const value = fieldValues[field as keyof FormData] ?? ''
+      engine.emit(FieldUpdated, { step: currentStep, field, value })
     }
-    return { step, valid: errors.length === 0, errors }
-  }
-
-  // Step 2 (preferences) always valid
-  return { step, valid: true, errors: [] }
-})
-
-// ---------------------------------------------------------------------------
-// Navigation: NextStep triggers ValidateStep first
-// ---------------------------------------------------------------------------
-
-engine.on(NextStep, () => {
-  const step = currentStepSig.value
-  engine.emit(ValidateStep, step)
-})
-
-// Only advance if validation passed
-engine.on(StepValidated, (result: StepValidation) => {
-  if (result.valid && result.step === currentStepSig.value) {
-    const next = Math.min(currentStepSig.value + 1, 3)
-    engine.emit(GoToStep, next)
-    engine.emit(StepTransition, undefined)
+    shakeCount++
+    setShake(shakeCount)
   }
 })
 
-engine.on(PrevStep, () => {
-  const prev = Math.max(currentStepSig.value - 1, 0)
-  engine.emit(GoToStep, prev)
-  engine.emit(StepTransition, undefined)
+engine.on(PrevStep, [CurrentStepChanged, StepDirectionChanged], (_payload, setStep, setDir) => {
+  if (currentStep > 0) {
+    currentStep = (currentStep - 1) as StepId
+    setStep(currentStep)
+    setDir('prev')
+  }
 })
 
-// ---------------------------------------------------------------------------
-// Async submit
-// ---------------------------------------------------------------------------
-
-engine.async<FormData, SubmitResult>(SubmitForm, {
-  pending: SubmitPending,
-  done: SubmitDone,
-  error: SubmitError,
-  strategy: 'first',
-  do: async (data, { signal }) => {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 1500)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
-
-    // Simulate occasional failure
-    if (Math.random() < 0.2) {
-      throw new Error('Server error: failed to save form. Please try again.')
-    }
-
-    return {
-      success: true,
-      message: `Registration complete for ${data.personal.firstName} ${data.personal.lastName}!`,
-    }
-  },
+engine.on(FormSubmitted, [IsSubmittingChanged, SubmitResultChanged], async (_data, setSubmitting, setResult) => {
+  setSubmitting(true)
+  await new Promise((r) => setTimeout(r, 1500))
+  setSubmitting(false)
+  setResult({ success: true })
 })
 
-// ---------------------------------------------------------------------------
-// Step transition tween
-// ---------------------------------------------------------------------------
-
-export const stepTransitionTween: TweenValue = engine.tween({
-  start: StepTransition,
-  done: TransitionDone,
-  from: 0,
-  to: 1,
-  duration: 300,
-  easing: 'easeOut',
-})
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const currentStepSig: Signal<number> = engine.signal<number>(
-  GoToStep,
-  0,
-  (_prev, step) => step,
-)
-
-export const personalSig: Signal<PersonalInfo> = engine.signal<PersonalInfo>(
-  PersonalUpdated,
-  { firstName: '', lastName: '', email: '' },
-  (prev, partial) => ({ ...prev, ...partial }),
-)
-
-export const addressSig: Signal<AddressInfo> = engine.signal<AddressInfo>(
-  AddressUpdated,
-  { street: '', city: '', state: '', zip: '' },
-  (prev, partial) => ({ ...prev, ...partial }),
-)
-
-export const preferencesSig: Signal<PreferencesInfo> = engine.signal<PreferencesInfo>(
-  PreferencesUpdated,
-  { newsletter: true, theme: 'light', notifications: true },
-  (prev, partial) => ({ ...prev, ...partial }),
-)
-
-export const validationSig: Signal<StepValidation> = engine.signal<StepValidation>(
-  StepValidated,
-  { step: -1, valid: true, errors: [] },
-  (_prev, v) => v,
-)
-
-export const submittingSig: Signal<boolean> = engine.signal<boolean>(
-  SubmitPending,
-  false,
-  () => true,
-)
-engine.signalUpdate(submittingSig, SubmitDone, () => false)
-engine.signalUpdate(submittingSig, SubmitError, () => false)
-
-export const submitResultSig: Signal<SubmitResult | null> = engine.signal<SubmitResult | null>(
-  SubmitDone,
-  null,
-  (_prev, result) => result,
-)
-
-export const submitErrorSig: Signal<string | null> = engine.signal<string | null>(
-  SubmitError,
-  null,
-  (_prev, err) => err.message,
-)
-engine.signalUpdate(submitErrorSig, SubmitPending, () => null)
-
-// Start frame loop for tween animation
-engine.startFrameLoop()
+export function startLoop() {}
+export function stopLoop() {}

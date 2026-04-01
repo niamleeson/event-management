@@ -1,3 +1,10 @@
+// DAG
+// PriceUpdate ──→ StocksChanged
+//             └──→ AlertTriggered (conditional, >5% change)
+// StockSelected ──→ SelectedStockChanged
+// AlertTriggered ──→ AlertsChanged
+// DismissAlert ──→ AlertsChanged
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 
@@ -52,43 +59,55 @@ const INITIAL_STOCKS: Stock[] = [
 
 export let stocks = INITIAL_STOCKS
 export const StocksChanged = engine.event('StocksChanged')
-engine.on(PriceUpdate, (v: any) => { stocks = ((prev, { symbol, price }) => prev.map(s => {
+engine.on(PriceUpdate, [StocksChanged], ({ symbol, price }, setStocks) => {
+  stocks = stocks.map(s => {
     if (s.symbol !== symbol) return s
     const change = price - s.history[0]
     const changePercent = (change / s.history[0]) * 100
     const history = [...s.history, price].slice(-60)
     return { ...s, price, change, changePercent, history }
-  }))(stocks, v); engine.emit(StocksChanged, stocks) })
+  })
+  setStocks(stocks)
+})
 
 export let selectedStock = 'AAPL'
 export const SelectedStockChanged = engine.event('SelectedStockChanged')
-engine.on(StockSelected, (v: any) => { selectedStock = ((_prev, sym) => sym)(selectedStock, v); engine.emit(SelectedStockChanged, selectedStock) })
+engine.on(StockSelected, [SelectedStockChanged], (sym, setSelected) => {
+  selectedStock = sym
+  setSelected(selectedStock)
+})
 
 let alertId = 0
 export let alerts = [] as Alert[]
 export const AlertsChanged = engine.event('AlertsChanged')
-engine.on(AlertTriggered, (v: any) => { alerts = ((prev, alert) => [alert, ...prev].slice(0, 10))(alerts, v); engine.emit(AlertsChanged, alerts) })
-engine.on(DismissAlert, (v: any) => { alerts = ((prev, id) => prev.filter(a => a.id !== id))(alerts, v); engine.emit(AlertsChanged, alerts) })
+engine.on(AlertTriggered, [AlertsChanged], (alert, setAlerts) => {
+  alerts = [alert, ...alerts].slice(0, 10)
+  setAlerts(alerts)
+})
+engine.on(DismissAlert, [AlertsChanged], (id, setAlerts) => {
+  alerts = alerts.filter(a => a.id !== id)
+  setAlerts(alerts)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Alert on >5% change                                               */
 /* ------------------------------------------------------------------ */
 
-engine.on(PriceUpdate, (v: any) => { const _r = (({ symbol, price }) => {
+engine.on(PriceUpdate, [AlertTriggered], ({ symbol, price }, setAlert) => {
   const stock = stocks.find(s => s.symbol === symbol)
-  if (!stock || stock.history.length < 2) return null
+  if (!stock || stock.history.length < 2) return
   const basePrice = stock.history[0]
   const percentChange = Math.abs((price - basePrice) / basePrice * 100)
-  if (percentChange <= 5) return null
+  if (percentChange <= 5) return
   const direction = price > basePrice ? 'up' : 'down'
-  return {
+  setAlert({
     id: alertId++,
     symbol,
     message: `${symbol} moved ${direction === 'up' ? '+' : ''}${percentChange.toFixed(1)}% since open`,
     time: Date.now(),
     type: direction,
-  }
-})(v); if (_r != null) engine.emit(AlertTriggered, _r) })
+  })
+})
 
 /* ------------------------------------------------------------------ */
 /*  Price simulation (500ms updates)                                  */
@@ -103,3 +122,6 @@ setInterval(() => {
     engine.emit(PriceUpdate, { symbol: stock.symbol, price: Math.round(newPrice * 100) / 100 })
   }
 }, 500)
+
+export function startLoop() {}
+export function stopLoop() {}

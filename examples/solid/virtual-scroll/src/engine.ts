@@ -1,6 +1,11 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// ScrollChanged ──→ PageRequested (prefetch pages)
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -120,11 +125,19 @@ engine.on(ScrollChanged, (scrollTop) => {
 requestedPages.add(0)
 engine.emit(PageRequested, 0)
 
-// Frame loop
-let _lastFrame = performance.now()
-requestAnimationFrame(function _loop() {
-  const now = performance.now()
-  engine.emit(Frame, now - _lastFrame)
-  _lastFrame = now
-  requestAnimationFrame(_loop)
-})
+// Start/stop frame loop
+let _rafId: number | null = null
+export function startLoop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
+    const now = performance.now()
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
+  }
+  _rafId = requestAnimationFrame(loop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}

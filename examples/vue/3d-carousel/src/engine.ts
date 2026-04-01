@@ -1,3 +1,12 @@
+// DAG
+// DragMove ──→ RotationTargetChanged
+// ItemSelected ──→ RotationTargetChanged
+//              └──→ SelectedItemChanged
+//              └──→ ZtChanged[i]
+// engine.frame ──→ RotationTargetChanged (auto-rotate)
+// DragStart ──→ (stops auto-rotate)
+// DragEnd ──→ (resumes auto-rotate)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -35,10 +44,16 @@ export const AutoRotateTick = engine.event('AutoRotateTick')
 
 export let rotationTarget = 0
 export const RotationTargetChanged = engine.event('RotationTargetChanged')
-engine.on(DragMove, (v: any) => { rotationTarget = ((prev, { dx }) => prev + dx * 0.3)(rotationTarget, v); engine.emit(RotationTargetChanged, rotationTarget) })
+engine.on(DragMove, [RotationTargetChanged], ({ dx }, setTarget) => {
+  rotationTarget = rotationTarget + dx * 0.3
+  setTarget(rotationTarget)
+})
 
 // Snap on item select
-engine.on(ItemSelected, (v: any) => { rotationTarget = ((_prev, idx) => -idx * ANGLE_STEP)(rotationTarget, v); engine.emit(RotationTargetChanged, rotationTarget) })
+engine.on(ItemSelected, [RotationTargetChanged], (idx, setTarget) => {
+  rotationTarget = -idx * ANGLE_STEP
+  setTarget(rotationTarget)
+})
 
 // Spring-driven smooth rotation
 export let rotationSpring = { value: 0, velocity: 0, settled: true }
@@ -82,7 +97,10 @@ export const RotationSpringVal = engine.event<number>('RotationSpringVal')
 
 export let selectedItem = 0
 export const SelectedItemChanged = engine.event('SelectedItemChanged')
-engine.on(ItemSelected, (v: any) => { selectedItem = ((_prev, idx) => idx)(selectedItem, v); engine.emit(SelectedItemChanged, selectedItem) })
+engine.on(ItemSelected, [SelectedItemChanged], (idx, setSelected) => {
+  selectedItem = idx
+  setSelected(selectedItem)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Selected item springs forward (translateZ boost)                  */
@@ -94,7 +112,10 @@ export const selectedZSprings: any[] = []
 for (let i = 0; i < ITEM_COUNT; i++) {
   let zt = 0 as number
 const ZtChanged = engine.event('ZtChanged')
-engine.on(ItemSelected, (v: any) => { zt = ((_prev, idx) => idx === i ? 60 : 0)(zt, v); engine.emit(ZtChanged, zt) })
+engine.on(ItemSelected, [ZtChanged], (idx, setZt) => {
+  zt = idx === i ? 60 : 0
+  setZt(zt)
+})
   selectedZTargets.push(zt)
   let zs = { value: 0, velocity: 0, settled: true }
 const ZsVal = engine.event<number>('ZsVal')
@@ -143,13 +164,17 @@ engine.on(DragStart, () => { autoRotating = false })
 engine.on(DragEnd, () => { autoRotating = true })
 engine.on(ItemSelected, () => { autoRotating = false })
 
-engine.on(engine.frame, ({ dt }) => {
+engine.on(engine.frame, [RotationTargetChanged], ({ dt }, setTarget) => {
   if (!autoRotating) return
   const speed = 0.015
-  (rotationTarget = rotationTarget + speed * (dt / 16.667, engine.emit(RotationTargetChanged, rotationTarget)))
+  rotationTarget = rotationTarget + speed * (dt / 16.667)
+  setTarget(rotationTarget)
 })
 
 
 
 
 export { ANGLE_STEP }
+
+export function startLoop() {}
+export function stopLoop() {}

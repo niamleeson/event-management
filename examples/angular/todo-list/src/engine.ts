@@ -1,88 +1,101 @@
+// DAG
+// TodoTextChanged ──→ CurrentTextChanged
+//                 └──→ ValidationResultEvent
+// TodoAdded ──→ TodosChanged
+// TodoRemoved ──→ TodosChanged
+// TodoToggled ──→ TodosChanged
+// FilterChanged ──→ ActiveFilterChanged
+
 import { createEngine } from '@pulse/core'
-import type { Engine, EventType, Signal } from '@pulse/core'
+
+// ---------------------------------------------------------------------------
+// Engine
+// ---------------------------------------------------------------------------
+
+export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface Todo {
-  id: number
+  id: string
   text: string
-  done: boolean
+  completed: boolean
 }
 
 export type Filter = 'all' | 'active' | 'completed'
 
 export interface ValidationResult {
   valid: boolean
-  message: string
+  error: string | null
 }
 
 // ---------------------------------------------------------------------------
-// Engine + Events
+// Event declarations
 // ---------------------------------------------------------------------------
 
-export const engine: Engine = createEngine()
-
-export const TodoTextChanged: EventType<string> = engine.event<string>('TodoTextChanged')
-export const ValidationResultEvent: EventType<ValidationResult> = engine.event<ValidationResult>('ValidationResult')
-export const TodoAdded: EventType<Todo> = engine.event<Todo>('TodoAdded')
-export const TodoRemoved: EventType<number> = engine.event<number>('TodoRemoved')
-export const TodoToggled: EventType<number> = engine.event<number>('TodoToggled')
-export const FilterChanged: EventType<Filter> = engine.event<Filter>('FilterChanged')
+export const TodoAdded = engine.event<Todo>('TodoAdded')
+export const TodoRemoved = engine.event<string>('TodoRemoved')
+export const TodoToggled = engine.event<string>('TodoToggled')
+export const TodoTextChanged = engine.event<string>('TodoTextChanged')
+export const ValidationResultEvent = engine.event<ValidationResult>('ValidationResult')
+export const FilterChanged = engine.event<Filter>('FilterChanged')
+export const TodosChanged = engine.event<Todo[]>('TodosChanged')
+export const CurrentTextChanged = engine.event<string>('CurrentTextChanged')
+export const ActiveFilterChanged = engine.event<Filter>('ActiveFilterChanged')
 
 // ---------------------------------------------------------------------------
-// Validation pipe: TodoTextChanged -> ValidationResult
+// State
 // ---------------------------------------------------------------------------
 
-engine.pipe(TodoTextChanged, ValidationResultEvent, (text: string): ValidationResult => {
+let todos: Todo[] = []
+let activeFilter: Filter = 'all'
+let currentText = ''
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+engine.on(TodoTextChanged, [CurrentTextChanged, ValidationResultEvent], (text: string, setCurrent, setValidation) => {
+  currentText = text
+  setCurrent(text)
   if (text.trim().length === 0) {
-    return { valid: false, message: 'Todo text cannot be empty' }
+    setValidation({ valid: false, error: null })
+  } else if (text.trim().length < 3) {
+    setValidation({ valid: false, error: 'Todo must be at least 3 characters' })
+  } else {
+    setValidation({ valid: true, error: null })
   }
-  if (text.trim().length < 3) {
-    return { valid: false, message: 'Todo text must be at least 3 characters' }
-  }
-  if (text.trim().length > 100) {
-    return { valid: false, message: 'Todo text must be 100 characters or less' }
-  }
-  return { valid: true, message: '' }
+})
+
+engine.on(TodoAdded, [TodosChanged], (todo: Todo, setTodos) => {
+  todos = [...todos, todo]
+  setTodos(todos)
+})
+
+engine.on(TodoRemoved, [TodosChanged], (id: string, setTodos) => {
+  todos = todos.filter((t) => t.id !== id)
+  setTodos(todos)
+})
+
+engine.on(TodoToggled, [TodosChanged], (id: string, setTodos) => {
+  todos = todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+  setTodos(todos)
+})
+
+engine.on(FilterChanged, [ActiveFilterChanged], (filter: Filter, setActive) => {
+  activeFilter = filter
+  setActive(filter)
 })
 
 // ---------------------------------------------------------------------------
-// Signals
+// Getters
 // ---------------------------------------------------------------------------
 
-let nextId = 1
+export function getTodos() { return todos }
+export function getActiveFilter() { return activeFilter }
+export function getCurrentText() { return currentText }
 
-export const todosSig: Signal<Todo[]> = engine.signal<Todo[]>(TodoAdded, [], (prev, added) => {
-  return [...prev, added]
-})
-
-// Also update on remove
-engine.signalUpdate(todosSig, TodoRemoved, (prev, id) => {
-  return prev.filter((t) => t.id !== id)
-})
-
-// Also update on toggle
-engine.signalUpdate(todosSig, TodoToggled, (prev, id) => {
-  return prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
-})
-
-export const filterSig: Signal<Filter> = engine.signal<Filter>(FilterChanged, 'all', (_prev, f) => f)
-
-export const validationSig: Signal<ValidationResult> = engine.signal<ValidationResult>(
-  ValidationResultEvent,
-  { valid: true, message: '' },
-  (_prev, v) => v,
-)
-
-export const inputTextSig: Signal<string> = engine.signal<string>(
-  TodoTextChanged,
-  '',
-  (_prev, text) => text,
-)
-
-/** Helper to generate unique IDs for new todos */
-export function getNextId(): number {
-  return nextId++
-}
+export function startLoop() {}
+export function stopLoop() {}

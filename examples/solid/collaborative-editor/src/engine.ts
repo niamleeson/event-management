@@ -1,6 +1,15 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// LocalEdit   ──→ DocumentChanged
+// RemoteEdit  ──→ DocumentChanged
+// CursorMoved ──→ (updates cursor positions)
+// UserJoined  ──→ ActiveUsersChanged
+// UserLeft    ──→ ActiveUsersChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -88,4 +97,5 @@ const initialText =
   'You can see their cursors moving in real-time.\n\n' +
   'Try typing below and watch Alice and Bob make their edits too.\n'
 
-
+export function startLoop() {}
+export function stopLoop() {}

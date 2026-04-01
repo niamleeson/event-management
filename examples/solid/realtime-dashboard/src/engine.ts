@@ -1,6 +1,17 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// MetricReceived ──┬──→ CurrentMetricsChanged
+//                  ├──→ ChartDataChanged
+//                  └──→ AlertsChanged
+//
+// AlertDismissed ──→ AlertsChanged
+//
+// FeedToggled ──→ FeedRunningChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -80,10 +91,10 @@ let lastChartUpdate = 0
 // Handlers
 // ---------------------------------------------------------------------------
 
-engine.on(MetricReceived, (metric) => {
+engine.on(MetricReceived, [CurrentMetricsChanged, ChartDataChanged, AlertsChanged], (metric, setMetrics, setChart, setAlerts) => {
   // Update current metrics
   currentMetrics = { ...currentMetrics, [metric.name]: metric }
-  engine.emit(CurrentMetricsChanged, { ...currentMetrics })
+  setMetrics({ ...currentMetrics })
 
   // Throttled chart update (max once per second)
   const now = Date.now()
@@ -92,7 +103,7 @@ engine.on(MetricReceived, (metric) => {
     const existing = chartData[metric.name] ?? []
     const next = [...existing, { timestamp: metric.timestamp, value: metric.value }].slice(-ROLLING_WINDOW)
     chartData = { ...chartData, [metric.name]: next }
-    engine.emit(ChartDataChanged, { ...chartData })
+    setChart({ ...chartData })
   }
 
   // Threshold breach detection
@@ -111,19 +122,19 @@ engine.on(MetricReceived, (metric) => {
         message: `${metric.name} exceeded threshold ${config.threshold}${config.unit} (current: ${metric.value.toFixed(1)}${config.unit})`,
       }
       alerts = [alert, ...alerts].slice(0, 20)
-      engine.emit(AlertsChanged, [...alerts])
+      setAlerts([...alerts])
     }
   }
 })
 
-engine.on(AlertDismissed, (id) => {
+engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
   alerts = alerts.filter((a) => a.id !== id)
-  engine.emit(AlertsChanged, [...alerts])
+  setAlerts([...alerts])
 })
 
-engine.on(FeedToggled, (running) => {
+engine.on(FeedToggled, [FeedRunningChanged], (running, setRunning) => {
   feedRunning = running
-  engine.emit(FeedRunningChanged, running)
+  setRunning(running)
 })
 
 // ---------------------------------------------------------------------------
@@ -157,3 +168,6 @@ export function stopFeed() {
     feedInterval = null
   }
 }
+
+export function startLoop() {}
+export function stopLoop() {}

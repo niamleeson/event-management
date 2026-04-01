@@ -1,6 +1,6 @@
 import { render } from 'solid-js/web'
 import { PulseProvider } from '@pulse/solid'
-import { engine } from './engine'
+import { engine, startLoop } from './engine'
 import App from './App'
 
 render(
@@ -11,3 +11,5 @@ render(
   ),
   document.getElementById('root')!,
 )
+
+startLoop()

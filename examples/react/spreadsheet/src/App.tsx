@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import { usePulse, useEmit } from '@pulse/react'
 import {
   CellsChanged,
+  DependentCellsRecalculated,
   SelectedCellChanged,
   CellEdited,
   CellSelected,
@@ -44,7 +45,7 @@ const emptyGrid: Grid = Array.from({ length: ROWS }, () => Array.from({ length: 
 
 function FormulaBar() {
   const emit = useEmit()
-  const grid = usePulse(CellsChanged, emptyGrid)
+  const grid = usePulse(DependentCellsRecalculated, emptyGrid)
   const sel = usePulse(SelectedCellChanged, { row: 0, col: 0 } as CellCoord)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentCell = grid[sel.row]?.[sel.col]
@@ -70,7 +71,7 @@ function FormulaBar() {
 
 function Cell({ row, col }: { row: number; col: number }) {
   const emit = useEmit()
-  const grid = usePulse(CellsChanged, emptyGrid)
+  const grid = usePulse(DependentCellsRecalculated, emptyGrid)
   const sel = usePulse(SelectedCellChanged, { row: 0, col: 0 } as CellCoord)
   const isSelected = sel.row === row && sel.col === col
   const cell = grid[row][col]
@@ -106,7 +107,7 @@ function ErrorNotifier() {
 }
 
 function StatusBar() {
-  const grid = usePulse(CellsChanged, emptyGrid)
+  const grid = usePulse(DependentCellsRecalculated, emptyGrid)
   const sel = usePulse(SelectedCellChanged, { row: 0, col: 0 } as CellCoord)
   const filledCount = grid.flat().filter(c => c.raw !== '').length
   const formulaCount = grid.flat().filter(c => c.raw.startsWith('=')).length

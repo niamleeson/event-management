@@ -1,3 +1,17 @@
+// DAG
+// ToolChanged ──→ CurrentToolChanged
+// ColorChanged ──→ CurrentColorChanged
+// SizeChanged ──→ BrushSizeChanged
+// LayerAdded ──→ LayersChanged
+// LayerToggled ──→ LayersChanged
+// LayerSelected ──→ ActiveLayerChanged
+// StrokeStart ──→ IsDrawingChanged
+// StrokeEnd ──→ IsDrawingChanged
+//           └──→ StrokesChanged
+// StrokeMove ──→ StrokesChanged
+// UndoStroke ──→ StrokesChanged
+// RedoStroke ──→ StrokesChanged
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -49,13 +63,22 @@ export const StrokesChanged = engine.event('StrokesChanged')
 
 export let currentTool = 'brush' as Tool
 export const CurrentToolChanged = engine.event('CurrentToolChanged')
-engine.on(ToolChanged, (v: any) => { currentTool = ((_prev, tool) => tool)(currentTool, v); engine.emit(CurrentToolChanged, currentTool) })
+engine.on(ToolChanged, [CurrentToolChanged], (tool, setTool) => {
+  currentTool = tool
+  setTool(currentTool)
+})
 export let currentColor = '#ff6b6b'
 export const CurrentColorChanged = engine.event('CurrentColorChanged')
-engine.on(ColorChanged, (v: any) => { currentColor = ((_prev, color) => color)(currentColor, v); engine.emit(CurrentColorChanged, currentColor) })
+engine.on(ColorChanged, [CurrentColorChanged], (color, setColor) => {
+  currentColor = color
+  setColor(currentColor)
+})
 export let brushSize = 4
 export const BrushSizeChanged = engine.event('BrushSizeChanged')
-engine.on(SizeChanged, (v: any) => { brushSize = ((_prev, size) => size)(brushSize, v); engine.emit(BrushSizeChanged, brushSize) })
+engine.on(SizeChanged, [BrushSizeChanged], (size, setSize) => {
+  brushSize = size
+  setSize(brushSize)
+})
 
 let nextLayerId = 2
 export let layers = [
@@ -63,14 +86,22 @@ export let layers = [
     { id: 1, name: 'Layer 1', visible: true, strokes: [] },
   ]
 export const LayersChanged = engine.event('LayersChanged')
-engine.on(LayerAdded, (v: any) => { layers = ((prev) => [...prev, { id: nextLayerId++, name: `Layer ${nextLayerId - 1}`, visible: true, strokes: [] }])(layers, v); engine.emit(LayersChanged, layers) })
+engine.on(LayerAdded, [LayersChanged], (_payload, setLayers) => {
+  layers = [...layers, { id: nextLayerId++, name: `Layer ${nextLayerId - 1}`, visible: true, strokes: [] }]
+  setLayers(layers)
+})
 
-engine.on(LayerToggled, (v: any) => { layers = ((prev, id) =>
-  prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l))(layers, v); engine.emit(LayersChanged, layers) })
+engine.on(LayerToggled, [LayersChanged], (id, setLayers) => {
+  layers = layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l)
+  setLayers(layers)
+})
 
 export let activeLayer = 1
 export const ActiveLayerChanged = engine.event('ActiveLayerChanged')
-engine.on(LayerSelected, (v: any) => { activeLayer = ((_prev, id) => id)(activeLayer, v); engine.emit(ActiveLayerChanged, activeLayer) })
+engine.on(LayerSelected, [ActiveLayerChanged], (id, setActive) => {
+  activeLayer = id
+  setActive(activeLayer)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Drawing state                                                     */
@@ -78,8 +109,14 @@ engine.on(LayerSelected, (v: any) => { activeLayer = ((_prev, id) => id)(activeL
 
 export let isDrawing = false
 export const IsDrawingChanged = engine.event('IsDrawingChanged')
-engine.on(StrokeStart, (v: any) => { isDrawing = (() => true)(isDrawing, v); engine.emit(IsDrawingChanged, isDrawing) })
-engine.on(StrokeEnd, (v: any) => { isDrawing = (() => false)(isDrawing, v); engine.emit(IsDrawingChanged, isDrawing) })
+engine.on(StrokeStart, [IsDrawingChanged], (_payload, setDrawing) => {
+  isDrawing = true
+  setDrawing(isDrawing)
+})
+engine.on(StrokeEnd, [IsDrawingChanged], (_payload, setDrawing) => {
+  isDrawing = false
+  setDrawing(isDrawing)
+})
 
 let currentStroke: Stroke | null = null
 const undoStack: Stroke[] = []
@@ -95,13 +132,13 @@ engine.on(StrokeStart, (point) => {
   }
 })
 
-engine.on(StrokeMove, (point) => {
+engine.on(StrokeMove, [StrokesChanged], (point, setStrokes) => {
   if (!currentStroke) return
   currentStroke.points.push(point)
-  engine.emit(StrokesChanged, undefined)
+  setStrokes(undefined)
 })
 
-engine.on(StrokeEnd, () => {
+engine.on(StrokeEnd, [StrokesChanged], (_payload, setStrokes) => {
   if (!currentStroke || currentStroke.points.length < 2) {
     currentStroke = null
     return
@@ -122,21 +159,21 @@ engine.on(StrokeEnd, () => {
   }
 
   currentStroke = null
-  engine.emit(StrokesChanged, undefined)
+  setStrokes(undefined)
 })
 
-engine.on(UndoStroke, () => {
+engine.on(UndoStroke, [StrokesChanged], (_payload, setStrokes) => {
   if (undoStack.length === 0) return
   const stroke = undoStack.pop()!
   redoStack.push(stroke)
-  engine.emit(StrokesChanged, undefined)
+  setStrokes(undefined)
 })
 
-engine.on(RedoStroke, () => {
+engine.on(RedoStroke, [StrokesChanged], (_payload, setStrokes) => {
   if (redoStack.length === 0) return
   const stroke = redoStack.pop()!
   undoStack.push(stroke)
-  engine.emit(StrokesChanged, undefined)
+  setStrokes(undefined)
 })
 
 /* ------------------------------------------------------------------ */
@@ -175,3 +212,6 @@ export const TOOLS: { tool: Tool; icon: string; label: string }[] = [
 
 
 export { getCurrentStroke, getUndoStack, getRedoStack }
+
+export function startLoop() {}
+export function stopLoop() {}

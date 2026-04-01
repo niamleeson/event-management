@@ -1,6 +1,28 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// TodoTextChanged ──┬──→ CurrentTextChanged
+//                   └──→ ValidationResultEvent
+//
+// TodoAdded ──┬──→ TodosChanged
+//             ├──→ FilteredTodosChanged
+//             └──→ RemainingCountChanged
+//
+// TodoRemoved ──┬──→ TodosChanged
+//               ├──→ FilteredTodosChanged
+//               └──→ RemainingCountChanged
+//
+// TodoToggled ──┬──→ TodosChanged
+//               ├──→ FilteredTodosChanged
+//               └──→ RemainingCountChanged
+//
+// FilterChanged ──┬──→ ActiveFilterChanged
+//                 ├──→ FilteredTodosChanged
+//                 └──→ RemainingCountChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -47,28 +69,25 @@ let todos: Todo[] = []
 let activeFilter: Filter = 'all'
 let currentText = ''
 
-function emitDerived() {
-  const filtered =
-    activeFilter === 'active' ? todos.filter(t => !t.completed) :
+function computeFiltered() {
+  return activeFilter === 'active' ? todos.filter(t => !t.completed) :
     activeFilter === 'completed' ? todos.filter(t => t.completed) :
     todos
-  engine.emit(FilteredTodosChanged, filtered)
-  engine.emit(RemainingCountChanged, todos.filter(t => !t.completed).length)
 }
 
 // ---------------------------------------------------------------------------
 // Validate text input: non-empty and minimum length of 3
 // ---------------------------------------------------------------------------
 
-engine.on(TodoTextChanged, (text: string) => {
+engine.on(TodoTextChanged, [CurrentTextChanged, ValidationResultEvent], (text: string, setCurrentText, setValidation) => {
   currentText = text
-  engine.emit(CurrentTextChanged, text)
+  setCurrentText(text)
   if (text.trim().length === 0) {
-    engine.emit(ValidationResultEvent, { valid: false, error: null })
+    setValidation({ valid: false, error: null })
   } else if (text.trim().length < 3) {
-    engine.emit(ValidationResultEvent, { valid: false, error: 'Todo must be at least 3 characters' })
+    setValidation({ valid: false, error: 'Todo must be at least 3 characters' })
   } else {
-    engine.emit(ValidationResultEvent, { valid: true, error: null })
+    setValidation({ valid: true, error: null })
   }
 })
 
@@ -76,26 +95,33 @@ engine.on(TodoTextChanged, (text: string) => {
 // Handlers
 // ---------------------------------------------------------------------------
 
-engine.on(TodoAdded, (todo) => {
+engine.on(TodoAdded, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (todo, setTodos, setFiltered, setRemaining) => {
   todos = [...todos, todo]
-  engine.emit(TodosChanged, todos)
-  emitDerived()
+  setTodos(todos)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
 })
 
-engine.on(TodoRemoved, (id) => {
+engine.on(TodoRemoved, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (id, setTodos, setFiltered, setRemaining) => {
   todos = todos.filter((t) => t.id !== id)
-  engine.emit(TodosChanged, todos)
-  emitDerived()
+  setTodos(todos)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
 })
 
-engine.on(TodoToggled, (id) => {
+engine.on(TodoToggled, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (id, setTodos, setFiltered, setRemaining) => {
   todos = todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-  engine.emit(TodosChanged, todos)
-  emitDerived()
+  setTodos(todos)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
 })
 
-engine.on(FilterChanged, (filter) => {
+engine.on(FilterChanged, [ActiveFilterChanged, FilteredTodosChanged, RemainingCountChanged], (filter, setActive, setFiltered, setRemaining) => {
   activeFilter = filter
-  engine.emit(ActiveFilterChanged, filter)
-  emitDerived()
+  setActive(filter)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
 })
+
+export function startLoop() {}
+export function stopLoop() {}

@@ -1,3 +1,16 @@
+// DAG
+// SetSort ──→ SortChanged
+//         └──→ PageChanged
+//         └──→ DataChanged
+// SetFilter ──→ FiltersChanged
+//           └──→ PageChanged
+//           └──→ DataChanged
+// ClearFilters ──→ FiltersChanged
+//              └──→ PageChanged
+//              └──→ DataChanged
+// SetPage ──→ PageChanged
+//         └──→ DataChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -48,8 +61,11 @@ function recompute() {
   engine.emit(DataChanged, { rows: data.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE), total: data.length })
 }
 
-engine.on(SetSort, (cfg) => { sort = cfg.direction ? cfg : null; currentPage = 0; engine.emit(SortChanged, sort); engine.emit(PageChanged, 0); recompute() })
-engine.on(SetFilter, ({ column, value }) => { if (value) filters = { ...filters, [column]: value }; else { const f = { ...filters }; delete f[column]; filters = f }; currentPage = 0; engine.emit(FiltersChanged, filters); engine.emit(PageChanged, 0); recompute() })
-engine.on(ClearFilters, () => { filters = {}; currentPage = 0; engine.emit(FiltersChanged, {}); engine.emit(PageChanged, 0); recompute() })
-engine.on(SetPage, (page) => { currentPage = page; engine.emit(PageChanged, page); recompute() })
+engine.on(SetSort, [SortChanged, PageChanged], (cfg, setSort, setPage) => { sort = cfg.direction ? cfg : null; currentPage = 0; setSort(sort); setPage(0); recompute() })
+engine.on(SetFilter, [FiltersChanged, PageChanged], ({ column, value }, setFilters, setPage) => { if (value) filters = { ...filters, [column]: value }; else { const f = { ...filters }; delete f[column]; filters = f }; currentPage = 0; setFilters(filters); setPage(0); recompute() })
+engine.on(ClearFilters, [FiltersChanged, PageChanged], (_payload, setFilters, setPage) => { filters = {}; currentPage = 0; setFilters({}); setPage(0); recompute() })
+engine.on(SetPage, [PageChanged], (page, setPage) => { currentPage = page; setPage(page); recompute() })
 setTimeout(() => recompute(), 0)
+
+export function startLoop() {}
+export function stopLoop() {}

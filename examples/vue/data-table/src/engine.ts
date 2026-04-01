@@ -1,3 +1,24 @@
+// DAG
+// DataLoaded ──→ AllDataChanged
+//            └──→ LoadingChanged
+// FetchPending ──→ LoadingChanged
+// SortChanged ──→ SortColumnChanged
+//             └──→ SortDirChanged
+// FilterChanged ──→ FilterStatusChanged
+//               └──→ CurrentPageChanged
+// SearchChanged ──→ SearchQueryChanged
+//               └──→ CurrentPageChanged
+// PageChanged ──→ CurrentPageChanged
+// RowExpanded ──→ ExpandedRowChanged
+//             └──→ ExpandStart
+// RowSelected ──→ SelectedRowsChanged
+// SelectAll ──→ SelectedRowsChanged
+// BulkDelete ──→ SelectedRowsChanged
+//            └──→ DataLoaded
+// ColumnResized ──→ ColumnWidthsChanged
+// FetchData ──→ FetchPending
+//           └──→ DataLoaded (async)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -71,66 +92,110 @@ export const ColumnResized = engine.event<{ column: Column; width: number }>('Co
 
 export let allData = [] as DataRow[]
 export const AllDataChanged = engine.event('AllDataChanged')
-engine.on(DataLoaded, (v: any) => { allData = ((_prev, data) => data)(allData, v); engine.emit(AllDataChanged, allData) })
+engine.on(DataLoaded, [AllDataChanged], (data, setData) => {
+  allData = data
+  setData(allData)
+})
 export let loading = false
 export const LoadingChanged = engine.event('LoadingChanged')
-engine.on(FetchPending, (v: any) => { loading = (() => true)(loading, v); engine.emit(LoadingChanged, loading) })
-engine.on(DataLoaded, (v: any) => { loading = (() => false)(loading, v); engine.emit(LoadingChanged, loading) })
+engine.on(FetchPending, [LoadingChanged], (_payload, setLoading) => {
+  loading = true
+  setLoading(loading)
+})
+engine.on(DataLoaded, [LoadingChanged], (_payload, setLoading) => {
+  loading = false
+  setLoading(loading)
+})
 
 export let sortColumn = null as Column | null
 export const SortColumnChanged = engine.event('SortColumnChanged')
-engine.on(SortChanged, (v: any) => { sortColumn = ((prev, col) => prev === col ? col : col)(sortColumn, v); engine.emit(SortColumnChanged, sortColumn) })
+engine.on(SortChanged, [SortColumnChanged], (col, setSortCol) => {
+  sortColumn = col
+  setSortCol(sortColumn)
+})
 export let sortDir = null as SortDir
 export const SortDirChanged = engine.event('SortDirChanged')
-engine.on(SortChanged, (v: any) => { sortDir = ((prev, col) => {
-  if (sortColumn !== col) return 'asc'
-  if (prev === 'asc') return 'desc'
-  if (prev === 'desc') return null
-  return 'asc'
-})(sortDir, v); engine.emit(SortDirChanged, sortDir) })
+engine.on(SortChanged, [SortDirChanged], (col, setSortDir) => {
+  if (sortColumn !== col) sortDir = 'asc'
+  else if (sortDir === 'asc') sortDir = 'desc'
+  else if (sortDir === 'desc') sortDir = null
+  else sortDir = 'asc'
+  setSortDir(sortDir)
+})
 
 export let filterStatus = ''
 export const FilterStatusChanged = engine.event('FilterStatusChanged')
-engine.on(FilterChanged, (v: any) => { filterStatus = ((_prev, val) => val)(filterStatus, v); engine.emit(FilterStatusChanged, filterStatus) })
+engine.on(FilterChanged, [FilterStatusChanged], (val, setFilter) => {
+  filterStatus = val
+  setFilter(filterStatus)
+})
 export let searchQuery = ''
 export const SearchQueryChanged = engine.event('SearchQueryChanged')
-engine.on(SearchChanged, (v: any) => { searchQuery = ((_prev, q) => q)(searchQuery, v); engine.emit(SearchQueryChanged, searchQuery) })
+engine.on(SearchChanged, [SearchQueryChanged], (q, setQuery) => {
+  searchQuery = q
+  setQuery(searchQuery)
+})
 export let currentPage = 0
 export const CurrentPageChanged = engine.event('CurrentPageChanged')
-engine.on(PageChanged, (v: any) => { currentPage = ((_prev, page) => page)(currentPage, v); engine.emit(CurrentPageChanged, currentPage) })
-engine.on(SearchChanged, (v: any) => { currentPage = (() => 0)(currentPage, v); engine.emit(CurrentPageChanged, currentPage) })
-engine.on(FilterChanged, (v: any) => { currentPage = (() => 0)(currentPage, v); engine.emit(CurrentPageChanged, currentPage) })
+engine.on(PageChanged, [CurrentPageChanged], (page, setPage) => {
+  currentPage = page
+  setPage(currentPage)
+})
+engine.on(SearchChanged, [CurrentPageChanged], (_payload, setPage) => {
+  currentPage = 0
+  setPage(currentPage)
+})
+engine.on(FilterChanged, [CurrentPageChanged], (_payload, setPage) => {
+  currentPage = 0
+  setPage(currentPage)
+})
 
 export let expandedRow = -1
 export const ExpandedRowChanged = engine.event('ExpandedRowChanged')
-engine.on(RowExpanded, (v: any) => { expandedRow = ((prev, id) => prev === id ? -1 : id)(expandedRow, v); engine.emit(ExpandedRowChanged, expandedRow) })
+engine.on(RowExpanded, [ExpandedRowChanged], (id, setExpanded) => {
+  expandedRow = expandedRow === id ? -1 : id
+  setExpanded(expandedRow)
+})
 
 export let selectedRows = new Set<number>()
 const SelectedRowsChanged = engine.event('SelectedRowsChanged')
-engine.on(RowSelected, (v: any) => { selectedRows = ((prev, id) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  })(selectedRows, v); engine.emit(SelectedRowsChanged, selectedRows) })
-engine.on(SelectAll, (v: any) => { selectedRows = ((prev) => {
-  if (prev.size > 0) return new Set<number>()
-  const all = new Set<number>()
-  allData.forEach(r => all.add(r.id))
-  return all
-})(selectedRows, v); engine.emit(SelectedRowsChanged, selectedRows) })
-engine.on(BulkDelete, (v: any) => { selectedRows = (() => new Set<number>())(selectedRows, v); engine.emit(SelectedRowsChanged, selectedRows) })
+engine.on(RowSelected, [SelectedRowsChanged], (id, setSelected) => {
+  const next = new Set(selectedRows)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedRows = next
+  setSelected(selectedRows)
+})
+engine.on(SelectAll, [SelectedRowsChanged], (_payload, setSelected) => {
+  if (selectedRows.size > 0) {
+    selectedRows = new Set<number>()
+  } else {
+    const all = new Set<number>()
+    allData.forEach(r => all.add(r.id))
+    selectedRows = all
+  }
+  setSelected(selectedRows)
+})
+engine.on(BulkDelete, [SelectedRowsChanged], (_payload, setSelected) => {
+  selectedRows = new Set<number>()
+  setSelected(selectedRows)
+})
 
 export let columnWidths: Record<string, number> = { name: 160, email: 220, department: 120, role: 120, salary: 100, status: 90, joinDate: 110 }
 const ColumnWidthsChanged = engine.event('ColumnWidthsChanged')
-engine.on(ColumnResized, (v: any) => { columnWidths = ((prev: Record<string, number>, { column, width }: { column: string; width: number }) => ({ ...prev, [column]: Math.max(60, width) }))(columnWidths, v); engine.emit(ColumnWidthsChanged, columnWidths) })
+engine.on(ColumnResized, [ColumnWidthsChanged], ({ column, width }, setWidths) => {
+  columnWidths = { ...columnWidths, [column]: Math.max(60, width) }
+  setWidths(columnWidths)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Expand row tween                                                  */
 /* ------------------------------------------------------------------ */
 
 const ExpandStart = engine.event('ExpandStart')
-engine.on(RowExpanded, (v: any) => { engine.emit(ExpandStart, (() => undefined)(v)) })
+engine.on(RowExpanded, [ExpandStart], (_payload, setStart) => {
+  setStart(undefined)
+})
 
 export let expandTween = { value: 0, active: false }
 export const ExpandTweenVal = engine.event<number>('ExpandTweenVal')
@@ -195,10 +260,10 @@ export const ExpandTweenVal = engine.event<number>('ExpandTweenVal')
 /*  Bulk delete                                                       */
 /* ------------------------------------------------------------------ */
 
-engine.on(BulkDelete, (v: any) => { engine.emit(DataLoaded, (() => {
+engine.on(BulkDelete, [DataLoaded], (_payload, setLoaded) => {
   const sel = selectedRows
-  return allData.filter(r => !sel.has(r.id))
-})(v)) })
+  setLoaded(allData.filter(r => !sel.has(r.id)))
+})
 
 // Load initial data
 engine.emit(FetchData, undefined)
@@ -228,3 +293,6 @@ const STATUS_COLORS: Record<string, string> = {
 export { STATUS_COLORS }
 
 export { ColumnWidthsChanged, SelectedRowsChanged }
+
+export function startLoop() {}
+export function stopLoop() {}

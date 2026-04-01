@@ -1,3 +1,10 @@
+// DAG
+// NotificationAdded ──→ NotificationsChanged
+// DismissNotification ──→ NotificationsChanged
+// AddNotification ──→ NotificationAdded
+//                 └──→ DismissNotification (delayed auto-dismiss)
+// FloodNotifications ──→ AddNotification (x10 staggered)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -62,20 +69,20 @@ export const NotificationsChanged = engine.event<Notification[]>('NotificationsC
 let nextId = 1
 let notifications: Notification[] = []
 
-engine.on(NotificationAdded, (notif) => {
+engine.on(NotificationAdded, [NotificationsChanged], (notif, setNotifs) => {
   notifications = [notif, ...notifications].slice(0, 20)
-  engine.emit(NotificationsChanged, notifications)
+  setNotifs(notifications)
 })
-engine.on(DismissNotification, (id) => {
+engine.on(DismissNotification, [NotificationsChanged], (id, setNotifs) => {
   notifications = notifications.filter(n => n.id !== id)
-  engine.emit(NotificationsChanged, notifications)
+  setNotifs(notifications)
 })
 
 /* ------------------------------------------------------------------ */
 /*  Add notification logic                                            */
 /* ------------------------------------------------------------------ */
 
-engine.on(AddNotification, ({ title, message, priority }) => {
+engine.on(AddNotification, [NotificationAdded], ({ title, message, priority }, setAdded) => {
   const now = Date.now()
   const notif: Notification = {
     id: nextId++,
@@ -85,7 +92,7 @@ engine.on(AddNotification, ({ title, message, priority }) => {
     createdAt: now,
     dismissAt: now + AUTO_DISMISS_MS[priority],
   }
-  engine.emit(NotificationAdded, notif)
+  setAdded(notif)
 
   // Auto-dismiss
   setTimeout(() => {
@@ -126,3 +133,6 @@ engine.on(FloodNotifications, () => {
 export function getNotifications() { return notifications }
 
 export { PRIORITY_COLORS, PRIORITY_ICONS }
+
+export function startLoop() {}
+export function stopLoop() {}

@@ -1,3 +1,8 @@
+// DAG
+// OpenModal ──→ ModalStackChanged
+// CloseModal ──→ ModalStackChanged
+// CloseAll ──→ ModalStackChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -8,6 +13,9 @@ export const CloseAll = engine.event<void>('CloseAll')
 export const ModalStackChanged = engine.event<ModalConfig[]>('ModalStackChanged')
 let modalStack: ModalConfig[] = []
 
-engine.on(OpenModal, (config) => { if (modalStack.length >= 5) return; modalStack = [...modalStack, config]; engine.emit(ModalStackChanged, modalStack) })
-engine.on(CloseModal, (id) => { modalStack = modalStack.filter((m) => m.id !== id); engine.emit(ModalStackChanged, modalStack) })
-engine.on(CloseAll, () => { modalStack = []; engine.emit(ModalStackChanged, modalStack) })
+engine.on(OpenModal, [ModalStackChanged], (config, setStack) => { if (modalStack.length >= 5) return; modalStack = [...modalStack, config]; setStack(modalStack) })
+engine.on(CloseModal, [ModalStackChanged], (id, setStack) => { modalStack = modalStack.filter((m) => m.id !== id); setStack(modalStack) })
+engine.on(CloseAll, [ModalStackChanged], (_payload, setStack) => { modalStack = []; setStack(modalStack) })
+
+export function startLoop() {}
+export function stopLoop() {}

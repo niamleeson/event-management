@@ -1,3 +1,11 @@
+// DAG
+// DragMove ──→ RotationXTargetChanged
+//          └──→ RotationYTargetChanged
+// SnapToFace ──→ RotationXTargetChanged
+//            └──→ RotationYTargetChanged
+// FaceSelected ──→ SelectedFaceChanged
+// DragEnd ──→ SnapToFace
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -30,19 +38,27 @@ export const SnapDone = engine.event('SnapDone')
 
 export let rotationXTarget = 0
 export const RotationXTargetChanged = engine.event('RotationXTargetChanged')
-engine.on(DragMove, (v: any) => { rotationXTarget = ((prev, { dy }) => prev + dy * 0.4)(rotationXTarget, v); engine.emit(RotationXTargetChanged, rotationXTarget) })
+engine.on(DragMove, [RotationXTargetChanged], ({ dy }, setTargetX) => {
+  rotationXTarget = rotationXTarget + dy * 0.4
+  setTargetX(rotationXTarget)
+})
 export let rotationYTarget = 0
 export const RotationYTargetChanged = engine.event('RotationYTargetChanged')
-engine.on(DragMove, (v: any) => { rotationYTarget = ((prev, { dx }) => prev + dx * 0.4)(rotationYTarget, v); engine.emit(RotationYTargetChanged, rotationYTarget) })
+engine.on(DragMove, [RotationYTargetChanged], ({ dx }, setTargetY) => {
+  rotationYTarget = rotationYTarget + dx * 0.4
+  setTargetY(rotationYTarget)
+})
 
-engine.on(SnapToFace, (v: any) => { rotationXTarget = ((_prev, face) => {
+engine.on(SnapToFace, [RotationXTargetChanged], (face, setTargetX) => {
   const snaps: Record<number, number> = { 4: -90, 5: 90 }
-  return snaps[face] ?? 0
-})(rotationXTarget, v); engine.emit(RotationXTargetChanged, rotationXTarget) })
-engine.on(SnapToFace, (v: any) => { rotationYTarget = ((_prev, face) => {
+  rotationXTarget = snaps[face] ?? 0
+  setTargetX(rotationXTarget)
+})
+engine.on(SnapToFace, [RotationYTargetChanged], (face, setTargetY) => {
   const snaps: Record<number, number> = { 0: 0, 1: -90, 2: -180, 3: -270 }
-  return snaps[face] ?? 0
-})(rotationYTarget, v); engine.emit(RotationYTargetChanged, rotationYTarget) })
+  rotationYTarget = snaps[face] ?? 0
+  setTargetY(rotationYTarget)
+})
 
 export let rotXSpring = { value: 0, velocity: 0, settled: true }
 export const RotXSpringVal = engine.event<number>('RotXSpringVal')
@@ -115,26 +131,32 @@ export const RotYSpringVal = engine.event<number>('RotYSpringVal')
 
 export let selectedFace = -1
 export const SelectedFaceChanged = engine.event('SelectedFaceChanged')
-engine.on(FaceSelected, (v: any) => { selectedFace = ((_prev, idx) => idx)(selectedFace, v); engine.emit(SelectedFaceChanged, selectedFace) })
+engine.on(FaceSelected, [SelectedFaceChanged], (idx, setSelected) => {
+  selectedFace = idx
+  setSelected(selectedFace)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Snap logic                                                        */
 /* ------------------------------------------------------------------ */
 
-engine.on(DragEnd, () => {
+engine.on(DragEnd, [SnapToFace], (_payload, setSnap) => {
   const ry = rotYSpring.value
   const rx = rotXSpring.value
 
   if (rx < -45) {
-    engine.emit(SnapToFace, 4)
+    setSnap(4)
     return
   }
   if (rx > 45) {
-    engine.emit(SnapToFace, 5)
+    setSnap(5)
     return
   }
 
   const normalized = ((ry % 360) + 360) % 360
   const faceIndex = Math.round(normalized / 90) % 4
-  engine.emit(SnapToFace, faceIndex)
+  setSnap(faceIndex)
 })
+
+export function startLoop() {}
+export function stopLoop() {}

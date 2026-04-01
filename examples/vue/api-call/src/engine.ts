@@ -1,3 +1,13 @@
+// DAG
+// SearchInput ──→ SearchQueryChanged
+//             └──→ ErrorChanged
+//             └──→ IsSearchingChanged
+//             └──→ SearchResultsChanged (async debounced)
+// UserSelected ──→ SelectedUserIdChanged
+//              └──→ IsLoadingDetailsChanged
+//              └──→ UserDetailsChanged (async)
+//              └──→ ErrorChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -89,11 +99,11 @@ let searchAbort: AbortController | null = null
 let detailsAbort: AbortController | null = null
 
 // Debounced search
-engine.on(SearchInput, (query: string) => {
+engine.on(SearchInput, [SearchQueryChanged, ErrorChanged], (query: string, setQuery, setError) => {
   searchQuery = query
-  engine.emit(SearchQueryChanged, query)
+  setQuery(query)
   error = null
-  engine.emit(ErrorChanged, null)
+  setError(null)
 
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(async () => {
@@ -125,9 +135,9 @@ engine.on(SearchInput, (query: string) => {
 })
 
 // User details fetch
-engine.on(UserSelected, async (userId: string) => {
+engine.on(UserSelected, [SelectedUserIdChanged], async (userId: string, setSelectedId) => {
   selectedUserId = userId
-  engine.emit(SelectedUserIdChanged, userId)
+  setSelectedId(userId)
 
   if (detailsAbort) detailsAbort.abort()
   detailsAbort = new AbortController()
@@ -159,3 +169,6 @@ export function getError() { return error }
 
 
 export { error, searchQuery, isSearching, userDetails, isLoadingDetails, selectedUserId, searchResults }
+
+export function startLoop() {}
+export function stopLoop() {}

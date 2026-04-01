@@ -1,3 +1,13 @@
+// DAG
+// MetricReceived ──→ ChartDataUpdated
+//                └──→ ThresholdBreached (conditional)
+//                └──→ CurrentMetricsChanged
+// ThresholdBreached ──→ AlertCreated (after 3 breaches)
+// AlertCreated ──→ AlertsChanged
+// AlertDismissed ──→ AlertsChanged
+// ChartDataUpdated ──→ ChartDataChanged
+// FeedToggled ──→ FeedRunningChanged
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -78,31 +88,31 @@ let feedRunning = true
 // ---------------------------------------------------------------------------
 
 // MetricReceived -> ChartDataUpdated (always fires for every metric)
-engine.on(MetricReceived, (metric) => {
-  engine.emit(ChartDataUpdated, {
+engine.on(MetricReceived, [ChartDataUpdated], (metric, setChart) => {
+  setChart({
     name: metric.name,
     point: { timestamp: metric.timestamp, value: metric.value },
   })
 })
 
 // MetricReceived -> ThresholdBreached (conditional: only when value > threshold)
-engine.on(MetricReceived, (metric) => {
+engine.on(MetricReceived, [ThresholdBreached], (metric, setBreach) => {
   const config = METRICS.find((m) => m.name === metric.name)
   if (config && metric.value > config.threshold) {
-    engine.emit(ThresholdBreached, metric)
+    setBreach(metric)
   }
 })
 
 // Track breach counts per metric; create alert when count hits 3
 let breachCounts: Record<string, number> = {}
 
-engine.on(ThresholdBreached, (metric: Metric) => {
+engine.on(ThresholdBreached, [AlertCreated], (metric: Metric, setAlert) => {
   const key = metric.name
   breachCounts[key] = (breachCounts[key] ?? 0) + 1
   if (breachCounts[key] >= 3) {
     breachCounts[key] = 0
     const config = METRICS.find((m) => m.name === metric.name)
-    engine.emit(AlertCreated, {
+    setAlert({
       id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       metric: metric.name,
       value: metric.value,
@@ -126,33 +136,33 @@ engine.on(MetricReceived, (metric: Metric) => {
 // ---------------------------------------------------------------------------
 
 // Current metric values
-engine.on(MetricReceived, (metric) => {
+engine.on(MetricReceived, [CurrentMetricsChanged], (metric, setMetrics) => {
   currentMetrics = { ...currentMetrics, [metric.name]: metric }
-  engine.emit(CurrentMetricsChanged, currentMetrics)
+  setMetrics(currentMetrics)
 })
 
 // Alert list
-engine.on(AlertCreated, (alert) => {
+engine.on(AlertCreated, [AlertsChanged], (alert, setAlerts) => {
   alerts = [alert, ...alerts].slice(0, 20)
-  engine.emit(AlertsChanged, alerts)
+  setAlerts(alerts)
 })
-engine.on(AlertDismissed, (id) => {
+engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
   alerts = alerts.filter((a) => a.id !== id)
-  engine.emit(AlertsChanged, alerts)
+  setAlerts(alerts)
 })
 
 // Chart data (rolling window per metric)
-engine.on(ChartDataUpdated, (update) => {
+engine.on(ChartDataUpdated, [ChartDataChanged], (update, setChartData) => {
   const existing = chartData[update.name] ?? []
   const next = [...existing, update.point].slice(-ROLLING_WINDOW)
   chartData = { ...chartData, [update.name]: next }
-  engine.emit(ChartDataChanged, chartData)
+  setChartData(chartData)
 })
 
 // Feed running state
-engine.on(FeedToggled, (running) => {
+engine.on(FeedToggled, [FeedRunningChanged], (running, setRunning) => {
   feedRunning = running
-  engine.emit(FeedRunningChanged, feedRunning)
+  setRunning(feedRunning)
 })
 
 // ---------------------------------------------------------------------------
@@ -198,3 +208,6 @@ export function getChartData() { return chartData }
 export function getFeedRunning() { return feedRunning }
 
 export { startFeed, stopFeed }
+
+export function startLoop() {}
+export function stopLoop() {}

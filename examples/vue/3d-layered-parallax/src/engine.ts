@@ -1,3 +1,10 @@
+// DAG
+// MouseMoved ──→ TiltXTargetChanged
+//            └──→ TiltYTargetChanged
+// ToggleDayNight ──→ IsNightChanged
+//                └──→ DayNightTweenStart
+// SceneEnter ──→ enterStart[i] (staggered)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -27,10 +34,16 @@ export const DayNightChanged = engine.event<boolean>('DayNightChanged')
 
 export let tiltXTarget = 0
 export const TiltXTargetChanged = engine.event('TiltXTargetChanged')
-engine.on(MouseMoved, (v: any) => { tiltXTarget = ((_prev, { y }) => (y - 0.5) * 15)(tiltXTarget, v); engine.emit(TiltXTargetChanged, tiltXTarget) })
+engine.on(MouseMoved, [TiltXTargetChanged], ({ y }, setTiltX) => {
+  tiltXTarget = (y - 0.5) * 15
+  setTiltX(tiltXTarget)
+})
 export let tiltYTarget = 0
 export const TiltYTargetChanged = engine.event('TiltYTargetChanged')
-engine.on(MouseMoved, (v: any) => { tiltYTarget = ((_prev, { x }) => (x - 0.5) * 15)(tiltYTarget, v); engine.emit(TiltYTargetChanged, tiltYTarget) })
+engine.on(MouseMoved, [TiltYTargetChanged], ({ x }, setTiltY) => {
+  tiltYTarget = (x - 0.5) * 15
+  setTiltY(tiltYTarget)
+})
 
 export let tiltXSpring = { value: 0, velocity: 0, settled: true }
 export const TiltXSpringVal = engine.event<number>('TiltXSpringVal')
@@ -107,11 +120,16 @@ export const TiltYSpringVal = engine.event<number>('TiltYSpringVal')
 
 export let isNight = true
 export const IsNightChanged = engine.event('IsNightChanged')
-engine.on(ToggleDayNight, (v: any) => { isNight = ((prev) => !prev)(isNight, v); engine.emit(IsNightChanged, isNight) })
+engine.on(ToggleDayNight, [IsNightChanged], (_payload, setNight) => {
+  isNight = !isNight
+  setNight(isNight)
+})
 
 // Tween for day/night transition (0=day, 1=night)
 const DayNightTweenStart = engine.event('DayNightTweenStart')
-engine.on(ToggleDayNight, (v: any) => { engine.emit(DayNightTweenStart, (() => undefined)(v)) })
+engine.on(ToggleDayNight, [DayNightTweenStart], (_payload, setStart) => {
+  setStart(undefined)
+})
 
 export let nightAmount = { value: 0, active: false }
 export const NightAmountVal = engine.event<number>('NightAmountVal')
@@ -189,3 +207,6 @@ const TwVal = engine.event<number>('TwVal')
     setTimeout(() => engine.emit(enterStart, undefined), i * 200)
   })
 }
+
+export function startLoop() {}
+export function stopLoop() {}

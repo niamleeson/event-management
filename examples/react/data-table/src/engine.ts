@@ -32,6 +32,23 @@ export interface FilterState {
 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// SortChanged ──→ SortStateChanged
+// FilterChanged ┬──→ FiltersChanged
+//               └──→ CurrentPageChanged
+// PageChanged ──→ CurrentPageChanged
+// RowSelected ──→ SelectedRowsChanged
+// RowExpanded ──→ ExpandedRowsChanged
+// SelectAll ──→ SelectedRowsChanged
+// DeselectAll ──→ SelectedRowsChanged
+// BulkAction ──→ SelectedRowsChanged
+// ColumnResized ──→ ColumnWidthsChanged
+// SearchChanged ┬──→ SearchQueryChanged
+//               └──→ CurrentPageChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
@@ -190,13 +207,13 @@ export function getProcessedData(): {
 // Event handlers
 // ---------------------------------------------------------------------------
 
-engine.on(SortChanged, (state) => {
+engine.on(SortChanged, [SortStateChanged], (state, setSortState) => {
   sortState = state
-  engine.emit(SortStateChanged, sortState)
+  setSortState(sortState)
   simulateLoad()
 })
 
-engine.on(FilterChanged, ({ column, value }) => {
+engine.on(FilterChanged, [FiltersChanged, CurrentPageChanged], ({ column, value }, setFilters, setPage) => {
   const current = { ...filters }
   if (value) {
     current[column] = value
@@ -204,19 +221,19 @@ engine.on(FilterChanged, ({ column, value }) => {
     delete current[column]
   }
   filters = current
-  engine.emit(FiltersChanged, filters)
+  setFilters(filters)
   // Reset to page 1 on filter change
   currentPage = 1
-  engine.emit(CurrentPageChanged, currentPage)
+  setPage(currentPage)
 })
 
-engine.on(PageChanged, (page) => {
+engine.on(PageChanged, [CurrentPageChanged], (page, setPage) => {
   currentPage = page
-  engine.emit(CurrentPageChanged, currentPage)
+  setPage(currentPage)
   simulateLoad()
 })
 
-engine.on(RowSelected, (id) => {
+engine.on(RowSelected, [SelectedRowsChanged], (id, setSelected) => {
   const current = new Set(selectedRows)
   if (current.has(id)) {
     current.delete(id)
@@ -224,10 +241,10 @@ engine.on(RowSelected, (id) => {
     current.add(id)
   }
   selectedRows = current
-  engine.emit(SelectedRowsChanged, selectedRows)
+  setSelected(selectedRows)
 })
 
-engine.on(RowExpanded, (id) => {
+engine.on(RowExpanded, [ExpandedRowsChanged], (id, setExpanded) => {
   const current = new Set(expandedRows)
   if (current.has(id)) {
     current.delete(id)
@@ -235,10 +252,10 @@ engine.on(RowExpanded, (id) => {
     current.add(id)
   }
   expandedRows = current
-  engine.emit(ExpandedRowsChanged, expandedRows)
+  setExpanded(expandedRows)
 })
 
-engine.on(SelectAll, () => {
+engine.on(SelectAll, [SelectedRowsChanged], (_, setSelected) => {
   const { rows } = getProcessedData()
   const allIds = new Set(rows.map((r) => r.id))
   const current = new Set(selectedRows)
@@ -249,30 +266,30 @@ engine.on(SelectAll, () => {
     for (const id of allIds) current.add(id)
   }
   selectedRows = current
-  engine.emit(SelectedRowsChanged, selectedRows)
+  setSelected(selectedRows)
 })
 
-engine.on(DeselectAll, () => {
+engine.on(DeselectAll, [SelectedRowsChanged], (_, setSelected) => {
   selectedRows = new Set()
-  engine.emit(SelectedRowsChanged, selectedRows)
+  setSelected(selectedRows)
 })
 
-engine.on(BulkAction, ({ action, ids }) => {
+engine.on(BulkAction, [SelectedRowsChanged], ({ action, ids }, setSelected) => {
   console.log(`Bulk action: ${action} on ${ids.length} rows`)
   selectedRows = new Set()
-  engine.emit(SelectedRowsChanged, selectedRows)
+  setSelected(selectedRows)
 })
 
-engine.on(ColumnResized, ({ column, width }) => {
+engine.on(ColumnResized, [ColumnWidthsChanged], ({ column, width }, setWidths) => {
   columnWidths = { ...columnWidths, [column]: Math.max(50, width) }
-  engine.emit(ColumnWidthsChanged, columnWidths)
+  setWidths(columnWidths)
 })
 
-engine.on(SearchChanged, (query) => {
+engine.on(SearchChanged, [SearchQueryChanged, CurrentPageChanged], (query, setSearchQuery, setPage) => {
   searchQuery = query
-  engine.emit(SearchQueryChanged, searchQuery)
+  setSearchQuery(searchQuery)
   currentPage = 1
-  engine.emit(CurrentPageChanged, currentPage)
+  setPage(currentPage)
   simulateLoad()
 })
 
@@ -285,3 +302,6 @@ function simulateLoad() {
     engine.emit(IsLoadingChanged, isLoading)
   }, 200)
 }
+
+export function startLoop() {}
+export function stopLoop() {}

@@ -1,6 +1,19 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// StrokeStart ──→ (sets currentStroke signal)
+// StrokeMove  ──→ (updates currentStroke signal)
+// StrokeEnd   ──→ (commits stroke to strokes signal)
+// UndoStroke  ──→ (pops undo stack)
+// RedoStroke  ──→ (pops redo stack)
+// ClearCanvas ──→ (clears all signals)
+// LayerAdded  ──→ LayerSelected
+// LayerToggled ──→ (toggles layer visibility)
+// Frame       ──→ (renders canvas)
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -300,15 +313,21 @@ export function loadProject(snap: any) {
 }
 
 // ---------------------------------------------------------------------------
-// Start frame loop
+// Start/stop frame loop
 // ---------------------------------------------------------------------------
 
-
-// Frame loop
-let _lastFrame = performance.now()
-requestAnimationFrame(function _loop() {
-  const now = performance.now()
-  engine.emit(Frame, now - _lastFrame)
-  _lastFrame = now
-  requestAnimationFrame(_loop)
-})
+let _rafId: number | null = null
+export function startLoop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
+    const now = performance.now()
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
+  }
+  _rafId = requestAnimationFrame(loop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}

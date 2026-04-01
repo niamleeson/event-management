@@ -78,6 +78,17 @@ async function fetchUserDetails(userId: string): Promise<UserDetails> {
 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// SearchInput ──┬──→ SearchQueryChanged
+//               └──→ SearchError
+//               (debounced → doSearch → SearchLoading, SearchDone, SearchError)
+// UserSelected ──┬──→ UserDetailsDone
+//                ├──→ UserDetailsLoading
+//                └──→ SearchError
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
@@ -96,9 +107,9 @@ export const UserDetailsLoading = engine.event<boolean>('UserDetailsLoading')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-engine.on(SearchInput, (query: string) => {
-  engine.emit(SearchQueryChanged, query)
-  engine.emit(SearchError, null)
+engine.on(SearchInput, [SearchQueryChanged, SearchError], (query: string, setQuery, setError) => {
+  setQuery(query)
+  setError(null)
 
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
@@ -129,17 +140,20 @@ async function doSearch(query: string) {
 // Async user details handler
 // ---------------------------------------------------------------------------
 
-engine.on(UserSelected, async (userId: string | null) => {
+engine.on(UserSelected, [UserDetailsDone, UserDetailsLoading, SearchError], async (userId: string | null, setDetails, setLoading, setError) => {
   if (!userId) {
-    engine.emit(UserDetailsDone, null)
+    setDetails(null)
     return
   }
-  engine.emit(UserDetailsLoading, true)
+  setLoading(true)
   try {
     const details = await fetchUserDetails(userId)
-    engine.emit(UserDetailsDone, details)
+    setDetails(details)
   } catch (e: any) {
-    engine.emit(SearchError, e instanceof Error ? e.message : String(e))
+    setError(e instanceof Error ? e.message : String(e))
   }
-  engine.emit(UserDetailsLoading, false)
+  setLoading(false)
 })
+
+export function startLoop() {}
+export function stopLoop() {}

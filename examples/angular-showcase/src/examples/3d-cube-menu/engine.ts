@@ -1,3 +1,11 @@
+// DAG
+// SnapToFace ──→ RotXChanged
+//            └──→ RotYChanged
+// SelectFace ──→ SelectedFaceChanged
+//            └──→ GlowChanged
+// DragEnd ──→ SnapToFace
+//         └──→ SelectFace
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -41,7 +49,7 @@ engine.on(SnapToFace, (idx) => {
   springTo(targetRotY, fy, (v) => { targetRotY = v; engine.emit(RotYChanged, v) })
 })
 
-engine.on(SelectFace, (idx) => { engine.emit(SelectedFaceChanged, idx); engine.emit(GlowChanged, 1) })
+engine.on(SelectFace, [SelectedFaceChanged, GlowChanged], (idx, setSelected, setGlow) => { setSelected(idx); setGlow(1) })
 
 engine.on(DragEnd, () => {
   let bestFace = 0, bestDist = Infinity
@@ -59,3 +67,6 @@ engine.on(DragEnd, () => {
 export function updateTargetRot(x: number, y: number) { targetRotX = x; targetRotY = y; engine.emit(RotXChanged, x); engine.emit(RotYChanged, y) }
 export function getTargetRotX() { return targetRotX }
 export function getTargetRotY() { return targetRotY }
+
+export function startLoop() {}
+export function stopLoop() {}

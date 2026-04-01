@@ -1,7 +1,8 @@
 // ---- Pulse Core — Public API ----
 
 // Engine
-export { Engine, CycleError, createEngine, Skip } from './engine.js'
+export { Engine, CycleError, createEngine, Skip, RuleBuilder } from './engine.js'
+export type { Emitter, RuleHandle } from './engine.js'
 
 // Types
 export type {

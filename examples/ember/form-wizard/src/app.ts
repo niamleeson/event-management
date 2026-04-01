@@ -3,6 +3,7 @@ import { action } from '@ember/object'
 import { TrackedSignal, TrackedTween } from '@pulse/ember'
 import {
   pulse,
+  startLoop,
   currentStep,
   personalInfo,
   contactInfo,
@@ -49,6 +50,7 @@ export default class FormWizardApp extends Component {
 
   constructor(owner: unknown, args: Record<string, unknown>) {
     super(owner, args)
+    startLoop()
     this.step = pulse.createSignal(currentStep)
     this.personal = pulse.createSignal(personalInfo)
     this.contact = pulse.createSignal(contactInfo)

@@ -35,6 +35,23 @@ export interface AlertData {
 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// PriceUpdate ──┬──→ AlertTriggered
+//               ├──→ PricesChanged
+//               └──→ FlashClear (via setTimeout)
+// FlashClear ──→ PricesChanged
+// AlertTriggered ──→ AlertsChanged
+// AlertDismissed ──→ AlertsChanged
+// WatchlistAdd ──→ WatchlistChanged
+// WatchlistRemove ──→ WatchlistChanged
+// TimeframeChanged ──→ TimeframeStateChanged
+// TickerPaused ──→ IsLiveChanged
+// TickerResumed ──→ IsLiveChanged
+// StockSelected ──→ SelectedStockChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
@@ -109,9 +126,9 @@ let selectedStock = 'AAPL'
 
 let alertCounter = 0
 
-engine.on(PriceUpdate, (data) => {
+engine.on(PriceUpdate, [AlertTriggered], (data, triggerAlert) => {
   if (Math.abs(data.change) > 5) {
-    engine.emit(AlertTriggered, {
+    triggerAlert({
       symbol: data.symbol,
       message: `${data.symbol} ${data.change > 0 ? 'surged' : 'dropped'} ${Math.abs(data.change).toFixed(2)}%`,
     })
@@ -122,7 +139,7 @@ engine.on(PriceUpdate, (data) => {
 // Price update handler
 // ---------------------------------------------------------------------------
 
-engine.on(PriceUpdate, (data) => {
+engine.on(PriceUpdate, [PricesChanged], (data, setPrices) => {
   const current = new Map(prices)
   const stock = current.get(data.symbol)
   if (!stock) return
@@ -139,75 +156,75 @@ engine.on(PriceUpdate, (data) => {
     flashTime: Date.now(),
   })
   prices = current
-  engine.emit(PricesChanged, prices)
+  setPrices(prices)
 
   // Clear flash after 800ms
   setTimeout(() => engine.emit(FlashClear, data.symbol), 800)
 })
 
-engine.on(FlashClear, (symbol) => {
+engine.on(FlashClear, [PricesChanged], (symbol, setPrices) => {
   const current = new Map(prices)
   const stock = current.get(symbol)
   if (!stock) return
   current.set(symbol, { ...stock, flashDirection: null })
   prices = current
-  engine.emit(PricesChanged, prices)
+  setPrices(prices)
 })
 
 // ---------------------------------------------------------------------------
 // Alert handlers
 // ---------------------------------------------------------------------------
 
-engine.on(AlertTriggered, ({ symbol, message }) => {
+engine.on(AlertTriggered, [AlertsChanged], ({ symbol, message }, setAlerts) => {
   const id = `alert-${++alertCounter}`
   const alert: AlertData = { id, symbol, message, timestamp: Date.now() }
   alerts = [alert, ...alerts].slice(0, 20)
-  engine.emit(AlertsChanged, alerts)
+  setAlerts(alerts)
 })
 
-engine.on(AlertDismissed, (id) => {
+engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
   alerts = alerts.filter((a) => a.id !== id)
-  engine.emit(AlertsChanged, alerts)
+  setAlerts(alerts)
 })
 
 // ---------------------------------------------------------------------------
 // Watchlist handlers
 // ---------------------------------------------------------------------------
 
-engine.on(WatchlistAdd, (symbol) => {
+engine.on(WatchlistAdd, [WatchlistChanged], (symbol, setWatchlist) => {
   if (!watchlist.includes(symbol)) {
     watchlist = [...watchlist, symbol]
-    engine.emit(WatchlistChanged, watchlist)
+    setWatchlist(watchlist)
   }
 })
 
-engine.on(WatchlistRemove, (symbol) => {
+engine.on(WatchlistRemove, [WatchlistChanged], (symbol, setWatchlist) => {
   watchlist = watchlist.filter((s) => s !== symbol)
-  engine.emit(WatchlistChanged, watchlist)
+  setWatchlist(watchlist)
 })
 
 // ---------------------------------------------------------------------------
 // Other handlers
 // ---------------------------------------------------------------------------
 
-engine.on(TimeframeChanged, (tf) => {
+engine.on(TimeframeChanged, [TimeframeStateChanged], (tf, setTimeframe) => {
   timeframe = tf
-  engine.emit(TimeframeStateChanged, timeframe)
+  setTimeframe(timeframe)
 })
 
-engine.on(TickerPaused, () => {
+engine.on(TickerPaused, [IsLiveChanged], (_, setLive) => {
   isLive = false
-  engine.emit(IsLiveChanged, isLive)
+  setLive(isLive)
 })
 
-engine.on(TickerResumed, () => {
+engine.on(TickerResumed, [IsLiveChanged], (_, setLive) => {
   isLive = true
-  engine.emit(IsLiveChanged, isLive)
+  setLive(isLive)
 })
 
-engine.on(StockSelected, (sym) => {
+engine.on(StockSelected, [SelectedStockChanged], (sym, setSelected) => {
   selectedStock = sym
-  engine.emit(SelectedStockChanged, selectedStock)
+  setSelected(selectedStock)
 })
 
 // ---------------------------------------------------------------------------
@@ -238,3 +255,6 @@ function startTicker() {
 }
 
 startTicker()
+
+export function startLoop() {}
+export function stopLoop() {}

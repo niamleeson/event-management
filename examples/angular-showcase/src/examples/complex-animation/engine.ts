@@ -1,3 +1,15 @@
+// DAG
+// PageLoaded ──→ CardOpacityChanged[i] (via stagger)
+//            └──→ CardTranslateYChanged[i] (via stagger)
+//            └──→ AllEnteredChanged
+//            └──→ AllCardsEntered
+//            └──→ WelcomeOpacityChanged
+//            └──→ WelcomeTranslateYChanged
+// HoverCard[i] ──→ CardScaleChanged[i]
+//              └──→ CardShadowChanged[i]
+// UnhoverCard[i] ──→ CardScaleChanged[i]
+//                └──→ CardShadowChanged[i]
+
 import { createEngine, type EventType } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -107,7 +119,7 @@ const smoothstep = (t: number) => t * t * (3 - 2 * t)
 
 let enteredCount = 0
 
-engine.on(PageLoaded, () => {
+engine.on(PageLoaded, [AllEnteredChanged, AllCardsEntered, WelcomeOpacityChanged, WelcomeTranslateYChanged], (_payload, setAllEntered, _fireAllEntered, setWelcomeOpacity, setWelcomeTranslateY) => {
   enteredCount = 0
   for (let i = 0; i < CARD_COUNT; i++) {
     setTimeout(() => {
@@ -154,3 +166,6 @@ for (let i = 0; i < CARD_COUNT; i++) {
     })
   })
 }
+
+export function startLoop() {}
+export function stopLoop() {}

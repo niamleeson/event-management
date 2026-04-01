@@ -1,3 +1,9 @@
+// DAG
+// CellEdited ──→ CellsChanged
+//            └──→ CellComputed
+//            └──→ FormulaError
+// CellSelected ──→ SelectedCellChanged
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -170,10 +176,10 @@ export const CellSelected = engine.event<CellCoord>('CellSelected')
 export const FormulaError = engine.event<FormulaErrorPayload>('FormulaError')
 
 // ---------------------------------------------------------------------------
-// Pipe: CellEdited -> CellComputed
+// Pipe: CellEdited -> CellComputed / FormulaError
 // ---------------------------------------------------------------------------
 
-engine.on(CellEdited, (v: any) => { const _r = ((payload: CellEditPayload) => {
+engine.on(CellEdited, [CellComputed, FormulaError], (payload: CellEditPayload, setComputed, setError) => {
   const currentGrid = cells
   const tempGrid = currentGrid.map(row => row.map(cell => ({ ...cell })))
   tempGrid[payload.row][payload.col] = { raw: payload.value, computed: payload.value }
@@ -181,22 +187,14 @@ engine.on(CellEdited, (v: any) => { const _r = ((payload: CellEditPayload) => {
   if (payload.value.startsWith('=')) {
     try {
       const result = evaluateFormula(payload.value, tempGrid, payload.row, payload.col)
-      return [
-        { row: payload.row, col: payload.col, result },
-        undefined,
-      ]
+      setComputed({ row: payload.row, col: payload.col, result })
     } catch (err: any) {
-      return [
-        undefined,
-        { row: payload.row, col: payload.col, error: err.message },
-      ]
+      setError({ row: payload.row, col: payload.col, error: err.message })
     }
+  } else {
+    setComputed({ row: payload.row, col: payload.col, result: payload.value })
   }
-  return [
-    { row: payload.row, col: payload.col, result: payload.value },
-    undefined,
-  ]
-})(v); if (_r[0] !== undefined) engine.emit(CellComputed, _r[0]); if (_r[1] !== undefined) engine.emit(FormulaError, _r[1]) })
+})
 
 // ---------------------------------------------------------------------------
 // Signals
@@ -204,20 +202,27 @@ engine.on(CellEdited, (v: any) => { const _r = ((payload: CellEditPayload) => {
 
 export let cells = makeEmptyGrid()
 export const CellsChanged = engine.event('CellsChanged')
-engine.on(CellEdited, (v: any) => { cells = ((prev, payload) => {
-  const newGrid = prev.map(row => row.map(cell => ({ ...cell })))
+engine.on(CellEdited, [CellsChanged], (payload, setCells) => {
+  const newGrid = cells.map(row => row.map(cell => ({ ...cell })))
   newGrid[payload.row][payload.col] = {
     raw: payload.value,
     computed: payload.value,
   }
-  return recomputeGrid(newGrid)
-})(cells, v); engine.emit(CellsChanged, cells) })
+  cells = recomputeGrid(newGrid)
+  setCells(cells)
+})
 
 export let selectedCell = { row: 0, col: 0 }
 export const SelectedCellChanged = engine.event('SelectedCellChanged')
-engine.on(CellSelected, (v: any) => { selectedCell = ((_prev, coord) => coord)(selectedCell, v); engine.emit(SelectedCellChanged, selectedCell) })
+engine.on(CellSelected, [SelectedCellChanged], (coord, setSelected) => {
+  selectedCell = coord
+  setSelected(selectedCell)
+})
 
 
 
 
 export { colLabel, ROWS, COLS }
+
+export function startLoop() {}
+export function stopLoop() {}

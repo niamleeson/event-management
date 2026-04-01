@@ -2,6 +2,18 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// OpenModal ──┬──→ ModalStackChanged
+//             └──→ ActiveModalIdChanged
+// CloseModal ─┬──→ ModalStackChanged
+//             └──→ ActiveModalIdChanged
+// CloseAll ──→ CloseModal (per modal)
+// ConfirmAction ──→ CloseModal (chain)
+// CancelAction ──→ CloseModal (chain)
+// ---------------------------------------------------------------------------
+
 export type ModalSize = 'small' | 'medium' | 'large'
 
 export interface ModalData {
@@ -27,13 +39,13 @@ export const ActiveModalIdChanged = engine.event<string | null>('ActiveModalIdCh
 let modalStack: ModalData[] = []
 let activeModalId: string | null = null
 
-engine.on(OpenModal, ({ id, title, content, size }) => {
+engine.on(OpenModal, [ModalStackChanged, ActiveModalIdChanged], ({ id, title, content, size }, setStack, setActive) => {
   if (modalStack.find((m) => m.id === id)) return
   const modal: ModalData = { id, title, content, size, state: 'entering' }
   modalStack = [...modalStack, modal]
   activeModalId = id
-  engine.emit(ModalStackChanged, [...modalStack])
-  engine.emit(ActiveModalIdChanged, activeModalId)
+  setStack([...modalStack])
+  setActive(activeModalId)
 
   setTimeout(() => {
     modalStack = modalStack.map((m) => m.id === id ? { ...m, state: 'open' as const } : m)
@@ -41,11 +53,11 @@ engine.on(OpenModal, ({ id, title, content, size }) => {
   }, 50)
 })
 
-engine.on(CloseModal, (id) => {
+engine.on(CloseModal, [ModalStackChanged, ActiveModalIdChanged], (id, setStack, setActive) => {
   const modal = modalStack.find((m) => m.id === id)
   if (!modal || modal.state === 'exiting') return
   modalStack = modalStack.map((m) => m.id === id ? { ...m, state: 'exiting' as const } : m)
-  engine.emit(ModalStackChanged, [...modalStack])
+  setStack([...modalStack])
 
   setTimeout(() => {
     modalStack = modalStack.filter((m) => m.id !== id)
@@ -61,5 +73,8 @@ engine.on(CloseAll, () => {
   toClose.forEach((m, i) => setTimeout(() => engine.emit(CloseModal, m.id), i * 100))
 })
 
-engine.on(ConfirmAction, (id) => engine.emit(CloseModal, id))
-engine.on(CancelAction, (id) => engine.emit(CloseModal, id))
+engine.on(ConfirmAction).emit(CloseModal)
+engine.on(CancelAction).emit(CloseModal)
+
+export function startLoop() {}
+export function stopLoop() {}

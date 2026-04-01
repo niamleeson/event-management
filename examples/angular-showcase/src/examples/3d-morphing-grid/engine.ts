@@ -1,3 +1,7 @@
+// DAG
+// CycleMorph ──→ CellShapesChanged
+//            └──→ MorphProgressChanged[i]
+
 import { createEngine, type EventType } from '@pulse/core'
 
 export const engine = createEngine()
@@ -20,9 +24,9 @@ function animateTo(from: number, to: number, dur: number, ease: (t: number) => n
   requestAnimationFrame(tick)
 }
 
-engine.on(CycleMorph, () => {
+engine.on(CycleMorph, [CellShapesChanged], (_payload, setShapes) => {
   cellShapes = cellShapes.map((s) => (s + 1) % SHAPES.length)
-  engine.emit(CellShapesChanged, cellShapes)
+  setShapes(cellShapes)
   for (let i = 0; i < CELL_COUNT; i++) {
     const row = Math.floor(i / GRID_SIZE), col = i % GRID_SIZE, delay = (row + col) * 80, idx = i
     setTimeout(() => animateTo(0, 1, 500, (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, (v) => engine.emit(MorphProgressChanged[idx], { index: idx, value: v })), delay)
@@ -32,3 +36,6 @@ engine.on(CycleMorph, () => {
 let autoCycleTimer: ReturnType<typeof setInterval> | null = null
 export function startAutoCycle() { if (autoCycleTimer) return; autoCycleTimer = setInterval(() => engine.emit(CycleMorph, undefined), 3000) }
 export function stopAutoCycle() { if (autoCycleTimer) { clearInterval(autoCycleTimer); autoCycleTimer = null } }
+
+export function startLoop() { startAutoCycle() }
+export function stopLoop() { stopAutoCycle() }

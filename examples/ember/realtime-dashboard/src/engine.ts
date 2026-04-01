@@ -1,3 +1,8 @@
+// DAG
+// MetricReceived ──→ CurrentMetricsChanged, ChartDataChanged, AlertsChanged
+// AlertDismissed ──→ AlertsChanged
+// FeedToggled ──→ FeedRunningChanged
+
 import { createEngine } from '@pulse/core'
 import { createPulseService } from '@pulse/ember'
 
@@ -11,225 +16,160 @@ export const engine = createEngine()
 // Types
 // ---------------------------------------------------------------------------
 
-export interface MetricPoint {
-  time: number
+export interface Metric {
+  name: string
   value: number
+  unit: string
+  timestamp: number
 }
 
 export interface Alert {
   id: string
   metric: string
-  message: string
-  severity: 'warning' | 'critical'
+  value: number
+  threshold: number
   timestamp: number
+  message: string
 }
 
-export interface DashboardMetrics {
-  cpu: number
-  memory: number
-  requests: number
-  errorRate: number
-  latency: number
+export interface ChartDataPoint {
+  timestamp: number
+  value: number
 }
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+export const METRICS = [
+  { name: 'CPU Usage', unit: '%', threshold: 80, baseValue: 45 },
+  { name: 'Memory', unit: '%', threshold: 85, baseValue: 62 },
+  { name: 'Latency', unit: 'ms', threshold: 200, baseValue: 120 },
+  { name: 'Requests/s', unit: 'req/s', threshold: 1000, baseValue: 650 },
+]
+
+const ROLLING_WINDOW = 30
 
 // ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
-export const DataTick = engine.event<DashboardMetrics>('DataTick')
-export const CpuUpdated = engine.event<number>('CpuUpdated')
-export const MemoryUpdated = engine.event<number>('MemoryUpdated')
-export const RequestsUpdated = engine.event<number>('RequestsUpdated')
-export const ErrorRateUpdated = engine.event<number>('ErrorRateUpdated')
-export const LatencyUpdated = engine.event<number>('LatencyUpdated')
-export const CpuThresholdBreached = engine.event<number>('CpuThresholdBreached')
-export const MemoryThresholdBreached = engine.event<number>('MemoryThresholdBreached')
-export const AlertRaised = engine.event<Alert>('AlertRaised')
+export const MetricReceived = engine.event<Metric>('MetricReceived')
 export const AlertDismissed = engine.event<string>('AlertDismissed')
-export const FeedStarted = engine.event<void>('FeedStarted')
-export const FeedStopped = engine.event<void>('FeedStopped')
-export const ChartTweenStart = engine.event<void>('ChartTweenStart')
+export const FeedToggled = engine.event<boolean>('FeedToggled')
+
+// State change events
+export const CurrentMetricsChanged = engine.event<Record<string, Metric>>('CurrentMetricsChanged')
+export const AlertsChanged = engine.event<Alert[]>('AlertsChanged')
+export const ChartDataChanged = engine.event<Record<string, ChartDataPoint[]>>('ChartDataChanged')
+export const FeedRunningChanged = engine.event<boolean>('FeedRunningChanged')
 
 // ---------------------------------------------------------------------------
-// Pipes: fan out DataTick to individual metric events
+// State
 // ---------------------------------------------------------------------------
 
-engine.pipe(DataTick, CpuUpdated, (m) => m.cpu)
-engine.pipe(DataTick, MemoryUpdated, (m) => m.memory)
-engine.pipe(DataTick, RequestsUpdated, (m) => m.requests)
-engine.pipe(DataTick, ErrorRateUpdated, (m) => m.errorRate)
-engine.pipe(DataTick, LatencyUpdated, (m) => m.latency)
-
-// ---------------------------------------------------------------------------
-// Threshold detection with engine.when
-// ---------------------------------------------------------------------------
-
-// CPU signal for threshold checking
-export const cpuValue = engine.signal<number>(
-  CpuUpdated,
-  0,
-  (_prev, val) => val,
+let currentMetrics: Record<string, Metric> = {}
+let alerts: Alert[] = []
+let chartData: Record<string, ChartDataPoint[]> = Object.fromEntries(
+  METRICS.map((m) => [m.name, []])
 )
+let feedRunning = true
 
-// Memory signal for threshold checking
-export const memoryValue = engine.signal<number>(
-  MemoryUpdated,
-  0,
-  (_prev, val) => val,
-)
+// Breach tracking for alert generation
+let breachCount = 0
+let lastBreachTime = 0
 
-// Fire threshold events when values exceed limits
-engine.when(cpuValue, (v) => v > 85, CpuThresholdBreached)
-engine.when(memoryValue, (v) => v > 90, MemoryThresholdBreached)
+// Throttle chart updates
+let lastChartUpdate = 0
 
 // ---------------------------------------------------------------------------
-// Join: both CPU and Memory breached = critical alert
+// Handlers
 // ---------------------------------------------------------------------------
 
-engine.join([CpuThresholdBreached, MemoryThresholdBreached], AlertRaised, {
-  do: (cpu: number, mem: number): Alert => ({
-    id: crypto.randomUUID(),
-    metric: 'system',
-    message: `Critical: CPU at ${cpu.toFixed(0)}% AND Memory at ${mem.toFixed(0)}%`,
-    severity: 'critical',
-    timestamp: Date.now(),
-  }),
+engine.on(MetricReceived, [CurrentMetricsChanged, ChartDataChanged, AlertsChanged], (metric, setMetrics, setChart, setAlerts) => {
+  // Update current metrics
+  currentMetrics = { ...currentMetrics, [metric.name]: metric }
+  setMetrics({ ...currentMetrics })
+
+  // Throttled chart update (max once per second)
+  const now = Date.now()
+  if (now - lastChartUpdate >= 1000) {
+    lastChartUpdate = now
+    const existing = chartData[metric.name] ?? []
+    const next = [...existing, { timestamp: metric.timestamp, value: metric.value }].slice(-ROLLING_WINDOW)
+    chartData = { ...chartData, [metric.name]: next }
+    setChart({ ...chartData })
+  }
+
+  // Threshold breach detection
+  const config = METRICS.find((m) => m.name === metric.name)
+  if (config && metric.value > config.threshold) {
+    breachCount++
+    if (breachCount >= 3 && now - lastBreachTime > 10000) {
+      lastBreachTime = now
+      breachCount = 0
+      const alert: Alert = {
+        id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        metric: metric.name,
+        value: metric.value,
+        threshold: config.threshold,
+        timestamp: Date.now(),
+        message: `${metric.name} exceeded threshold ${config.threshold}${config.unit} (current: ${metric.value.toFixed(1)}${config.unit})`,
+      }
+      alerts = [alert, ...alerts].slice(0, 20)
+      setAlerts([...alerts])
+    }
+  }
 })
 
-// Individual threshold alerts
-engine.pipe(CpuThresholdBreached, AlertRaised, (cpu): Alert => ({
-  id: crypto.randomUUID(),
-  metric: 'cpu',
-  message: `CPU usage at ${cpu.toFixed(0)}%`,
-  severity: 'warning',
-  timestamp: Date.now(),
-}))
+engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
+  alerts = alerts.filter((a) => a.id !== id)
+  setAlerts([...alerts])
+})
 
-engine.pipe(MemoryThresholdBreached, AlertRaised, (mem): Alert => ({
-  id: crypto.randomUUID(),
-  metric: 'memory',
-  message: `Memory usage at ${mem.toFixed(0)}%`,
-  severity: 'warning',
-  timestamp: Date.now(),
-}))
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-const MAX_HISTORY = 30
-
-// CPU history (for chart)
-export const cpuHistory = engine.signal<MetricPoint[]>(
-  CpuUpdated,
-  [],
-  (prev, val) => {
-    const next = [...prev, { time: Date.now(), value: val }]
-    return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next
-  },
-)
-
-// Memory history
-export const memoryHistory = engine.signal<MetricPoint[]>(
-  MemoryUpdated,
-  [],
-  (prev, val) => {
-    const next = [...prev, { time: Date.now(), value: val }]
-    return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next
-  },
-)
-
-// Request count
-export const requestCount = engine.signal<number>(
-  RequestsUpdated,
-  0,
-  (prev, val) => prev + val,
-)
-
-// Error rate
-export const errorRate = engine.signal<number>(
-  ErrorRateUpdated,
-  0,
-  (_prev, val) => val,
-)
-
-// Latency
-export const latencyValue = engine.signal<number>(
-  LatencyUpdated,
-  0,
-  (_prev, val) => val,
-)
-
-// Alert list
-export const alerts = engine.signal<Alert[]>(
-  AlertRaised,
-  [],
-  (prev, alert) => {
-    const next = [alert, ...prev]
-    return next.length > 10 ? next.slice(0, 10) : next
-  },
-)
-
-engine.signalUpdate(alerts, AlertDismissed, (prev, id) =>
-  prev.filter((a) => a.id !== id),
-)
-
-// Feed running state
-export const feedRunning = engine.signal<boolean>(
-  FeedStarted,
-  false,
-  () => true,
-)
-engine.signalUpdate(feedRunning, FeedStopped, () => false)
-
-// ---------------------------------------------------------------------------
-// Tween: chart bar animation on new data
-// ---------------------------------------------------------------------------
-
-engine.pipe(DataTick, ChartTweenStart, () => undefined)
-
-export const chartTween = engine.tween({
-  start: ChartTweenStart,
-  from: 0,
-  to: 1,
-  duration: 300,
-  easing: 'easeOut',
+engine.on(FeedToggled, [FeedRunningChanged], (running, setRunning) => {
+  feedRunning = running
+  setRunning(running)
 })
 
 // ---------------------------------------------------------------------------
-// Mock data feed
+// Mock WebSocket data feed
 // ---------------------------------------------------------------------------
 
 let feedInterval: ReturnType<typeof setInterval> | null = null
 
-export function startFeed(): void {
+export function startFeed() {
   if (feedInterval) return
-  engine.emit(FeedStarted, undefined)
-
   feedInterval = setInterval(() => {
-    engine.emit(DataTick, {
-      cpu: 40 + Math.random() * 55,        // 40-95%
-      memory: 50 + Math.random() * 45,     // 50-95%
-      requests: Math.floor(Math.random() * 200),
-      errorRate: Math.random() * 8,         // 0-8%
-      latency: 20 + Math.random() * 180,    // 20-200ms
-    })
-  }, 1500)
+    if (!feedRunning) return
+    for (const config of METRICS) {
+      const spike = Math.random() < 0.15 ? config.threshold * 0.4 : 0
+      const noise = (Math.random() - 0.5) * config.baseValue * 0.3
+      const value = Math.max(0, config.baseValue + noise + spike)
+
+      engine.emit(MetricReceived, {
+        name: config.name,
+        value,
+        unit: config.unit,
+        timestamp: Date.now(),
+      })
+    }
+  }, 1000)
 }
 
-export function stopFeed(): void {
+export function stopFeed() {
   if (feedInterval) {
     clearInterval(feedInterval)
     feedInterval = null
   }
-  engine.emit(FeedStopped, undefined)
 }
 
 // ---------------------------------------------------------------------------
-// Start the frame loop for tween updates
+// Start/stop loop (no-op: this example has no animation frame loop)
 // ---------------------------------------------------------------------------
 
-engine.startFrameLoop()
+export function startLoop() {}
+export function stopLoop() {}
 
 // ---------------------------------------------------------------------------
 // Pulse Service

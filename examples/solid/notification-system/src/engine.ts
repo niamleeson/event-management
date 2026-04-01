@@ -1,5 +1,25 @@
 import { createEngine } from '@pulse/core'
 
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// NotifyInfo    ──┬──→ NotificationsChanged
+//                 └──→ CountChanged
+//
+// NotifySuccess ──┬──→ NotificationsChanged
+//                 └──→ CountChanged
+//
+// NotifyWarning ──┬──→ NotificationsChanged
+//                 └──→ CountChanged
+//
+// NotifyError   ──┬──→ NotificationsChanged
+//                 └──→ CountChanged
+//
+// DismissNotification ──┬──→ NotificationsChanged
+//                       └──→ CountChanged
+//
+// DismissAll ──→ DismissNotification (per notification)
+
 export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
@@ -108,3 +128,6 @@ engine.on(DismissAll, () => {
     if (!n.exiting) dismiss(n.id)
   }
 })
+
+export function startLoop() {}
+export function stopLoop() {}

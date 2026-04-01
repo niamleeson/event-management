@@ -1,3 +1,13 @@
+// DAG
+// ScrollTo ──→ ScrollTopChanged
+//          └──→ FetchPage (prefetch nearby)
+// SearchChanged ──→ SearchQueryChanged
+// PageLoaded ──→ LoadedPagesChanged
+//            └──→ LoadingPagesChanged
+// FetchPending ──→ LoadingPagesChanged
+// FetchPage ──→ FetchPending
+//           └──→ PageLoaded (async)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 
@@ -55,32 +65,41 @@ export const FetchPending = engine.event<number>('FetchPending')
 
 export let scrollTop = 0
 export const ScrollTopChanged = engine.event('ScrollTopChanged')
-engine.on(ScrollTo, (v: any) => { scrollTop = ((_prev, val) => val)(scrollTop, v); engine.emit(ScrollTopChanged, scrollTop) })
+engine.on(ScrollTo, [ScrollTopChanged], (val, setScroll) => {
+  scrollTop = val
+  setScroll(scrollTop)
+})
 
 export let searchQuery = ''
 export const SearchQueryChanged = engine.event('SearchQueryChanged')
-engine.on(SearchChanged, (v: any) => { searchQuery = ((_prev, q) => q)(searchQuery, v); engine.emit(SearchQueryChanged, searchQuery) })
+engine.on(SearchChanged, [SearchQueryChanged], (q, setQuery) => {
+  searchQuery = q
+  setQuery(searchQuery)
+})
 
 export let loadedPages = new Map<number, Item[]>()
 const LoadedPagesChanged = engine.event('LoadedPagesChanged')
-engine.on(PageLoaded, (v: any) => { loadedPages = ((prev: Map<number, Item[]>, { page, items }: { page: number; items: Item[] }) => {
-    const next = new Map(prev)
-    next.set(page, items)
-    return next
-  })(loadedPages, v); engine.emit(LoadedPagesChanged, loadedPages) })
+engine.on(PageLoaded, [LoadedPagesChanged], ({ page, items }, setLoaded) => {
+  const next = new Map(loadedPages)
+  next.set(page, items)
+  loadedPages = next
+  setLoaded(loadedPages)
+})
 
 let loadingPages = new Set<number>()
 const LoadingPagesChanged = engine.event('LoadingPagesChanged')
-engine.on(FetchPending, (v: any) => { loadingPages = ((prev, page) => {
-  const next = new Set(prev)
+engine.on(FetchPending, [LoadingPagesChanged], (page, setLoading) => {
+  const next = new Set(loadingPages)
   next.add(page)
-  return next
-})(loadingPages, v); engine.emit(LoadingPagesChanged, loadingPages) })
-engine.on(PageLoaded, (v: any) => { loadingPages = ((prev, { page }) => {
-  const next = new Set(prev)
+  loadingPages = next
+  setLoading(loadingPages)
+})
+engine.on(PageLoaded, [LoadingPagesChanged], ({ page }, setLoading) => {
+  const next = new Set(loadingPages)
   next.delete(page)
-  return next
-})(loadingPages, v); engine.emit(LoadingPagesChanged, loadingPages) })
+  loadingPages = next
+  setLoading(loadingPages)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Async page fetching                                               */
@@ -134,3 +153,6 @@ engine.emit(FetchPage, 0)
 export { loadingPages }
 
 export { LoadingPagesChanged, LoadedPagesChanged }
+
+export function startLoop() {}
+export function stopLoop() {}

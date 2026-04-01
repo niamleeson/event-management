@@ -1,3 +1,10 @@
+// DAG
+// MetricReceived ──→ CurrentMetricsChanged
+//                └──→ ChartDataChanged
+//                └──→ AlertsChanged (via threshold breach)
+// AlertDismissed ──→ AlertsChanged
+// FeedToggled ──→ FeedRunningChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -33,15 +40,15 @@ let chartData: Record<string, ChartDataPoint[]> = Object.fromEntries(METRICS.map
 let feedRunning = true
 let breachCounts: Record<string, number> = {}
 
-engine.on(MetricReceived, (metric) => {
+engine.on(MetricReceived, [CurrentMetricsChanged, ChartDataChanged, AlertsChanged], (metric, setMetrics, setChart, setAlerts) => {
   currentMetrics = { ...currentMetrics, [metric.name]: metric }
-  engine.emit(CurrentMetricsChanged, currentMetrics)
+  setMetrics(currentMetrics)
 
   // Update chart
   const existing = chartData[metric.name] ?? []
   const next = [...existing, { timestamp: metric.timestamp, value: metric.value }].slice(-ROLLING_WINDOW)
   chartData = { ...chartData, [metric.name]: next }
-  engine.emit(ChartDataChanged, chartData)
+  setChart(chartData)
 
   // Threshold check
   const config = METRICS.find((m) => m.name === metric.name)
@@ -56,21 +63,21 @@ engine.on(MetricReceived, (metric) => {
         message: `${metric.name} exceeded threshold ${config.threshold}${config.unit} (current: ${metric.value.toFixed(1)}${config.unit})`,
       }
       alerts = [alert, ...alerts].slice(0, 20)
-      engine.emit(AlertsChanged, alerts)
+      setAlerts(alerts)
     }
   } else if (config) {
     breachCounts[metric.name] = 0
   }
 })
 
-engine.on(AlertDismissed, (id) => {
+engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
   alerts = alerts.filter((a) => a.id !== id)
-  engine.emit(AlertsChanged, alerts)
+  setAlerts(alerts)
 })
 
-engine.on(FeedToggled, (running) => {
+engine.on(FeedToggled, [FeedRunningChanged], (running, setRunning) => {
   feedRunning = running
-  engine.emit(FeedRunningChanged, running)
+  setRunning(running)
 })
 
 let feedInterval: ReturnType<typeof setInterval> | null = null
@@ -91,3 +98,6 @@ export function startFeed() {
 export function stopFeed() {
   if (feedInterval) { clearInterval(feedInterval); feedInterval = null }
 }
+
+export function startLoop() { startFeed() }
+export function stopLoop() { stopFeed() }

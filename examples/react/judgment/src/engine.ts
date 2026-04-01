@@ -2,6 +2,30 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// MouseMoved ──→ (proximity checks: CursorNearHeaven, CursorLeftHeaven,
+//                 CursorNearHell, CursorVeryCloseHell, CursorLeftHell,
+//                 ShakeDetected)
+// CursorNearHeaven ──→ NPCBow (chain)
+// CursorLeftHeaven ──→ NPCStopBow (chain)
+// CursorNearHell ──→ NPCReach (chain)
+// CursorLeftHell ──→ NPCStopReach (chain)
+// CursorVeryCloseHell ──→ NPCCling (chain)
+// ShakeDetected ──→ NPCShakenOff (chain)
+// NPCBow / NPCStopBow / NPCReach / NPCStopReach / NPCCling / NPCShakenOff
+//   (terminal — mutate NPC state directly)
+// MouseDown ──→ GrabNPC
+// GrabNPC (terminal — mutates NPC state)
+// MouseUp ──→ DropNPC
+// DropNPC ──→ NPCLanded
+// NPCLanded ──→ SpawnNext
+// SpawnNext (terminal — spawns NPC)
+// NPCSettledHeaven / NPCSettledHell (terminal — mutate NPC state)
+// Frame (terminal — physics tick)
+// ---------------------------------------------------------------------------
+
 // ── Types ──
 
 export type Zone = 'queue' | 'heaven' | 'hell' | 'falling' | 'dragging' | 'clinging'
@@ -204,29 +228,17 @@ engine.on(MouseMoved, (pos) => {
 // PROXIMITY → REACTIONS
 // ════════════════════════════════
 
-engine.on(CursorNearHeaven, ({ id }) => {
-  engine.emit(NPCBow, id)
-})
+engine.on(CursorNearHeaven).emit(NPCBow, ({ id }) => id)
 
-engine.on(CursorLeftHeaven, (id) => {
-  engine.emit(NPCStopBow, id)
-})
+engine.on(CursorLeftHeaven).emit(NPCStopBow)
 
-engine.on(CursorNearHell, ({ id, angle }) => {
-  engine.emit(NPCReach, { id, angle })
-})
+engine.on(CursorNearHell).emit(NPCReach, ({ id, angle }) => ({ id, angle }))
 
-engine.on(CursorLeftHell, (id) => {
-  engine.emit(NPCStopReach, id)
-})
+engine.on(CursorLeftHell).emit(NPCStopReach)
 
-engine.on(CursorVeryCloseHell, (id) => {
-  engine.emit(NPCCling, id)
-})
+engine.on(CursorVeryCloseHell).emit(NPCCling)
 
-engine.on(ShakeDetected, ({ id }) => {
-  engine.emit(NPCShakenOff, id)
-})
+engine.on(ShakeDetected).emit(NPCShakenOff, ({ id }) => id)
 
 // ════════════════════════════════
 // REACTIONS → STATE CHANGES
@@ -286,7 +298,7 @@ engine.on(NPCShakenOff, (id) => {
 // GRAB / DROP
 // ════════════════════════════════
 
-engine.on(MouseDown, (pos) => {
+engine.on(MouseDown, [GrabNPC], (pos, grabNPC) => {
   let closest: string | null = null
   let closestDist = NPC_SIZE * 1.5
   for (const [id, s] of npcs) {
@@ -294,7 +306,7 @@ engine.on(MouseDown, (pos) => {
     const d = distPt(pos, { x: s.x, y: s.y })
     if (d < closestDist) { closest = id; closestDist = d }
   }
-  if (closest) engine.emit(GrabNPC, closest)
+  if (closest) grabNPC(closest)
 })
 
 engine.on(GrabNPC, (id) => {
@@ -308,13 +320,13 @@ engine.on(GrabNPC, (id) => {
   s.expression = 'terrified'
 })
 
-engine.on(MouseUp, (pos) => {
+engine.on(MouseUp, [DropNPC], (pos, dropNPC) => {
   if (!dragId) return
-  engine.emit(DropNPC, { id: dragId, x: pos.x, y: pos.y })
+  dropNPC({ id: dragId, x: pos.x, y: pos.y })
   dragId = null
 })
 
-engine.on(DropNPC, ({ id, x, y }) => {
+engine.on(DropNPC, [NPCLanded], ({ id, x, y }, npcLanded) => {
   const s = npcs.get(id)
   if (!s) return
   if (y < screenH * QUEUE_HEIGHT + 40) {
@@ -328,11 +340,11 @@ engine.on(DropNPC, ({ id, x, y }) => {
   if (x / screenW < DIVIDER_X) {
     s.velY = 2
     s.expression = 'terrified'
-    engine.emit(NPCLanded, { id, zone: 'hell' })
+    npcLanded({ id, zone: 'hell' })
   } else {
     s.velY = -2
     s.expression = 'happy'
-    engine.emit(NPCLanded, { id, zone: 'heaven' })
+    npcLanded({ id, zone: 'heaven' })
   }
 })
 
@@ -340,10 +352,10 @@ engine.on(DropNPC, ({ id, x, y }) => {
 // LANDING / SETTLING → SCORE
 // ════════════════════════════════
 
-engine.on(NPCLanded, ({ zone }) => {
+engine.on(NPCLanded, [SpawnNext], ({ zone }, spawnNext) => {
   if (zone === 'heaven') score.heaven++
   if (zone === 'hell') score.hell++
-  engine.emit(SpawnNext, undefined)
+  spawnNext(undefined)
 })
 
 engine.on(SpawnNext, () => {
@@ -380,7 +392,7 @@ engine.on(NPCSettledHell, (id) => {
 // FRAME — PHYSICS ONLY
 // ════════════════════════════════
 
-engine.on(Frame, (dt) => {
+engine.on(Frame, [NPCSettledHeaven, NPCSettledHell], (dt, settledHeaven, settledHell) => {
   const dtSec = Math.min(dt / 1000, 0.05)
   const gravity = 800
   screenW = window.innerWidth
@@ -425,7 +437,7 @@ engine.on(Frame, (dt) => {
           s.velY = 0
           s.targetX = screenW * DIVIDER_X + 40 + Math.random() * (screenW * 0.45)
           s.targetY = settleY
-          engine.emit(NPCSettledHeaven, id)
+          settledHeaven(id)
         }
       } else {
         s.velY += gravity * dtSec
@@ -438,7 +450,7 @@ engine.on(Frame, (dt) => {
           s.velY *= -0.4
           if (Math.abs(s.velY) < 30) {
             s.velY = 0
-            engine.emit(NPCSettledHell, id)
+            settledHell(id)
           }
         }
       }
@@ -479,19 +491,18 @@ engine.on(Frame, (dt) => {
 })
 
 // ── Frame loop ──
-let lastTime = performance.now()
-let rafId: number
-
+let _rafId: number | null = null
 export function startLoop() {
-  function loop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
     const now = performance.now()
-    engine.emit(Frame, now - lastTime)
-    lastTime = now
-    rafId = requestAnimationFrame(loop)
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
   }
-  rafId = requestAnimationFrame(loop)
+  _rafId = requestAnimationFrame(loop)
 }
-
 export function stopLoop() {
-  cancelAnimationFrame(rafId)
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }

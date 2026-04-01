@@ -1,3 +1,14 @@
+// DAG
+// UserTyped ──→ DocumentChanged
+//           └──→ EditRecorded
+// UserDeleted ──→ DocumentChanged
+//             └──→ EditRecorded
+// CursorMoved ──→ CursorsChanged
+//             └──→ CursorXChanged
+// EditRecorded ──→ EditHistoryChanged
+// BotTick ──→ UserTyped
+//         └──→ CursorMoved
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -64,39 +75,39 @@ let editHistory: Edit[] = []
 let cursorXPositions: Record<string, number> = {}
 
 // Document state
-engine.on(UserTyped, ({ text, position }) => {
+engine.on(UserTyped, [DocumentChanged], ({ text, position }, setDoc) => {
   document = document.slice(0, position) + text + document.slice(position)
-  engine.emit(DocumentChanged, document)
+  setDoc(document)
 })
-engine.on(UserDeleted, ({ position, count }) => {
+engine.on(UserDeleted, [DocumentChanged], ({ position, count }, setDoc) => {
   document = document.slice(0, Math.max(0, position - count)) + document.slice(position)
-  engine.emit(DocumentChanged, document)
+  setDoc(document)
 })
 
 // Cursors state
-engine.on(CursorMoved, (pos) => {
+engine.on(CursorMoved, [CursorsChanged, CursorXChanged], (pos, setCursors, setCursorX) => {
   const next = new Map(cursors)
   next.set(pos.user, pos)
   cursors = next
-  engine.emit(CursorsChanged, cursors)
+  setCursors(cursors)
 
   // Update cursor X positions (used for visual indicators)
   cursorXPositions = { ...cursorXPositions, [pos.user]: pos.position * 8 }
-  engine.emit(CursorXChanged, cursorXPositions)
+  setCursorX(cursorXPositions)
 })
 
 // Edit history state
-engine.on(EditRecorded, (edit) => {
+engine.on(EditRecorded, [EditHistoryChanged], (edit, setHistory) => {
   editHistory = [...editHistory.slice(-49), edit]
-  engine.emit(EditHistoryChanged, editHistory)
+  setHistory(editHistory)
 })
 
 /* ------------------------------------------------------------------ */
 /*  Record edits                                                      */
 /* ------------------------------------------------------------------ */
 
-engine.on(UserTyped, ({ user, text, position }) => {
-  engine.emit(EditRecorded, {
+engine.on(UserTyped, [EditRecorded], ({ user, text, position }, setEdit) => {
+  setEdit({
     id: editId++,
     user,
     position,
@@ -106,8 +117,8 @@ engine.on(UserTyped, ({ user, text, position }) => {
   })
 })
 
-engine.on(UserDeleted, ({ user, position, count }) => {
-  engine.emit(EditRecorded, {
+engine.on(UserDeleted, [EditRecorded], ({ user, position, count }, setEdit) => {
+  setEdit({
     id: editId++,
     user,
     position,
@@ -123,17 +134,17 @@ engine.on(UserDeleted, ({ user, position, count }) => {
 
 const botPositions: Record<string, number> = { Alice: 0, Bob: 0 }
 
-engine.on(BotTick, () => {
+engine.on(BotTick, [UserTyped, CursorMoved], (_payload, setTyped, setCursor) => {
   const bots = ['Alice', 'Bob']
   const bot = bots[Math.floor(Math.random() * bots.length)]
   const word = BOT_WORDS[Math.floor(Math.random() * BOT_WORDS.length)]
   const pos = Math.min(botPositions[bot], document.length)
 
-  engine.emit(UserTyped, { user: bot, text: word, position: pos })
+  setTyped({ user: bot, text: word, position: pos })
   botPositions[bot] = pos + word.length
 
   const userObj = USERS.find(u => u.name === bot)!
-  engine.emit(CursorMoved, { user: bot, position: botPositions[bot], color: userObj.color })
+  setCursor({ user: bot, position: botPositions[bot], color: userObj.color })
 })
 
 // Bot types every 2-4 seconds
@@ -149,3 +160,6 @@ export function getDocument() { return document }
 export function getCursors() { return cursors }
 export function getEditHistory() { return editHistory }
 export function getCursorXPositions() { return cursorXPositions }
+
+export function startLoop() {}
+export function stopLoop() {}

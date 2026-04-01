@@ -1,3 +1,10 @@
+// DAG
+// DragStart ──→ (sets drag state)
+// DragMove ──→ RotationChanged
+// DragEnd ──→ (re-enables auto-rotate)
+// SelectItem ──→ SelectedChanged
+// RotateTo ──→ RotationChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -33,20 +40,11 @@ let dragStartAngle = 0
 let isDragging = false
 let animFrame: number | null = null
 
-function springTo(from: number, to: number, cb: (v: number) => void) {
-  let pos = from, vel = 0
-  function tick() {
-    vel = (vel + (to - pos) * 120 / 1000) * (1 - 18 / 1000); pos += vel; cb(pos)
-    if (Math.abs(to - pos) > 0.1 || Math.abs(vel) > 0.1) requestAnimationFrame(tick); else cb(to)
-  }
-  requestAnimationFrame(tick)
-}
-
 engine.on(DragStart, (startX) => { isDragging = true; autoRotateEnabled = false; dragStartAngle = rotation })
-engine.on(DragMove, (deltaX) => { rotation = dragStartAngle + deltaX * 0.3; engine.emit(RotationChanged, rotation) })
+engine.on(DragMove, [RotationChanged], (deltaX, setRotation) => { rotation = dragStartAngle + deltaX * 0.3; setRotation(rotation) })
 engine.on(DragEnd, () => { isDragging = false; autoRotateEnabled = true; autoRotateAngle = rotation })
-engine.on(SelectItem, (idx) => { autoRotateEnabled = false; engine.emit(SelectedChanged, idx) })
-engine.on(RotateTo, (deg) => { rotation = deg; autoRotateAngle = deg; engine.emit(RotationChanged, deg) })
+engine.on(SelectItem, [SelectedChanged], (idx, setSelected) => { autoRotateEnabled = false; setSelected(idx) })
+engine.on(RotateTo, [RotationChanged], (deg, setRotation) => { rotation = deg; autoRotateAngle = deg; setRotation(deg) })
 
 // Auto-rotate
 function autoRotateLoop() {
@@ -57,4 +55,11 @@ function autoRotateLoop() {
   }
   animFrame = requestAnimationFrame(autoRotateLoop)
 }
-animFrame = requestAnimationFrame(autoRotateLoop)
+
+export function startLoop() {
+  if (animFrame !== null) return
+  animFrame = requestAnimationFrame(autoRotateLoop)
+}
+export function stopLoop() {
+  if (animFrame !== null) { cancelAnimationFrame(animFrame); animFrame = null }
+}

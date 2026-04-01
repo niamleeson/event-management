@@ -1,3 +1,10 @@
+// DAG
+// TodoTextChanged ──→ CurrentTextChanged, ValidationResultEvent
+// TodoAdded ──→ TodosChanged, FilteredTodosChanged, RemainingCountChanged
+// TodoRemoved ──→ TodosChanged, FilteredTodosChanged, RemainingCountChanged
+// TodoToggled ──→ TodosChanged, FilteredTodosChanged, RemainingCountChanged
+// FilterChanged ──→ ActiveFilterChanged, FilteredTodosChanged, RemainingCountChanged
+
 import { createEngine } from '@pulse/core'
 import { createPulseService } from '@pulse/ember'
 
@@ -34,60 +41,80 @@ export const TodoToggled = engine.event<string>('TodoToggled')
 export const TodoTextChanged = engine.event<string>('TodoTextChanged')
 export const ValidationResultEvent = engine.event<ValidationResult>('ValidationResult')
 export const FilterChanged = engine.event<Filter>('FilterChanged')
+export const TodosChanged = engine.event<Todo[]>('TodosChanged')
+export const FilteredTodosChanged = engine.event<Todo[]>('FilteredTodosChanged')
+export const RemainingCountChanged = engine.event<number>('RemainingCountChanged')
+export const CurrentTextChanged = engine.event<string>('CurrentTextChanged')
+export const ActiveFilterChanged = engine.event<Filter>('ActiveFilterChanged')
 
 // ---------------------------------------------------------------------------
-// Pipes
+// State
 // ---------------------------------------------------------------------------
 
+let todos: Todo[] = []
+let activeFilter: Filter = 'all'
+let currentText = ''
+
+function computeFiltered(): Todo[] {
+  return activeFilter === 'active' ? todos.filter(t => !t.completed) :
+    activeFilter === 'completed' ? todos.filter(t => t.completed) :
+    todos
+}
+
+// ---------------------------------------------------------------------------
 // Validate text input: non-empty and minimum length of 3
-engine.pipe(TodoTextChanged, ValidationResultEvent, (text: string): ValidationResult => {
+// ---------------------------------------------------------------------------
+
+engine.on(TodoTextChanged, [CurrentTextChanged, ValidationResultEvent], (text: string, setText, setValidation) => {
+  currentText = text
+  setText(text)
   if (text.trim().length === 0) {
-    return { valid: false, error: null }
+    setValidation({ valid: false, error: null })
+  } else if (text.trim().length < 3) {
+    setValidation({ valid: false, error: 'Todo must be at least 3 characters' })
+  } else {
+    setValidation({ valid: true, error: null })
   }
-  if (text.trim().length < 3) {
-    return { valid: false, error: 'Todo must be at least 3 characters' }
-  }
-  return { valid: true, error: null }
 })
 
 // ---------------------------------------------------------------------------
-// Signals
+// Handlers
 // ---------------------------------------------------------------------------
 
-// The todo list, reduced from add/remove/toggle events
-export const todoList = engine.signal<Todo[]>(TodoAdded, [], (prev, todo) => [
-  ...prev,
-  todo,
-])
+engine.on(TodoAdded, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (todo, setTodos, setFiltered, setRemaining) => {
+  todos = [...todos, todo]
+  setTodos(todos)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
+})
 
-engine.signalUpdate(todoList, TodoRemoved, (prev, id) =>
-  prev.filter((t) => t.id !== id),
-)
+engine.on(TodoRemoved, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (id, setTodos, setFiltered, setRemaining) => {
+  todos = todos.filter((t) => t.id !== id)
+  setTodos(todos)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
+})
 
-engine.signalUpdate(todoList, TodoToggled, (prev, id) =>
-  prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-)
+engine.on(TodoToggled, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (id, setTodos, setFiltered, setRemaining) => {
+  todos = todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+  setTodos(todos)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
+})
 
-// Active filter
-export const activeFilter = engine.signal<Filter>(
-  FilterChanged,
-  'all',
-  (_prev, filter) => filter,
-)
+engine.on(FilterChanged, [ActiveFilterChanged, FilteredTodosChanged, RemainingCountChanged], (filter, setActive, setFiltered, setRemaining) => {
+  activeFilter = filter
+  setActive(filter)
+  setFiltered(computeFiltered())
+  setRemaining(todos.filter(t => !t.completed).length)
+})
 
-// Current input text
-export const currentText = engine.signal<string>(
-  TodoTextChanged,
-  '',
-  (_prev, text) => text,
-)
+// ---------------------------------------------------------------------------
+// Start/stop loop (no-op: this example has no animation frame loop)
+// ---------------------------------------------------------------------------
 
-// Validation state
-export const validationState = engine.signal<ValidationResult>(
-  ValidationResultEvent,
-  { valid: false, error: null },
-  (_prev, result) => result,
-)
+export function startLoop() {}
+export function stopLoop() {}
 
 // ---------------------------------------------------------------------------
 // Pulse Service (shared instance for all components)

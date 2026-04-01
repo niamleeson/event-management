@@ -1,3 +1,8 @@
+// DAG
+// MorphToShape ──→ CurrentShapeChanged
+//              └──→ rxStart[i], ryStart[i], tzStart[i] (staggered per cell)
+// CycleShape ──→ MorphToShape
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -48,7 +53,10 @@ export const CycleShape = engine.event('CycleShape')
 
 export let currentShape = 'flat' as Shape
 export const CurrentShapeChanged = engine.event('CurrentShapeChanged')
-engine.on(MorphToShape, (v: any) => { currentShape = ((_prev, shape) => shape)(currentShape, v); engine.emit(CurrentShapeChanged, currentShape) })
+engine.on(MorphToShape, [CurrentShapeChanged], (shape, setShape) => {
+  currentShape = shape
+  setShape(currentShape)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Per-cell tweens for rotateX, rotateY, translateZ                  */
@@ -179,10 +187,10 @@ const TzTweenVal = engine.event<number>('TzTweenVal')
 /* ------------------------------------------------------------------ */
 
 let shapeIndex = 0
-engine.on(CycleShape, (v: any) => { engine.emit(MorphToShape, (() => {
+engine.on(CycleShape, [MorphToShape], (_payload, setMorph) => {
   shapeIndex = (shapeIndex + 1) % SHAPES.length
-  return SHAPES[shapeIndex]
-})(v)) })
+  setMorph(SHAPES[shapeIndex])
+})
 
 // Auto-cycle every 3 seconds
 setInterval(() => {
@@ -196,3 +204,6 @@ setTimeout(() => engine.emit(MorphToShape, 'sphere'), 500)
 
 
 export { COLORS }
+
+export function startLoop() {}
+export function stopLoop() {}

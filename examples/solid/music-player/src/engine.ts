@@ -1,6 +1,22 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// Frame ──┬──→ Pause (when track ends)
+//         ├──→ NextTrack (when track ends)
+//         ├──→ ProgressTick
+//         ├──→ BeatDetected
+//         └──→ VisualizerUpdate
+//
+// NextTrack ──┬──→ TrackChanged
+//             └──→ Play
+//
+// PrevTrack ──┬──→ Seek (if near start, restart)
+//             ├──→ TrackChanged
+//             └──→ Play
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -71,7 +87,7 @@ export const VisualizerBarsChanged = engine.event<number[]>('VisualizerBarsChang
 
 let beatTimer = 0
 
-engine.on(Frame, ({ dt }) => {
+engine.on(Frame, [Pause, NextTrack, ProgressTick, BeatDetected, VisualizerUpdate], ({ dt }, setPause, setNext, setProgress, setBeat, setVisualizer) => {
   if (!isPlaying.value) return
 
   const track = currentTrack.value
@@ -81,17 +97,17 @@ engine.on(Frame, ({ dt }) => {
   const increment = (dt / 1000) / track.duration
   const newProgress = progress.value + increment
   if (newProgress >= 1) {
-    engine.emit(Pause, undefined)
-    engine.emit(NextTrack, undefined)
+    setPause(undefined)
+    setNext(undefined)
     return
   }
-  engine.emit(ProgressTick, newProgress)
+  setProgress(newProgress)
 
   // Beat detection (simulated every ~500ms)
   beatTimer += dt
   if (beatTimer >= 500) {
     beatTimer -= 500
-    engine.emit(BeatDetected, undefined)
+    setBeat(undefined)
   }
 
   // Visualizer: generate random bars influenced by "beats"
@@ -103,14 +119,14 @@ engine.on(Frame, ({ dt }) => {
     const freqBias = Math.sin((i / 32) * Math.PI) * 0.3
     bars.push(Math.min(1, base + beatBoost + freqBias))
   }
-  engine.emit(VisualizerUpdate, bars)
+  setVisualizer(bars)
 })
 
 // ---------------------------------------------------------------------------
 // Track navigation
 // ---------------------------------------------------------------------------
 
-engine.on(NextTrack, () => {
+engine.on(NextTrack, [TrackChanged, Play], (_, setTrack, setPlay) => {
   const current = currentTrack.value
   const pl = playlist.value
   const idx = pl.findIndex(t => t.id === current.id)
@@ -123,38 +139,44 @@ engine.on(NextTrack, () => {
     nextIdx = (idx + 1) % pl.length
   }
 
-  engine.emit(TrackChanged, pl[nextIdx])
+  setTrack(pl[nextIdx])
   if (isPlaying.value) {
     // Keep playing
-    engine.emit(Play, undefined)
+    setPlay(undefined)
   }
 })
 
-engine.on(PrevTrack, () => {
+engine.on(PrevTrack, [Seek, TrackChanged, Play], (_, setSeek, setTrack, setPlay) => {
   const current = currentTrack.value
   const pl = playlist.value
   const idx = pl.findIndex(t => t.id === current.id)
 
   if (progress.value > 0.05) {
     // Restart current track
-    engine.emit(Seek, 0)
+    setSeek(0)
     return
   }
 
   const prevIdx = idx <= 0 ? pl.length - 1 : idx - 1
-  engine.emit(TrackChanged, pl[prevIdx])
+  setTrack(pl[prevIdx])
   if (isPlaying.value) {
-    engine.emit(Play, undefined)
+    setPlay(undefined)
   }
 })
 
-// Start frame loop
-
-// Frame loop
-let _lastFrame = performance.now()
-requestAnimationFrame(function _loop() {
-  const now = performance.now()
-  engine.emit(Frame, now - _lastFrame)
-  _lastFrame = now
-  requestAnimationFrame(_loop)
-})
+// Start/stop frame loop
+let _rafId: number | null = null
+export function startLoop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
+    const now = performance.now()
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
+  }
+  _rafId = requestAnimationFrame(loop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}

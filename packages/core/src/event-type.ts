@@ -10,6 +10,7 @@ export function createEventType<T = any>(name: string): EventType<T> {
   return {
     name: `${name}#${eventTypeCounter++}`,
     _consumers: new Set<Rule>(),
+    _solo: null,
   }
 }
 

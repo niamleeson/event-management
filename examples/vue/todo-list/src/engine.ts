@@ -1,3 +1,12 @@
+// DAG
+// TodoTextChanged ──→ CurrentTextChanged
+//                 └──→ ValidationResultEvent
+//                 └──→ ValidationChanged
+// TodoAdded ──→ TodoListChanged
+// TodoRemoved ──→ TodoListChanged
+// TodoToggled ──→ TodoListChanged
+// FilterChanged ──→ ActiveFilterChanged
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -52,9 +61,9 @@ let validation: ValidationResult = { valid: false, error: null }
 // ---------------------------------------------------------------------------
 
 // Validate text input: non-empty and minimum length of 3
-engine.on(TodoTextChanged, (text: string) => {
+engine.on(TodoTextChanged, [CurrentTextChanged, ValidationResultEvent, ValidationChanged], (text: string, setCurrent, setResult, setValidation) => {
   currentText = text
-  engine.emit(CurrentTextChanged, text)
+  setCurrent(text)
 
   let result: ValidationResult
   if (text.trim().length === 0) {
@@ -65,28 +74,28 @@ engine.on(TodoTextChanged, (text: string) => {
     result = { valid: true, error: null }
   }
   validation = result
-  engine.emit(ValidationResultEvent, result)
-  engine.emit(ValidationChanged, result)
+  setResult(result)
+  setValidation(result)
 })
 
-engine.on(TodoAdded, (todo: Todo) => {
+engine.on(TodoAdded, [TodoListChanged], (todo: Todo, setList) => {
   todos = [...todos, todo]
-  engine.emit(TodoListChanged, todos)
+  setList(todos)
 })
 
-engine.on(TodoRemoved, (id: string) => {
+engine.on(TodoRemoved, [TodoListChanged], (id: string, setList) => {
   todos = todos.filter((t) => t.id !== id)
-  engine.emit(TodoListChanged, todos)
+  setList(todos)
 })
 
-engine.on(TodoToggled, (id: string) => {
+engine.on(TodoToggled, [TodoListChanged], (id: string, setList) => {
   todos = todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-  engine.emit(TodoListChanged, todos)
+  setList(todos)
 })
 
-engine.on(FilterChanged, (filter: Filter) => {
+engine.on(FilterChanged, [ActiveFilterChanged], (filter: Filter, setActive) => {
   activeFilter = filter
-  engine.emit(ActiveFilterChanged, filter)
+  setActive(filter)
 })
 
 // ---------------------------------------------------------------------------
@@ -97,3 +106,6 @@ export function getTodos() { return todos }
 export function getActiveFilter() { return activeFilter }
 export function getCurrentText() { return currentText }
 export function getValidation() { return validation }
+
+export function startLoop() {}
+export function stopLoop() {}

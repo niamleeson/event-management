@@ -1,17 +1,20 @@
 import Component from '@glimmer/component'
 import { action } from '@ember/object'
-import { TrackedSignal } from '@pulse/ember'
+import { type PulseBinding } from '@pulse/ember'
 import {
   pulse,
-  todoList,
-  activeFilter,
-  currentText,
-  validationState,
+  startLoop,
   TodoAdded,
   TodoRemoved,
   TodoToggled,
   TodoTextChanged,
   FilterChanged,
+  TodosChanged,
+  FilteredTodosChanged,
+  RemainingCountChanged,
+  CurrentTextChanged,
+  ActiveFilterChanged,
+  ValidationResultEvent,
   type Todo,
   type Filter,
   type ValidationResult,
@@ -25,39 +28,39 @@ import {
 //
 // <div class="todo-app">
 //   <h1>Pulse Todos</h1>
-//   <p class="subtitle">All state managed through Pulse events and signals</p>
+//   <p class="subtitle">All state managed through Pulse events and on/emit</p>
 //   <TodoInput />
 //   <FilterBar />
 //   <TodoList />
 // </div>
 
 export default class TodoApp extends Component {
-  // -- Tracked signals bound to Pulse state --
-  todos: TrackedSignal<Todo[]>
-  filter: TrackedSignal<Filter>
-  text: TrackedSignal<string>
-  validation: TrackedSignal<ValidationResult>
+  // -- PulseBindings bound to Pulse events --
+  todos: PulseBinding<Todo[]>
+  filtered: PulseBinding<Todo[]>
+  remaining: PulseBinding<number>
+  filter: PulseBinding<Filter>
+  text: PulseBinding<string>
+  validation: PulseBinding<ValidationResult>
 
   constructor(owner: unknown, args: Record<string, unknown>) {
     super(owner, args)
-    this.todos = pulse.createSignal(todoList)
-    this.filter = pulse.createSignal(activeFilter)
-    this.text = pulse.createSignal(currentText)
-    this.validation = pulse.createSignal(validationState)
+    startLoop()
+    this.todos = pulse.bind(TodosChanged, [])
+    this.filtered = pulse.bind(FilteredTodosChanged, [])
+    this.remaining = pulse.bind(RemainingCountChanged, 0)
+    this.filter = pulse.bind(ActiveFilterChanged, 'all')
+    this.text = pulse.bind(CurrentTextChanged, '')
+    this.validation = pulse.bind(ValidationResultEvent, { valid: false, error: null })
   }
 
-  // -- Computed: filtered todo list --
+  // -- Computed --
   get filteredTodos(): Todo[] {
-    const f = this.filter.value
-    return this.todos.value.filter((t) => {
-      if (f === 'active') return !t.completed
-      if (f === 'completed') return t.completed
-      return true
-    })
+    return this.filtered.value
   }
 
   get remainingCount(): number {
-    return this.todos.value.filter((t) => !t.completed).length
+    return this.remaining.value
   }
 
   get isAddDisabled(): boolean {
@@ -111,6 +114,8 @@ export default class TodoApp extends Component {
   willDestroy(): void {
     super.willDestroy()
     this.todos.destroy()
+    this.filtered.destroy()
+    this.remaining.destroy()
     this.filter.destroy()
     this.text.destroy()
     this.validation.destroy()

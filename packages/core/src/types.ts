@@ -4,6 +4,8 @@
 export interface EventType<T = any> {
   name: string
   _consumers: Set<Rule>
+  /** Cached single consumer for ultra-fast single-handler dispatch */
+  _solo: Rule | null
   _phantom?: T
 }
 
@@ -21,6 +23,9 @@ export interface PulseEvent<T = any> {
 export type RuleMode = 'each' | 'join'
 
 /** A node in the DAG */
+/** Sentinel for empty join slot */
+export const JOIN_EMPTY: unique symbol = Symbol.for('pulse.join_empty') as any
+
 export interface Rule {
   id: string
   name: string
@@ -31,6 +36,10 @@ export interface Rule {
   outputs: EventType[]
   priority: number
   _disposed: boolean
+  /** Fast join state: pending payloads per trigger (null for 'each' rules) */
+  _joinPending: any[] | null
+  /** Fast join state: count of ready triggers */
+  _joinReady: number
 }
 
 /** Engine configuration */

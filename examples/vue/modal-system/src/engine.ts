@@ -1,3 +1,10 @@
+// DAG
+// ModalOpened ──→ ModalStackChanged
+// ModalClosed ──→ ModalStackChanged
+// OpenModal ──→ ModalOpened
+// CloseModal ──→ ModalClosed
+// CloseTopModal ──→ CloseModal
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -44,13 +51,13 @@ let nextModalId = 1
 let modalStack: ModalConfig[] = []
 let backdropOpacity = 0
 
-engine.on(ModalOpened, (modal) => {
+engine.on(ModalOpened, [ModalStackChanged], (modal, setStack) => {
   modalStack = [...modalStack, modal]
-  engine.emit(ModalStackChanged, modalStack)
+  setStack(modalStack)
 })
-engine.on(ModalClosed, (id) => {
+engine.on(ModalClosed, [ModalStackChanged], (id, setStack) => {
   modalStack = modalStack.filter(m => m.id !== id)
-  engine.emit(ModalStackChanged, modalStack)
+  setStack(modalStack)
 })
 
 /* ------------------------------------------------------------------ */
@@ -79,24 +86,24 @@ function animateBackdrop() {
 /*  Open/close logic                                                  */
 /* ------------------------------------------------------------------ */
 
-engine.on(OpenModal, ({ title, content, size }) => {
+engine.on(OpenModal, [ModalOpened], ({ title, content, size }, setOpened) => {
   const modal: ModalConfig = { id: nextModalId++, title, content, size }
-  engine.emit(ModalOpened, modal)
+  setOpened(modal)
   animateBackdrop()
 })
 
-engine.on(CloseModal, (id) => {
-  engine.emit(ModalClosed, id)
+engine.on(CloseModal, [ModalClosed], (id, setClosed) => {
+  setClosed(id)
 })
 
 engine.on(ModalClosed, () => {
   setTimeout(() => animateBackdrop(), 50)
 })
 
-engine.on(CloseTopModal, () => {
+engine.on(CloseTopModal, [CloseModal], (_payload, setClose) => {
   const stack = modalStack
   if (stack.length > 0) {
-    engine.emit(CloseModal, stack[stack.length - 1].id)
+    setClose(stack[stack.length - 1].id)
   }
 })
 
@@ -106,3 +113,6 @@ engine.on(CloseTopModal, () => {
 
 export function getModalStack() { return modalStack }
 export function getBackdropOpacity() { return backdropOpacity }
+
+export function startLoop() {}
+export function stopLoop() {}

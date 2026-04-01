@@ -1,3 +1,13 @@
+// DAG
+// Increment ──→ CountChanged
+//           └──→ AnimatedCountChanged (via animateTo)
+//           └──→ ColorIntensityChanged (via animateTo)
+//           └──→ BounceScaleChanged (via animateTo)
+// Decrement ──→ CountChanged
+//           └──→ AnimatedCountChanged (via animateTo)
+//           └──→ ColorIntensityChanged (via animateTo)
+//           └──→ BounceScaleChanged (via animateTo)
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -73,9 +83,9 @@ function animateTo(
 // Handlers
 // ---------------------------------------------------------------------------
 
-engine.on(Increment, () => {
+engine.on(Increment, [CountChanged], (_payload, setCount) => {
   count++
-  engine.emit(CountChanged, count)
+  setCount(count)
 
   // Animate count display
   animateTo(animatedCount, count, 400, easeOutCubic, (v) => {
@@ -98,9 +108,9 @@ engine.on(Increment, () => {
   })
 })
 
-engine.on(Decrement, () => {
+engine.on(Decrement, [CountChanged], (_payload, setCount) => {
   count--
-  engine.emit(CountChanged, count)
+  setCount(count)
 
   animateTo(animatedCount, count, 400, easeOutCubic, (v) => {
     animatedCount = v
@@ -119,3 +129,6 @@ engine.on(Decrement, () => {
     engine.emit(BounceScaleChanged, v)
   })
 })
+
+export function startLoop() {}
+export function stopLoop() {}

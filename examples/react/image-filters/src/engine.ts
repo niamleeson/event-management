@@ -2,6 +2,32 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// FilterAdded ───┬──→ FiltersChanged
+//                ├──→ UndoStackChanged
+//                └──→ RedoStackChanged
+// FilterRemoved ─┬──→ FiltersChanged
+//                ├──→ UndoStackChanged
+//                └──→ RedoStackChanged
+// FilterReordered ┬──→ FiltersChanged
+//                 ├──→ UndoStackChanged
+//                 └──→ RedoStackChanged
+// FilterParamChanged ┬──→ FiltersChanged
+//                    ├──→ UndoStackChanged
+//                    └──→ RedoStackChanged
+// ResetAll ──┬──→ FiltersChanged
+//            ├──→ UndoStackChanged
+//            └──→ RedoStackChanged
+// UndoRequested ┬──→ FiltersChanged
+//               ├──→ UndoStackChanged
+//               └──→ RedoStackChanged
+// RedoRequested ┬──→ FiltersChanged
+//               ├──→ UndoStackChanged
+//               └──→ RedoStackChanged
+// ---------------------------------------------------------------------------
+
 export type FilterName = 'brightness' | 'contrast' | 'saturate' | 'blur' | 'grayscale' | 'sepia' | 'hue-rotate' | 'invert'
 export interface Filter { id: string; name: FilterName; value: number; enabled: boolean }
 export interface FilterParamPayload { index: number; param: 'value' | 'enabled'; value: number | boolean }
@@ -34,27 +60,30 @@ let filters: Filter[] = []
 let undoStack: Filter[][] = []
 let redoStack: Filter[][] = []
 
-function emitAll() { engine.emit(FiltersChanged, [...filters]); engine.emit(UndoStackChanged, [...undoStack]); engine.emit(RedoStackChanged, [...redoStack]) }
+type EmitAllFn = (f: Filter[], u: Filter[][], r: Filter[][]) => void
 
-function pushChange(newFilters: Filter[]) {
+function pushChange(newFilters: Filter[], setFilters: (v: Filter[]) => void, setUndo: (v: Filter[][]) => void, setRedo: (v: Filter[][]) => void) {
   undoStack = [...undoStack, [...filters]]; redoStack = []
-  filters = newFilters; emitAll()
+  filters = newFilters
+  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
 }
 
-engine.on(FilterAdded, (f) => pushChange([...filters, f]))
-engine.on(FilterRemoved, (i) => { const n = [...filters]; n.splice(i, 1); pushChange(n) })
-engine.on(FilterReordered, (p) => { const n = [...filters]; const [m] = n.splice(p.from, 1); n.splice(p.to, 0, m); pushChange(n) })
-engine.on(FilterParamChanged, (p) => {
-  pushChange(filters.map((f, i) => i !== p.index ? f : p.param === 'enabled' ? { ...f, enabled: p.value as boolean } : { ...f, value: p.value as number }))
+engine.on(FilterAdded, [FiltersChanged, UndoStackChanged, RedoStackChanged], (f, setFilters, setUndo, setRedo) => pushChange([...filters, f], setFilters, setUndo, setRedo))
+engine.on(FilterRemoved, [FiltersChanged, UndoStackChanged, RedoStackChanged], (i, setFilters, setUndo, setRedo) => { const n = [...filters]; n.splice(i, 1); pushChange(n, setFilters, setUndo, setRedo) })
+engine.on(FilterReordered, [FiltersChanged, UndoStackChanged, RedoStackChanged], (p, setFilters, setUndo, setRedo) => { const n = [...filters]; const [m] = n.splice(p.from, 1); n.splice(p.to, 0, m); pushChange(n, setFilters, setUndo, setRedo) })
+engine.on(FilterParamChanged, [FiltersChanged, UndoStackChanged, RedoStackChanged], (p, setFilters, setUndo, setRedo) => {
+  pushChange(filters.map((f, i) => i !== p.index ? f : p.param === 'enabled' ? { ...f, enabled: p.value as boolean } : { ...f, value: p.value as number }), setFilters, setUndo, setRedo)
 })
-engine.on(ResetAll, () => pushChange([]))
-engine.on(UndoRequested, () => {
+engine.on(ResetAll, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => pushChange([], setFilters, setUndo, setRedo))
+engine.on(UndoRequested, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => {
   if (undoStack.length === 0) return
-  redoStack = [...redoStack, [...filters]]; filters = undoStack[undoStack.length - 1]; undoStack = undoStack.slice(0, -1); emitAll()
+  redoStack = [...redoStack, [...filters]]; filters = undoStack[undoStack.length - 1]; undoStack = undoStack.slice(0, -1)
+  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
 })
-engine.on(RedoRequested, () => {
+engine.on(RedoRequested, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => {
   if (redoStack.length === 0) return
-  undoStack = [...undoStack, [...filters]]; filters = redoStack[redoStack.length - 1]; redoStack = redoStack.slice(0, -1); emitAll()
+  undoStack = [...undoStack, [...filters]]; filters = redoStack[redoStack.length - 1]; redoStack = redoStack.slice(0, -1)
+  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
 })
 
 export function computeFilterString(filterList: Filter[]): string {
@@ -67,3 +96,6 @@ export function computeFilterString(filterList: Filter[]): string {
 }
 
 export const SAMPLE_IMAGE = 'https://picsum.photos/800/600?random=42'
+
+export function startLoop() {}
+export function stopLoop() {}

@@ -1,6 +1,22 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// FieldUpdated ──┬──→ FieldValuesChanged
+//                └──→ FieldErrorsChanged
+//
+// NextStep ──┬──→ IsSubmittingChanged
+//            ├──→ SubmitResultChanged
+//            ├──→ CurrentStepChanged
+//            ├──→ StepDirectionChanged
+//            ├──→ FieldUpdated (re-emit for validation)
+//            └──→ ShakeCountChanged
+//
+// PrevStep ──┬──→ CurrentStepChanged
+//            └──→ StepDirectionChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -119,24 +135,24 @@ let shakeCount = 0
 // Handlers
 // ---------------------------------------------------------------------------
 
-engine.on(FieldUpdated, (update) => {
+engine.on(FieldUpdated, [FieldValuesChanged, FieldErrorsChanged], (update, setValues, setErrors) => {
   fieldValues = { ...fieldValues, [update.field]: update.value }
-  engine.emit(FieldValuesChanged, { ...fieldValues })
+  setValues({ ...fieldValues })
 
   const result = validateField(update.field, update.value)
   fieldErrors = { ...fieldErrors, [update.field]: result.error }
-  engine.emit(FieldErrorsChanged, { ...fieldErrors })
+  setErrors({ ...fieldErrors })
 })
 
-engine.on(NextStep, async () => {
+engine.on(NextStep, [IsSubmittingChanged, SubmitResultChanged, CurrentStepChanged, StepDirectionChanged, ShakeCountChanged], async (_, setSubmitting, setResult, setStep, setDirection, setShake) => {
   if (currentStep >= 2) {
     // Submit
     isSubmitting = true
-    engine.emit(IsSubmittingChanged, true)
+    setSubmitting(true)
     await new Promise((resolve) => setTimeout(resolve, 1500))
     isSubmitting = false
-    engine.emit(IsSubmittingChanged, false)
-    engine.emit(SubmitResultChanged, { success: true })
+    setSubmitting(false)
+    setResult({ success: true })
     return
   }
 
@@ -149,8 +165,8 @@ engine.on(NextStep, async () => {
 
   if (allValid) {
     currentStep = (currentStep + 1) as StepId
-    engine.emit(CurrentStepChanged, currentStep)
-    engine.emit(StepDirectionChanged, 'next')
+    setStep(currentStep)
+    setDirection('next')
   } else {
     // Trigger validation for all fields
     for (const field of fields) {
@@ -158,14 +174,17 @@ engine.on(NextStep, async () => {
       engine.emit(FieldUpdated, { step: currentStep, field, value })
     }
     shakeCount++
-    engine.emit(ShakeCountChanged, shakeCount)
+    setShake(shakeCount)
   }
 })
 
-engine.on(PrevStep, () => {
+engine.on(PrevStep, [CurrentStepChanged, StepDirectionChanged], (_, setStep, setDirection) => {
   if (currentStep > 0) {
     currentStep = (currentStep - 1) as StepId
-    engine.emit(CurrentStepChanged, currentStep)
-    engine.emit(StepDirectionChanged, 'prev')
+    setStep(currentStep)
+    setDirection('prev')
   }
 })
+
+export function startLoop() {}
+export function stopLoop() {}

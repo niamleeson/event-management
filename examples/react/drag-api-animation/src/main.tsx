@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { PulseProvider } from '@pulse/react'
-import { engine } from './engine'
+import { engine, startLoop } from './engine'
 import App from './App'
 
 // Devtools integration hint:
@@ -15,3 +15,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </PulseProvider>
   </React.StrictMode>,
 )
+startLoop()

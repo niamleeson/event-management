@@ -98,14 +98,29 @@ function recomputeGrid(grid: Grid): Grid {
 }
 
 // ---------------------------------------------------------------------------
+// DAG (3 levels deep)
+// ---------------------------------------------------------------------------
+// CellEdited ──→ CellsChanged ──→ DependentCellsRecalculated ──→ FormulaError
+// CellSelected ──→ SelectedCellChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
+// Layer 0: User input events
 export const CellEdited = engine.event<CellEditPayload>('CellEdited')
 export const CellSelected = engine.event<CellCoord>('CellSelected')
-export const FormulaError = engine.event<FormulaErrorPayload>('FormulaError')
+
+// Layer 1: Primary state events
 export const CellsChanged = engine.event<Grid>('CellsChanged')
 export const SelectedCellChanged = engine.event<CellCoord>('SelectedCellChanged')
+
+// Layer 2: Derived state events (recalculation of dependent cells)
+export const DependentCellsRecalculated = engine.event<Grid>('DependentCellsRecalculated')
+
+// Layer 3: Error detection (derived from recalculated grid)
+export const FormulaError = engine.event<FormulaErrorPayload>('FormulaError')
 
 // ---------------------------------------------------------------------------
 // State
@@ -114,22 +129,45 @@ export const SelectedCellChanged = engine.event<CellCoord>('SelectedCellChanged'
 let cells = makeEmptyGrid()
 let selectedCell: CellCoord = { row: 0, col: 0 }
 
-engine.on(CellEdited, (payload) => {
+// ---------------------------------------------------------------------------
+// Layer 0 → Layer 1: Input handlers → primary state
+// ---------------------------------------------------------------------------
+
+engine.on(CellEdited, [CellsChanged], (payload, setCells) => {
   const newGrid = cells.map(r => r.map(c => ({ ...c })))
   newGrid[payload.row][payload.col] = { raw: payload.value, computed: payload.value }
-  cells = recomputeGrid(newGrid)
-  engine.emit(CellsChanged, cells)
-
-  // Check for formula errors
-  const cell = cells[payload.row][payload.col]
-  if (cell.error) {
-    engine.emit(FormulaError, { row: payload.row, col: payload.col, error: cell.error })
-  }
+  cells = newGrid
+  setCells(cells)
 })
 
-engine.on(CellSelected, (coord) => {
+engine.on(CellSelected, [SelectedCellChanged], (coord, setSelected) => {
   selectedCell = coord
-  engine.emit(SelectedCellChanged, coord)
+  setSelected(coord)
+})
+
+// ---------------------------------------------------------------------------
+// Layer 1 → Layer 2: Primary state → dependent cell recalculation
+// ---------------------------------------------------------------------------
+
+engine.on(CellsChanged, [DependentCellsRecalculated], (_grid, setRecalculated) => {
+  cells = recomputeGrid(cells)
+  setRecalculated(cells)
+})
+
+// ---------------------------------------------------------------------------
+// Layer 2 → Layer 3: Recalculated grid → formula error detection
+// ---------------------------------------------------------------------------
+
+engine.on(DependentCellsRecalculated, [FormulaError], (grid, setError) => {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c]
+      if (cell.error) {
+        setError({ row: r, col: c, error: cell.error })
+        return
+      }
+    }
+  }
 })
 
 // Emit initial state
@@ -137,3 +175,6 @@ engine.emit(CellsChanged, cells)
 engine.emit(SelectedCellChanged, selectedCell)
 
 export { colLabel, ROWS, COLS }
+
+export function startLoop() {}
+export function stopLoop() {}

@@ -1,3 +1,8 @@
+// DAG
+// FieldUpdated ──→ FieldValuesChanged, FieldErrorsChanged
+// NextStep ──→ CurrentStepChanged, StepDirectionChanged, IsSubmittingChanged, SubmitResultChanged, ShakeCountChanged
+// PrevStep ──→ CurrentStepChanged, StepDirectionChanged
+
 import { createEngine } from '@pulse/core'
 import { createPulseService } from '@pulse/ember'
 
@@ -11,274 +16,172 @@ export const engine = createEngine()
 // Types
 // ---------------------------------------------------------------------------
 
-export type StepId = 'personal' | 'contact' | 'preferences' | 'review'
+export type StepId = 0 | 1 | 2
 
-export interface PersonalInfo {
-  firstName: string
-  lastName: string
+export interface FieldUpdate {
+  step: StepId
+  field: string
+  value: string
 }
 
-export interface ContactInfo {
-  email: string
-  phone: string
-}
-
-export interface Preferences {
-  newsletter: boolean
-  theme: 'light' | 'dark'
+export interface FieldValidation {
+  step: StepId
+  field: string
+  valid: boolean
+  error: string | null
 }
 
 export interface FormData {
-  personal: PersonalInfo
-  contact: ContactInfo
-  preferences: Preferences
-}
-
-export interface ValidationError {
-  field: string
-  message: string
-}
-
-export interface StepValidation {
-  step: StepId
-  valid: boolean
-  errors: ValidationError[]
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  street: string
+  city: string
+  state: string
+  zip: string
 }
 
 // ---------------------------------------------------------------------------
-// Step order
+// Field definitions per step
 // ---------------------------------------------------------------------------
 
-export const STEPS: StepId[] = ['personal', 'contact', 'preferences', 'review']
+export const STEP_FIELDS: Record<StepId, string[]> = {
+  0: ['firstName', 'lastName', 'email', 'phone'],
+  1: ['street', 'city', 'state', 'zip'],
+  2: [],
+}
+
+export const STEP_LABELS: string[] = ['Personal Info', 'Address', 'Review & Submit']
+
+// ---------------------------------------------------------------------------
+// Validation rules
+// ---------------------------------------------------------------------------
+
+function validateField(field: string, value: string): { valid: boolean; error: string | null } {
+  switch (field) {
+    case 'firstName':
+    case 'lastName':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (value.trim().length < 2) return { valid: false, error: 'At least 2 characters' }
+      return { valid: true, error: null }
+    case 'email':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { valid: false, error: 'Invalid email' }
+      return { valid: true, error: null }
+    case 'phone':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (!/^\+?[\d\s()-]{7,}$/.test(value)) return { valid: false, error: 'Invalid phone number' }
+      return { valid: true, error: null }
+    case 'street':
+    case 'city':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      return { valid: true, error: null }
+    case 'state':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (value.trim().length < 2) return { valid: false, error: 'At least 2 characters' }
+      return { valid: true, error: null }
+    case 'zip':
+      if (!value.trim()) return { valid: false, error: 'Required' }
+      if (!/^\d{5}(-\d{4})?$/.test(value.trim())) return { valid: false, error: 'Invalid zip (e.g. 12345)' }
+      return { valid: true, error: null }
+    default:
+      return { valid: true, error: null }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
-// Navigation
-export const NextStepRequested = engine.event<void>('NextStepRequested')
-export const PrevStepRequested = engine.event<void>('PrevStepRequested')
-export const StepChanged = engine.event<StepId>('StepChanged')
-export const TransitionStart = engine.event<void>('TransitionStart')
-export const TransitionDone = engine.event<void>('TransitionDone')
+export const FieldUpdated = engine.event<FieldUpdate>('FieldUpdated')
+export const NextStep = engine.event<void>('NextStep')
+export const PrevStep = engine.event<void>('PrevStep')
+export const ShakeError = engine.event<void>('ShakeError')
 
-// Field updates
-export const PersonalUpdated = engine.event<Partial<PersonalInfo>>('PersonalUpdated')
-export const ContactUpdated = engine.event<Partial<ContactInfo>>('ContactUpdated')
-export const PreferencesUpdated = engine.event<Partial<Preferences>>('PreferencesUpdated')
-
-// Validation
-export const ValidateStep = engine.event<StepId>('ValidateStep')
-export const StepValidated = engine.event<StepValidation>('StepValidated')
-
-// Submission
-export const FormSubmitted = engine.event<void>('FormSubmitted')
-export const SubmitPending = engine.event<void>('SubmitPending')
-export const SubmitDone = engine.event<FormData>('SubmitDone')
-export const SubmitError = engine.event<Error>('SubmitError')
-export const FormReset = engine.event<void>('FormReset')
+// State change events
+export const CurrentStepChanged = engine.event<StepId>('CurrentStepChanged')
+export const StepDirectionChanged = engine.event<'next' | 'prev'>('StepDirectionChanged')
+export const FieldValuesChanged = engine.event<FormData>('FieldValuesChanged')
+export const FieldErrorsChanged = engine.event<Record<string, string | null>>('FieldErrorsChanged')
+export const IsSubmittingChanged = engine.event<boolean>('IsSubmittingChanged')
+export const SubmitResultChanged = engine.event<{ success: boolean } | null>('SubmitResultChanged')
+export const ShakeCountChanged = engine.event<number>('ShakeCountChanged')
 
 // ---------------------------------------------------------------------------
-// Signals: form data
+// State
 // ---------------------------------------------------------------------------
 
-export const personalInfo = engine.signal<PersonalInfo>(
-  PersonalUpdated,
-  { firstName: '', lastName: '' },
-  (prev, partial) => ({ ...prev, ...partial }),
-)
-
-engine.signalUpdate(personalInfo, FormReset, () => ({ firstName: '', lastName: '' }))
-
-export const contactInfo = engine.signal<ContactInfo>(
-  ContactUpdated,
-  { email: '', phone: '' },
-  (prev, partial) => ({ ...prev, ...partial }),
-)
-
-engine.signalUpdate(contactInfo, FormReset, () => ({ email: '', phone: '' }))
-
-export const preferences = engine.signal<Preferences>(
-  PreferencesUpdated,
-  { newsletter: true, theme: 'light' },
-  (prev, partial) => ({ ...prev, ...partial }),
-)
-
-engine.signalUpdate(preferences, FormReset, () => ({ newsletter: true, theme: 'light' }))
+let currentStep: StepId = 0
+let fieldValues: FormData = {
+  firstName: '', lastName: '', email: '', phone: '',
+  street: '', city: '', state: '', zip: '',
+}
+let fieldErrors: Record<string, string | null> = {}
+let isSubmitting = false
+let shakeCount = 0
 
 // ---------------------------------------------------------------------------
-// Signal: current step
+// Handlers
 // ---------------------------------------------------------------------------
 
-export const currentStep = engine.signal<StepId>(
-  StepChanged,
-  'personal',
-  (_prev, step) => step,
-)
+engine.on(FieldUpdated, [FieldValuesChanged, FieldErrorsChanged], (update, setValues, setErrors) => {
+  fieldValues = { ...fieldValues, [update.field]: update.value }
+  setValues({ ...fieldValues })
 
-engine.signalUpdate(currentStep, FormReset, () => 'personal')
-
-// ---------------------------------------------------------------------------
-// Pipes: validation
-// ---------------------------------------------------------------------------
-
-// Validate step fires validation for the current step
-engine.pipe(ValidateStep, StepValidated, (step: StepId): StepValidation => {
-  const errors: ValidationError[] = []
-
-  if (step === 'personal') {
-    const p = personalInfo.value
-    if (!p.firstName.trim()) {
-      errors.push({ field: 'firstName', message: 'First name is required' })
-    }
-    if (!p.lastName.trim()) {
-      errors.push({ field: 'lastName', message: 'Last name is required' })
-    }
-  }
-
-  if (step === 'contact') {
-    const c = contactInfo.value
-    if (!c.email.trim()) {
-      errors.push({ field: 'email', message: 'Email is required' })
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)) {
-      errors.push({ field: 'email', message: 'Invalid email format' })
-    }
-    if (c.phone && !/^\+?[\d\s-]{7,}$/.test(c.phone)) {
-      errors.push({ field: 'phone', message: 'Invalid phone format' })
-    }
-  }
-
-  // Preferences step has no required validation
-  return { step, valid: errors.length === 0, errors }
+  const result = validateField(update.field, update.value)
+  fieldErrors = { ...fieldErrors, [update.field]: result.error }
+  setErrors({ ...fieldErrors })
 })
 
-// ---------------------------------------------------------------------------
-// Signal: validation state per step
-// ---------------------------------------------------------------------------
+engine.on(NextStep, [CurrentStepChanged, StepDirectionChanged, IsSubmittingChanged, SubmitResultChanged, ShakeCountChanged], async (_, setStep, setDir, setSubmitting, setResult, setShake) => {
+  if (currentStep >= 2) {
+    // Submit
+    isSubmitting = true
+    setSubmitting(true)
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    isSubmitting = false
+    setSubmitting(false)
+    setResult({ success: true })
+    return
+  }
 
-export const stepValidation = engine.signal<Record<StepId, StepValidation>>(
-  StepValidated,
-  {
-    personal: { step: 'personal', valid: false, errors: [] },
-    contact: { step: 'contact', valid: false, errors: [] },
-    preferences: { step: 'preferences', valid: true, errors: [] },
-    review: { step: 'review', valid: true, errors: [] },
-  },
-  (prev, validation) => ({
-    ...prev,
-    [validation.step]: validation,
-  }),
-)
+  // Check step validity
+  const fields = STEP_FIELDS[currentStep]
+  const allValid = fields.every((field) => {
+    const val = fieldValues[field as keyof FormData]
+    return fieldErrors[field] === null && val?.trim()
+  })
 
-engine.signalUpdate(stepValidation, FormReset, () => ({
-  personal: { step: 'personal' as StepId, valid: false, errors: [] },
-  contact: { step: 'contact' as StepId, valid: false, errors: [] },
-  preferences: { step: 'preferences' as StepId, valid: true, errors: [] },
-  review: { step: 'review' as StepId, valid: true, errors: [] },
-}))
-
-// ---------------------------------------------------------------------------
-// Navigation logic: validate before advancing
-// ---------------------------------------------------------------------------
-
-engine.on(NextStepRequested, () => {
-  const step = currentStep.value
-  // Trigger validation
-  engine.emit(ValidateStep, step)
-})
-
-// After validation, advance if valid
-engine.on(StepValidated, (result) => {
-  if (!result.valid) return
-
-  const idx = STEPS.indexOf(result.step)
-  if (idx >= 0 && idx < STEPS.length - 1) {
-    const nextStep = STEPS[idx + 1]
-    engine.emit(TransitionStart, undefined)
-    engine.emit(StepChanged, nextStep)
+  if (allValid) {
+    currentStep = (currentStep + 1) as StepId
+    setStep(currentStep)
+    setDir('next')
+  } else {
+    // Trigger validation for all fields
+    for (const field of fields) {
+      const value = fieldValues[field as keyof FormData] ?? ''
+      engine.emit(FieldUpdated, { step: currentStep, field, value })
+    }
+    shakeCount++
+    setShake(shakeCount)
   }
 })
 
-engine.on(PrevStepRequested, () => {
-  const idx = STEPS.indexOf(currentStep.value)
-  if (idx > 0) {
-    engine.emit(TransitionStart, undefined)
-    engine.emit(StepChanged, STEPS[idx - 1])
+engine.on(PrevStep, [CurrentStepChanged, StepDirectionChanged], (_, setStep, setDir) => {
+  if (currentStep > 0) {
+    currentStep = (currentStep - 1) as StepId
+    setStep(currentStep)
+    setDir('prev')
   }
 })
 
 // ---------------------------------------------------------------------------
-// Tween: step transition animation
+// Start/stop loop (no-op: this example has no animation frame loop)
 // ---------------------------------------------------------------------------
 
-export const stepTransition = engine.tween({
-  start: TransitionStart,
-  done: TransitionDone,
-  from: 0,
-  to: 1,
-  duration: 350,
-  easing: 'easeOut',
-})
-
-// ---------------------------------------------------------------------------
-// Signal: submission state
-// ---------------------------------------------------------------------------
-
-export const isSubmitting = engine.signal<boolean>(
-  SubmitPending,
-  false,
-  () => true,
-)
-engine.signalUpdate(isSubmitting, SubmitDone, () => false)
-engine.signalUpdate(isSubmitting, SubmitError, () => false)
-
-export const submitError = engine.signal<string | null>(
-  SubmitError,
-  null,
-  (_prev, err) => err.message,
-)
-engine.signalUpdate(submitError, FormSubmitted, () => null)
-
-export const submitted = engine.signal<boolean>(
-  SubmitDone,
-  false,
-  () => true,
-)
-engine.signalUpdate(submitted, FormReset, () => false)
-
-// ---------------------------------------------------------------------------
-// Async: form submission
-// ---------------------------------------------------------------------------
-
-engine.async(FormSubmitted, {
-  pending: SubmitPending,
-  done: SubmitDone,
-  error: SubmitError,
-  strategy: 'first',
-  do: async (_payload, { signal }) => {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 1200)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
-
-    const data: FormData = {
-      personal: personalInfo.value,
-      contact: contactInfo.value,
-      preferences: preferences.value,
-    }
-
-    return data
-  },
-})
-
-// ---------------------------------------------------------------------------
-// Start the frame loop for tween updates
-// ---------------------------------------------------------------------------
-
-engine.startFrameLoop()
+export function startLoop() {}
+export function stopLoop() {}
 
 // ---------------------------------------------------------------------------
 // Pulse Service

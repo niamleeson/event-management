@@ -1,3 +1,24 @@
+// DAG
+// FieldUpdated ──→ FieldValidated
+//              └──→ FieldValuesChanged
+// FieldValidated ──→ StepValidated
+//                └──→ FieldErrorsChanged
+// StepValidated ──→ StepValidChanged
+// NextStep ──→ StepChanged (if valid)
+//          └──→ FieldUpdated (show errors)
+//          └──→ ShakeError (if invalid)
+//          └──→ FormSubmitted (if step 2)
+// PrevStep ──→ StepChanged
+// StepChanged ──→ CurrentStepChanged
+//             └──→ StepDirectionChanged
+// FormSubmitted ──→ SubmitPending
+//               └──→ SubmitDone (async)
+// SubmitPending ──→ IsSubmittingChanged
+// SubmitDone ──→ IsSubmittingChanged
+//            └──→ SubmitResultChanged
+// SubmitError ──→ IsSubmittingChanged
+// ShakeError ──→ ShakeActiveChanged
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -153,9 +174,9 @@ let shakeActive = 0
 // ---------------------------------------------------------------------------
 
 // FieldUpdated -> FieldValidated (per-field validation)
-engine.on(FieldUpdated, (update) => {
+engine.on(FieldUpdated, [FieldValidated], (update, setValidation) => {
   const result = validateField(update.field, update.value)
-  engine.emit(FieldValidated, {
+  setValidation({
     step: update.step,
     field: update.field,
     valid: result.valid,
@@ -167,13 +188,13 @@ engine.on(FieldUpdated, (update) => {
 // Step validation: check if all fields in current step are valid
 // ---------------------------------------------------------------------------
 
-engine.on(FieldValidated, (validation) => {
+engine.on(FieldValidated, [StepValidated], (validation, setStepValid) => {
   const step = validation.step
   const fields = STEP_FIELDS[step]
   const allValid = fields.every((field) => {
     return fieldErrors[field] === null && (fieldValues[field as keyof FormData] ?? '').trim()
   })
-  engine.emit(StepValidated, { step, valid: allValid })
+  setStepValid({ step, valid: allValid })
 })
 
 // ---------------------------------------------------------------------------
@@ -247,59 +268,59 @@ engine.on(PrevStep, () => {
 // ---------------------------------------------------------------------------
 
 // Current step
-engine.on(StepChanged, (change) => {
+engine.on(StepChanged, [CurrentStepChanged], (change, setStep) => {
   currentStep = change.step
-  engine.emit(CurrentStepChanged, currentStep)
+  setStep(currentStep)
 })
 
 // Transition direction for animation
-engine.on(StepChanged, (change) => {
+engine.on(StepChanged, [StepDirectionChanged], (change, setDir) => {
   stepDirection = change.direction
-  engine.emit(StepDirectionChanged, stepDirection)
+  setDir(stepDirection)
 })
 
 // Field values
-engine.on(FieldUpdated, (update) => {
+engine.on(FieldUpdated, [FieldValuesChanged], (update, setValues) => {
   fieldValues = { ...fieldValues, [update.field]: update.value }
-  engine.emit(FieldValuesChanged, fieldValues)
+  setValues(fieldValues)
 })
 
 // Field errors
-engine.on(FieldValidated, (validation) => {
+engine.on(FieldValidated, [FieldErrorsChanged], (validation, setErrors) => {
   fieldErrors = { ...fieldErrors, [validation.field]: validation.error }
-  engine.emit(FieldErrorsChanged, fieldErrors)
+  setErrors(fieldErrors)
 })
 
 // Step validity
-engine.on(StepValidated, (validation) => {
+engine.on(StepValidated, [StepValidChanged], (validation, setValid) => {
   stepValid = { ...stepValid, [validation.step]: validation.valid }
-  engine.emit(StepValidChanged, stepValid)
+  setValid(stepValid)
 })
 
 // Submitting state
-engine.on(SubmitPending, () => {
+engine.on(SubmitPending, [IsSubmittingChanged], (_payload, setSubmitting) => {
   isSubmitting = true
-  engine.emit(IsSubmittingChanged, isSubmitting)
+  setSubmitting(isSubmitting)
 })
-engine.on(SubmitDone, () => {
+engine.on(SubmitDone, [IsSubmittingChanged], (_payload, setSubmitting) => {
   isSubmitting = false
-  engine.emit(IsSubmittingChanged, isSubmitting)
+  setSubmitting(isSubmitting)
 })
-engine.on(SubmitError, () => {
+engine.on(SubmitError, [IsSubmittingChanged], (_payload, setSubmitting) => {
   isSubmitting = false
-  engine.emit(IsSubmittingChanged, isSubmitting)
+  setSubmitting(isSubmitting)
 })
 
 // Submit success state
-engine.on(SubmitDone, (result) => {
+engine.on(SubmitDone, [SubmitResultChanged], (result, setResult) => {
   submitResult = result
-  engine.emit(SubmitResultChanged, submitResult)
+  setResult(submitResult)
 })
 
 // Shake trigger
-engine.on(ShakeError, () => {
+engine.on(ShakeError, [ShakeActiveChanged], (_payload, setShake) => {
   shakeActive = shakeActive + 1
-  engine.emit(ShakeActiveChanged, shakeActive)
+  setShake(shakeActive)
 })
 
 // ---------------------------------------------------------------------------
@@ -316,3 +337,6 @@ export function getSubmitResult() { return submitResult }
 export function getShakeActive() { return shakeActive }
 
 export { STEP_FIELDS }
+
+export function startLoop() {}
+export function stopLoop() {}

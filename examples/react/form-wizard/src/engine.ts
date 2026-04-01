@@ -85,28 +85,47 @@ function validateField(field: string, value: string): { valid: boolean; error: s
 }
 
 // ---------------------------------------------------------------------------
+// DAG (4 levels deep)
+// ---------------------------------------------------------------------------
+// FieldUpdated ──→ FieldValuesChanged ──→ FieldErrorsChanged
+//
+// NextStep ──→ CurrentStepChanged ──→ StepDirectionChanged
+//          └──→ IsSubmittingChanged ──→ SubmitResultChanged
+//          └──→ ShakeCountChanged (on validation failure)
+//          └──→ FieldUpdated (re-validate on failure)
+//
+// PrevStep ──→ CurrentStepChanged ──→ StepDirectionChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
+// Layer 0: User input events
 export const FieldUpdated = engine.event<FieldUpdate>('FieldUpdated')
 export const NextStep = engine.event<void>('NextStep')
 export const PrevStep = engine.event<void>('PrevStep')
 export const ShakeError = engine.event<void>('ShakeError')
 
-// State change events for React
-export const CurrentStepChanged = engine.event<StepId>('CurrentStepChanged')
-export const StepDirectionChanged = engine.event<'next' | 'prev'>('StepDirectionChanged')
+// Layer 1: Primary state events
 export const FieldValuesChanged = engine.event<FormData>('FieldValuesChanged')
-export const FieldErrorsChanged = engine.event<Record<string, string | null>>('FieldErrorsChanged')
+export const CurrentStepChanged = engine.event<StepId>('CurrentStepChanged')
 export const IsSubmittingChanged = engine.event<boolean>('IsSubmittingChanged')
-export const SubmitResultChanged = engine.event<{ success: boolean } | null>('SubmitResultChanged')
 export const ShakeCountChanged = engine.event<number>('ShakeCountChanged')
+
+// Layer 2: Derived state events
+export const FieldErrorsChanged = engine.event<Record<string, string | null>>('FieldErrorsChanged')
+export const StepDirectionChanged = engine.event<'next' | 'prev'>('StepDirectionChanged')
+
+// Layer 3: Terminal state events (async)
+export const SubmitResultChanged = engine.event<{ success: boolean } | null>('SubmitResultChanged')
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
 let currentStep: StepId = 0
+let prevStep: StepId = 0
 let fieldValues: FormData = {
   firstName: '', lastName: '', email: '', phone: '',
   street: '', city: '', state: '', zip: '',
@@ -114,29 +133,26 @@ let fieldValues: FormData = {
 let fieldErrors: Record<string, string | null> = {}
 let isSubmitting = false
 let shakeCount = 0
+let lastUpdatedField: string | null = null
 
 // ---------------------------------------------------------------------------
-// Handlers
+// Layer 0 → Layer 1: Input handlers → primary state
 // ---------------------------------------------------------------------------
 
-engine.on(FieldUpdated, (update) => {
+engine.on(FieldUpdated, [FieldValuesChanged], (update, setValues) => {
+  lastUpdatedField = update.field
   fieldValues = { ...fieldValues, [update.field]: update.value }
-  engine.emit(FieldValuesChanged, { ...fieldValues })
-
-  const result = validateField(update.field, update.value)
-  fieldErrors = { ...fieldErrors, [update.field]: result.error }
-  engine.emit(FieldErrorsChanged, { ...fieldErrors })
+  setValues({ ...fieldValues })
 })
 
-engine.on(NextStep, async () => {
+engine.on(NextStep, [CurrentStepChanged, IsSubmittingChanged, ShakeCountChanged], async (_, setStep, setSubmitting, setShake) => {
   if (currentStep >= 2) {
-    // Submit
+    // Submit flow
     isSubmitting = true
-    engine.emit(IsSubmittingChanged, true)
+    setSubmitting(true)
     await new Promise((resolve) => setTimeout(resolve, 1500))
     isSubmitting = false
-    engine.emit(IsSubmittingChanged, false)
-    engine.emit(SubmitResultChanged, { success: true })
+    setSubmitting(false)
     return
   }
 
@@ -148,9 +164,9 @@ engine.on(NextStep, async () => {
   })
 
   if (allValid) {
+    prevStep = currentStep
     currentStep = (currentStep + 1) as StepId
-    engine.emit(CurrentStepChanged, currentStep)
-    engine.emit(StepDirectionChanged, 'next')
+    setStep(currentStep)
   } else {
     // Trigger validation for all fields
     for (const field of fields) {
@@ -158,14 +174,47 @@ engine.on(NextStep, async () => {
       engine.emit(FieldUpdated, { step: currentStep, field, value })
     }
     shakeCount++
-    engine.emit(ShakeCountChanged, shakeCount)
+    setShake(shakeCount)
   }
 })
 
-engine.on(PrevStep, () => {
+engine.on(PrevStep, [CurrentStepChanged], (_, setStep) => {
   if (currentStep > 0) {
+    prevStep = currentStep
     currentStep = (currentStep - 1) as StepId
-    engine.emit(CurrentStepChanged, currentStep)
-    engine.emit(StepDirectionChanged, 'prev')
+    setStep(currentStep)
   }
 })
+
+// ---------------------------------------------------------------------------
+// Layer 1 → Layer 2: Primary state → derived state
+// ---------------------------------------------------------------------------
+
+// FieldValuesChanged → FieldErrorsChanged (validate only the field that changed)
+engine.on(FieldValuesChanged, [FieldErrorsChanged], (_values, setErrors) => {
+  if (!lastUpdatedField) return
+  const value = fieldValues[lastUpdatedField as keyof FormData] ?? ''
+  const result = validateField(lastUpdatedField, value)
+  fieldErrors = { ...fieldErrors, [lastUpdatedField]: result.error }
+  setErrors({ ...fieldErrors })
+})
+
+// CurrentStepChanged → StepDirectionChanged (direction derived from step transition)
+engine.on(CurrentStepChanged, [StepDirectionChanged], (newStep, setDirection) => {
+  setDirection(newStep > prevStep ? 'next' : 'prev')
+})
+
+// ---------------------------------------------------------------------------
+// Layer 2 → Layer 3: Derived state → terminal async result
+// ---------------------------------------------------------------------------
+
+// IsSubmittingChanged → SubmitResultChanged (result emitted when submission completes)
+engine.on(IsSubmittingChanged, [SubmitResultChanged], (submitting, setResult) => {
+  // When submitting transitions to false, submission is complete
+  if (!submitting && currentStep >= 2) {
+    setResult({ success: true })
+  }
+})
+
+export function startLoop() {}
+export function stopLoop() {}

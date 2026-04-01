@@ -1,6 +1,16 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// MessageReceived ──┬──→ NewMessageAnim
+//                   └──→ BadgeBounce (if sender !== 'You')
+//
+// MessageSent ──┬──→ TypingStarted
+//               ├──→ TypingStopped
+//               └──→ MessageReceived
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -74,14 +84,14 @@ export const UnreadCountChanged = engine.event<number>('UnreadCountChanged')
 
 
 // When a message is received, trigger animation
-engine.on(MessageReceived, () => {
-  engine.emit(NewMessageAnim, undefined)
+engine.on(MessageReceived, [NewMessageAnim], (_, setAnim) => {
+  setAnim(undefined)
 })
 
 // When unread count changes (non-zero), bounce badge
-engine.on(MessageReceived, (msg) => {
+engine.on(MessageReceived, [BadgeBounce], (msg, setBounce) => {
   if (msg.sender !== 'You') {
-    engine.emit(BadgeBounce, undefined)
+    setBounce(undefined)
   }
 })
 
@@ -146,3 +156,6 @@ engine.on(MessageSent, (payload) => {
 })
 
 // Start frame loop for animations
+
+export function startLoop() {}
+export function stopLoop() {}

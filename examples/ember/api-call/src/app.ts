@@ -1,14 +1,14 @@
 import Component from '@glimmer/component'
 import { action } from '@ember/object'
-import { TrackedSignal } from '@pulse/ember'
+import { type PulseBinding } from '@pulse/ember'
 import {
   pulse,
-  queryText,
-  isLoading,
-  searchResults,
-  searchError,
+  startLoop,
+  SearchInput,
   SearchQueryChanged,
-  SearchCleared,
+  SearchLoading,
+  SearchDone,
+  SearchError,
   type User,
 } from './engine'
 
@@ -19,17 +19,18 @@ import {
 // Template: see components/app.hbs
 
 export default class UserSearchApp extends Component {
-  query: TrackedSignal<string>
-  loading: TrackedSignal<boolean>
-  results: TrackedSignal<User[]>
-  error: TrackedSignal<string | null>
+  query: PulseBinding<string>
+  loading: PulseBinding<boolean>
+  results: PulseBinding<User[]>
+  error: PulseBinding<string | null>
 
   constructor(owner: unknown, args: Record<string, unknown>) {
     super(owner, args)
-    this.query = pulse.createSignal(queryText)
-    this.loading = pulse.createSignal(isLoading)
-    this.results = pulse.createSignal(searchResults)
-    this.error = pulse.createSignal(searchError)
+    startLoop()
+    this.query = pulse.bind(SearchQueryChanged, '')
+    this.loading = pulse.bind(SearchLoading, false)
+    this.results = pulse.bind(SearchDone, [])
+    this.error = pulse.bind(SearchError, null)
   }
 
   get hasResults(): boolean {
@@ -48,13 +49,12 @@ export default class UserSearchApp extends Component {
   @action
   updateQuery(event: Event): void {
     const value = (event.target as HTMLInputElement).value
-    pulse.emit(SearchQueryChanged, value)
+    pulse.emit(SearchInput, value)
   }
 
   @action
   clearSearch(): void {
-    pulse.emit(SearchQueryChanged, '')
-    pulse.emit(SearchCleared, undefined)
+    pulse.emit(SearchInput, '')
   }
 
   willDestroy(): void {

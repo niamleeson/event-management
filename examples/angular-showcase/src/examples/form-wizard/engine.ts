@@ -1,3 +1,15 @@
+// DAG
+// FieldUpdated ──→ FieldValuesChanged
+//              └──→ FieldErrorsChanged
+// NextStep ──→ CurrentStepChanged
+//          └──→ StepDirectionChanged
+//          └──→ ShakeChanged
+//          └──→ FormSubmitted
+// PrevStep ──→ CurrentStepChanged
+//          └──→ StepDirectionChanged
+// FormSubmitted ──→ IsSubmittingChanged
+//               └──→ SubmitResultChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -64,15 +76,15 @@ let fieldValues: FormData = { firstName: '', lastName: '', email: '', phone: '',
 let fieldErrors: Record<string, string | null> = {}
 let shakeCount = 0
 
-engine.on(FieldUpdated, (update) => {
+engine.on(FieldUpdated, [FieldValuesChanged, FieldErrorsChanged], (update, setValues, setErrors) => {
   fieldValues = { ...fieldValues, [update.field]: update.value }
-  engine.emit(FieldValuesChanged, fieldValues)
+  setValues(fieldValues)
   const result = validateField(update.field, update.value)
   fieldErrors = { ...fieldErrors, [update.field]: result.error }
-  engine.emit(FieldErrorsChanged, fieldErrors)
+  setErrors(fieldErrors)
 })
 
-engine.on(NextStep, () => {
+engine.on(NextStep, [CurrentStepChanged, StepDirectionChanged, ShakeChanged], (_payload, setStep, setDir, setShake) => {
   if (currentStep >= 2) {
     engine.emit(FormSubmitted, fieldValues)
     return
@@ -84,29 +96,32 @@ engine.on(NextStep, () => {
   })
   if (allValid) {
     currentStep = (currentStep + 1) as StepId
-    engine.emit(CurrentStepChanged, currentStep)
-    engine.emit(StepDirectionChanged, 'next')
+    setStep(currentStep)
+    setDir('next')
   } else {
     for (const field of fields) {
       const value = (fieldValues as any)[field] ?? ''
       engine.emit(FieldUpdated, { step: currentStep, field, value })
     }
     shakeCount++
-    engine.emit(ShakeChanged, shakeCount)
+    setShake(shakeCount)
   }
 })
 
-engine.on(PrevStep, () => {
+engine.on(PrevStep, [CurrentStepChanged, StepDirectionChanged], (_payload, setStep, setDir) => {
   if (currentStep > 0) {
     currentStep = (currentStep - 1) as StepId
-    engine.emit(CurrentStepChanged, currentStep)
-    engine.emit(StepDirectionChanged, 'prev')
+    setStep(currentStep)
+    setDir('prev')
   }
 })
 
-engine.on(FormSubmitted, async () => {
-  engine.emit(IsSubmittingChanged, true)
+engine.on(FormSubmitted, [IsSubmittingChanged, SubmitResultChanged], async (_data, setSubmitting, setResult) => {
+  setSubmitting(true)
   await new Promise((r) => setTimeout(r, 1500))
-  engine.emit(IsSubmittingChanged, false)
-  engine.emit(SubmitResultChanged, { success: true })
+  setSubmitting(false)
+  setResult({ success: true })
 })
+
+export function startLoop() {}
+export function stopLoop() {}

@@ -1,3 +1,13 @@
+// DAG
+// MessageReceived ──→ MessagesChanged
+//                 └──→ UnreadCountChanged
+// TypingStarted ──→ TypingChanged
+// TypingStopped ──→ TypingChanged
+// MarkRead ──→ UnreadCountChanged
+// SendMessage ──→ MessageReceived
+//            └──→ TypingStarted (bot, delayed)
+//            └──→ TypingStopped (bot, delayed)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -63,38 +73,38 @@ let typing: TypingState = {}
 let unreadCount = 0
 
 // Messages state
-engine.on(MessageReceived, (msg) => {
+engine.on(MessageReceived, [MessagesChanged], (msg, setMsgs) => {
   messages = [...messages, msg]
-  engine.emit(MessagesChanged, messages)
+  setMsgs(messages)
 })
 
 // Typing state
-engine.on(TypingStarted, (user) => {
+engine.on(TypingStarted, [TypingChanged], (user, setTyping) => {
   typing = { ...typing, [user]: true }
-  engine.emit(TypingChanged, typing)
+  setTyping(typing)
 })
-engine.on(TypingStopped, (user) => {
+engine.on(TypingStopped, [TypingChanged], (user, setTyping) => {
   typing = { ...typing, [user]: false }
-  engine.emit(TypingChanged, typing)
+  setTyping(typing)
 })
 
 // Unread count state
-engine.on(MessageReceived, () => {
+engine.on(MessageReceived, [UnreadCountChanged], (_msg, setUnread) => {
   unreadCount = unreadCount + 1
-  engine.emit(UnreadCountChanged, unreadCount)
+  setUnread(unreadCount)
 })
-engine.on(MarkRead, () => {
+engine.on(MarkRead, [UnreadCountChanged], (_payload, setUnread) => {
   unreadCount = 0
-  engine.emit(UnreadCountChanged, unreadCount)
+  setUnread(unreadCount)
 })
 
 /* ------------------------------------------------------------------ */
 /*  Message sending                                                   */
 /* ------------------------------------------------------------------ */
 
-engine.on(SendMessage, (text) => {
+engine.on(SendMessage, [MessageReceived], (text, setMsg) => {
   const msg: Message = { id: nextId++, sender: 'You', text, time: now(), read: true }
-  engine.emit(MessageReceived, msg)
+  setMsg(msg)
 
   // Bot auto-responses with typing indicators
   const bots = ['Alice Bot', 'Bob Bot']
@@ -118,3 +128,6 @@ engine.on(SendMessage, (text) => {
 export function getMessages() { return messages }
 export function getTyping() { return typing }
 export function getUnreadCount() { return unreadCount }
+
+export function startLoop() {}
+export function stopLoop() {}

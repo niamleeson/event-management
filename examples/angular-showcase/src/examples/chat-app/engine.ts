@@ -1,3 +1,9 @@
+// DAG
+// SendMessage ──→ MessagesChanged
+//             └──→ UnreadCountChanged
+// MarkRead ──→ MessagesChanged
+//          └──→ UnreadCountChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -19,19 +25,19 @@ let messages: Message[] = []
 let typingUsers = new Set<TypingUser>()
 let unreadCount = 0
 
-engine.on(SendMessage, ({ text, sender }) => {
+engine.on(SendMessage, [MessagesChanged, UnreadCountChanged], ({ text, sender }, setMessages, setUnread) => {
   const msg: Message = { id: `msg-${++messageId}`, sender, text, timestamp: Date.now(), read: sender === 'You' }
   messages = [...messages, msg]
   if (!msg.read) unreadCount++
-  engine.emit(MessagesChanged, messages)
-  engine.emit(UnreadCountChanged, unreadCount)
+  setMessages(messages)
+  setUnread(unreadCount)
 })
 
-engine.on(MarkRead, (id) => {
+engine.on(MarkRead, [MessagesChanged, UnreadCountChanged], (id, setMessages, setUnread) => {
   messages = messages.map((m) => (m.id === id ? { ...m, read: true } : m))
   unreadCount = Math.max(0, unreadCount - 1)
-  engine.emit(MessagesChanged, messages)
-  engine.emit(UnreadCountChanged, unreadCount)
+  setMessages(messages)
+  setUnread(unreadCount)
 })
 
 let botInterval: ReturnType<typeof setInterval> | null = null
@@ -48,3 +54,6 @@ export function startBots() {
   }, 4000 + Math.random() * 3000)
 }
 export function stopBots() { if (botInterval) { clearInterval(botInterval); botInterval = null } }
+
+export function startLoop() { startBots() }
+export function stopLoop() { stopBots() }

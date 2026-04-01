@@ -1,6 +1,15 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// PriceUpdate ──→ FlashClear (via setTimeout)
+//
+// AlertTriggered ──→ (appends to alerts signal)
+// AlertDismissed ──→ (removes from alerts signal)
+// FlashClear     ──→ (clears flash on stock)
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -180,6 +189,8 @@ function startTicker() {
 startTicker()
 
 // ---------------------------------------------------------------------------
-// Start frame loop
+// Start/stop frame loop
 // ---------------------------------------------------------------------------
 
+export function startLoop() {}
+export function stopLoop() {}

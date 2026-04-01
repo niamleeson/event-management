@@ -1,3 +1,10 @@
+// DAG
+// ClickSpawn ──→ (adds particles, updated via physics loop)
+// ClearParticles ──→ ParticlesChanged
+//                └──→ ParticleCountChanged
+// FrameTick ──→ ParticlesChanged (via physics loop)
+//           └──→ ParticleCountChanged (via physics loop)
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -22,8 +29,10 @@ engine.on(ClickSpawn, (spawn) => {
     particles.push({ id: nextId++, x: spawn.x, y: spawn.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2, life: 1, maxLife: 60 + Math.random() * 60, size: 2 + Math.random() * 4, color: COLORS[Math.floor(Math.random() * COLORS.length)], trail: [] })
   }
 })
-engine.on(ClearParticles, () => { particles = []; engine.emit(ParticlesChanged, particles); engine.emit(ParticleCountChanged, 0) })
 
+engine.on(ClearParticles, [ParticlesChanged, ParticleCountChanged], (_payload, setParticles, setCount) => { particles = []; setParticles(particles); setCount(0) })
+
+let _rafId: number | null = null
 function physicsLoop() {
   if (particles.length > 0) {
     particles = particles.map((p) => ({
@@ -33,6 +42,13 @@ function physicsLoop() {
     engine.emit(ParticlesChanged, particles); engine.emit(ParticleCountChanged, particles.length)
   }
   engine.emit(FrameTick, undefined)
-  requestAnimationFrame(physicsLoop)
+  _rafId = requestAnimationFrame(physicsLoop)
 }
-requestAnimationFrame(physicsLoop)
+
+export function startLoop() {
+  if (_rafId !== null) return
+  _rafId = requestAnimationFrame(physicsLoop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}

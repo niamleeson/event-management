@@ -1,6 +1,21 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// DragStart ──┬──→ DragStateChanged
+//             └──→ DragPositionChanged
+//
+// DragEnd ──→ DragStateChanged
+//
+// CardMoved ──┬──→ CardsChanged
+//             └──→ CardStatusesChanged
+//
+// UndoRequested ──→ CardMoved
+//
+// Frame ──→ DragPositionChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -91,41 +106,41 @@ const undoHistory = new Map<string, MoveInfo>()
 // Drag handlers
 // ---------------------------------------------------------------------------
 
-engine.on(DragStart, (info) => {
+engine.on(DragStart, [DragStateChanged, DragPositionChanged], (info, setDragState, setDragPos) => {
   dragState = info
   dragPos = { x: info.startX, y: info.startY }
   springX = info.startX
   springY = info.startY
   springVelX = 0
   springVelY = 0
-  engine.emit(DragStateChanged, dragState)
-  engine.emit(DragPositionChanged, dragPos)
+  setDragState(dragState)
+  setDragPos(dragPos)
 })
 
 engine.on(DragMove, (pos) => {
   dragPos = pos
 })
 
-engine.on(DragEnd, () => {
+engine.on(DragEnd, [DragStateChanged], (_, setDragState) => {
   dragState = null
-  engine.emit(DragStateChanged, null)
+  setDragState(null)
 })
 
 // ---------------------------------------------------------------------------
 // Card move + async save
 // ---------------------------------------------------------------------------
 
-engine.on(CardMoved, async (move) => {
+engine.on(CardMoved, [CardsChanged, CardStatusesChanged], async (move, setCards, setStatuses) => {
   // Update cards
   cards = cards.map((c) => (c.id === move.cardId ? { ...c, column: move.toColumn } : c))
-  engine.emit(CardsChanged, [...cards])
+  setCards([...cards])
 
   // Track undo
   undoHistory.set(move.cardId, move)
 
   // Update status to saving
   cardStatuses = { ...cardStatuses, [move.cardId]: 'saving' as CardStatus }
-  engine.emit(CardStatusesChanged, { ...cardStatuses })
+  setStatuses({ ...cardStatuses })
 
   // Mock async save
   await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 400))
@@ -133,7 +148,7 @@ engine.on(CardMoved, async (move) => {
   // 30% chance of failure
   if (Math.random() < 0.3) {
     cardStatuses = { ...cardStatuses, [move.cardId]: 'error' as CardStatus }
-    engine.emit(CardStatusesChanged, { ...cardStatuses })
+    setStatuses({ ...cardStatuses })
     // Auto-retry after 2 seconds
     setTimeout(() => {
       const card = cards.find((c) => c.id === move.cardId)
@@ -143,7 +158,7 @@ engine.on(CardMoved, async (move) => {
     }, 2000)
   } else {
     cardStatuses = { ...cardStatuses, [move.cardId]: 'saved' as CardStatus }
-    engine.emit(CardStatusesChanged, { ...cardStatuses })
+    setStatuses({ ...cardStatuses })
     // Settle after animation
     setTimeout(() => {
       cardStatuses = { ...cardStatuses, [move.cardId]: 'settled' as CardStatus }
@@ -172,7 +187,7 @@ engine.on(UndoRequested, (cardId) => {
 // Frame loop: spring physics for drag ghost
 // ---------------------------------------------------------------------------
 
-engine.on(Frame, () => {
+engine.on(Frame, [DragPositionChanged], (_, setDragPos) => {
   if (!dragState) return
 
   const dx = dragPos.x - springX
@@ -184,17 +199,25 @@ engine.on(Frame, () => {
   springX += springVelX
   springY += springVelY
 
-  engine.emit(DragPositionChanged, { x: springX, y: springY })
+  setDragPos({ x: springX, y: springY })
 })
 
-// Start frame loop
-let last = performance.now()
-requestAnimationFrame(function loop() {
-  const now = performance.now()
-  engine.emit(Frame, now - last)
-  last = now
-  requestAnimationFrame(loop)
-})
+// Start/stop frame loop
+let _rafId: number | null = null
+export function startLoop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
+    const now = performance.now()
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
+  }
+  _rafId = requestAnimationFrame(loop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}
 
 // Emit initial state
 engine.emit(CardsChanged, [...cards])

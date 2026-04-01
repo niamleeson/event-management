@@ -1,3 +1,9 @@
+// DAG
+// SpawnExplosion ──→ (particles mutated)
+// ClearAll ──→ ParticleCountChanged
+// ParticlesUpdated ──→ ParticleCountChanged
+// engine.frame ──→ ParticlesUpdated (physics tick)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 /* ------------------------------------------------------------------ */
@@ -34,15 +40,21 @@ export const ParticlesUpdated = engine.event('ParticlesUpdated')
 export const ClearAll = engine.event('ClearAll')
 
 /* ------------------------------------------------------------------ */
-/*  Particle state (mutable for perf — driven by engine frame)        */
+/*  Particle state (mutable for perf -- driven by engine frame)       */
 /* ------------------------------------------------------------------ */
 
 export const particles: Particle[] = []
 
 export let particleCount = 0
 export const ParticleCountChanged = engine.event('ParticleCountChanged')
-engine.on(ParticlesUpdated, (v: any) => { particleCount = (() => particles.length)(particleCount, v); engine.emit(ParticleCountChanged, particleCount) })
-engine.on(ClearAll, (v: any) => { particleCount = (() => 0)(particleCount, v); engine.emit(ParticleCountChanged, particleCount) })
+engine.on(ParticlesUpdated, [ParticleCountChanged], (_payload, setCount) => {
+  particleCount = particles.length
+  setCount(particleCount)
+})
+engine.on(ClearAll, [ParticleCountChanged], (_payload, setCount) => {
+  particleCount = 0
+  setCount(particleCount)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Spawn logic                                                       */
@@ -79,7 +91,7 @@ engine.on(ClearAll, () => {
 /*  Frame handler: advance physics                                    */
 /* ------------------------------------------------------------------ */
 
-engine.on(engine.frame, ({ dt }) => {
+engine.on(engine.frame, [ParticlesUpdated], ({ dt }, setUpdated) => {
   if (particles.length === 0) return
 
   const dtSec = Math.min(dt / 16.667, 3)
@@ -97,5 +109,8 @@ engine.on(engine.frame, ({ dt }) => {
     }
   }
 
-  engine.emit(ParticlesUpdated, undefined)
+  setUpdated(undefined)
 })
+
+export function startLoop() {}
+export function stopLoop() {}

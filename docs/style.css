@@ -942,6 +942,144 @@ tr:hover td {
   }
 }
 
+/* ===== BENCHMARK BARS ===== */
+.bench-section {
+  margin-bottom: 32px;
+}
+
+.bench-section h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+
+.bench-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: #1e1e3a;
+  color: #aaa;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 2px solid rgba(67, 97, 238, 0.2);
+}
+
+.bench-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(67, 97, 238, 0.06);
+  color: #ccc;
+  font-size: 0.85rem;
+}
+
+.bench-table td:nth-child(2),
+.bench-table td:nth-child(3) {
+  text-align: right;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.bench-table tr:hover td {
+  background: rgba(67, 97, 238, 0.05);
+}
+
+.bench-table tr.highlight td {
+  color: #8b9cf7;
+  font-weight: 600;
+}
+
+.bench-bar-cell {
+  width: 40%;
+}
+
+.bench-bar {
+  height: 20px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #4361ee, #7c3aed);
+  min-width: 3px;
+  transition: width 0.5s ease;
+}
+
+.bench-bar.secondary {
+  background: linear-gradient(90deg, #334155, #475569);
+}
+
+.bench-bar.pulse {
+  background: linear-gradient(90deg, #4361ee, #7c3aed);
+}
+
+.bench-callout {
+  background: rgba(67, 97, 238, 0.08);
+  border: 1px solid rgba(67, 97, 238, 0.2);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin: 24px 0;
+}
+
+.bench-callout h4 {
+  margin-top: 0;
+  color: #8b9cf7;
+  font-size: 1rem;
+}
+
+.bench-callout p {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-bottom: 0;
+}
+
+.bench-callout p:not(:last-child) {
+  margin-bottom: 10px;
+}
+
+.bench-analysis {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.bench-analysis-card {
+  background: #12122a;
+  border: 1px solid rgba(67, 97, 238, 0.1);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.bench-analysis-card h4 {
+  margin-top: 0;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.bench-analysis-card p {
+  font-size: 0.82rem;
+  color: #999;
+  margin-bottom: 0;
+}
+
+.bench-meta {
+  font-size: 0.75rem;
+  color: #555;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .bench-analysis {
+    grid-template-columns: 1fr;
+  }
+  .bench-bar-cell {
+    width: 30%;
+  }
+}
+
 /* ===== PRINT STYLES ===== */
 @media print {
   .sidebar,

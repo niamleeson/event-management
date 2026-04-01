@@ -1,3 +1,14 @@
+// DAG
+// Play ──→ IsPlayingChanged
+// Pause ──→ IsPlayingChanged
+// SelectTrack ──→ TrackIdxChanged
+//             └──→ ProgressChanged
+// NextTrack ──→ TrackIdxChanged
+//           └──→ ProgressChanged
+// PrevTrack ──→ TrackIdxChanged
+//           └──→ ProgressChanged
+// Seek ──→ ProgressChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -27,13 +38,14 @@ export const AlbumRotationChanged = engine.event<number>('AlbumRotationChanged')
 
 let isPlaying = false, currentTrackIdx = 0, progress = 0, albumRotation = 0
 
-engine.on(Play, () => { isPlaying = true; engine.emit(IsPlayingChanged, true) })
-engine.on(Pause, () => { isPlaying = false; engine.emit(IsPlayingChanged, false) })
-engine.on(SelectTrack, (idx) => { currentTrackIdx = idx; progress = 0; engine.emit(TrackIdxChanged, idx); engine.emit(ProgressChanged, 0) })
-engine.on(NextTrack, () => { currentTrackIdx = (currentTrackIdx + 1) % PLAYLIST.length; progress = 0; engine.emit(TrackIdxChanged, currentTrackIdx); engine.emit(ProgressChanged, 0) })
-engine.on(PrevTrack, () => { currentTrackIdx = (currentTrackIdx - 1 + PLAYLIST.length) % PLAYLIST.length; progress = 0; engine.emit(TrackIdxChanged, currentTrackIdx); engine.emit(ProgressChanged, 0) })
-engine.on(Seek, (val) => { progress = val; engine.emit(ProgressChanged, val) })
+engine.on(Play, [IsPlayingChanged], (_payload, setPlaying) => { isPlaying = true; setPlaying(true) })
+engine.on(Pause, [IsPlayingChanged], (_payload, setPlaying) => { isPlaying = false; setPlaying(false) })
+engine.on(SelectTrack, [TrackIdxChanged, ProgressChanged], (idx, setTrack, setProgress) => { currentTrackIdx = idx; progress = 0; setTrack(idx); setProgress(0) })
+engine.on(NextTrack, [TrackIdxChanged, ProgressChanged], (_payload, setTrack, setProgress) => { currentTrackIdx = (currentTrackIdx + 1) % PLAYLIST.length; progress = 0; setTrack(currentTrackIdx); setProgress(0) })
+engine.on(PrevTrack, [TrackIdxChanged, ProgressChanged], (_payload, setTrack, setProgress) => { currentTrackIdx = (currentTrackIdx - 1 + PLAYLIST.length) % PLAYLIST.length; progress = 0; setTrack(currentTrackIdx); setProgress(0) })
+engine.on(Seek, [ProgressChanged], (val, setProgress) => { progress = val; setProgress(val) })
 
+let _rafId: number | null = null
 let lastTime = performance.now()
 function animLoop() {
   const now = performance.now(); const dt = now - lastTime; lastTime = now
@@ -53,6 +65,14 @@ function animLoop() {
     albumRotation += dt * 0.05
     engine.emit(AlbumRotationChanged, albumRotation)
   }
-  requestAnimationFrame(animLoop)
+  _rafId = requestAnimationFrame(animLoop)
 }
-requestAnimationFrame(animLoop)
+
+export function startLoop() {
+  if (_rafId !== null) return
+  lastTime = performance.now()
+  _rafId = requestAnimationFrame(animLoop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}

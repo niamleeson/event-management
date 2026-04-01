@@ -1,13 +1,15 @@
 import Component from '@glimmer/component'
 import { action } from '@ember/object'
-import { TrackedSignal, TrackedTween } from '@pulse/ember'
+import { type PulseBinding } from '@pulse/ember'
 import {
   pulse,
-  count,
-  displayTween,
-  IncrementClicked,
-  DecrementClicked,
-  ResetClicked,
+  startLoop,
+  Increment,
+  Decrement,
+  CountChanged,
+  AnimatedCountChanged,
+  ColorIntensityChanged,
+  BounceScaleChanged,
 } from './engine'
 
 // ---------------------------------------------------------------------------
@@ -16,56 +18,60 @@ import {
 
 // Template: see components/app.hbs
 //
-// The key pattern: TrackedTween.value updates on every animation frame,
-// triggering Ember to re-render the displayed number smoothly.
+// The key pattern: PulseBinding<number> for AnimatedCountChanged updates
+// on every animation frame, triggering Ember to re-render the displayed
+// number smoothly.
 
 export default class AnimatedCounterApp extends Component {
   // Discrete count (immediate updates)
-  countSignal: TrackedSignal<number>
+  countBinding: PulseBinding<number>
 
-  // Animated display value (smooth tween)
-  tweenedDisplay: TrackedTween
+  // Animated display value (smooth easing via Frame loop)
+  animatedCount: PulseBinding<number>
+
+  // Color intensity for visual feedback
+  colorIntensity: PulseBinding<number>
+
+  // Bounce scale for spring animation
+  bounceScale: PulseBinding<number>
 
   constructor(owner: unknown, args: Record<string, unknown>) {
     super(owner, args)
-    this.countSignal = pulse.createSignal(count)
-    this.tweenedDisplay = pulse.createTween(displayTween)
+    startLoop()
+    this.countBinding = pulse.bind(CountChanged, 0)
+    this.animatedCount = pulse.bind(AnimatedCountChanged, 0)
+    this.colorIntensity = pulse.bind(ColorIntensityChanged, 0)
+    this.bounceScale = pulse.bind(BounceScaleChanged, 1)
   }
 
   get displayValue(): string {
-    return this.tweenedDisplay.value.toFixed(1)
-  }
-
-  get isAnimating(): boolean {
-    return this.tweenedDisplay.active
-  }
-
-  get progressPercent(): string {
-    return `${(this.tweenedDisplay.progress * 100).toFixed(0)}%`
+    return this.animatedCount.value.toFixed(1)
   }
 
   get isZero(): boolean {
-    return this.countSignal.value === 0
+    return this.countBinding.value === 0
+  }
+
+  get scaleTransform(): string {
+    const s = this.bounceScale.value
+    return `scale(${s.toFixed(3)})`
   }
 
   @action
   increment(): void {
-    pulse.emit(IncrementClicked, undefined)
+    pulse.emit(Increment, undefined)
   }
 
   @action
   decrement(): void {
-    pulse.emit(DecrementClicked, undefined)
-  }
-
-  @action
-  reset(): void {
-    pulse.emit(ResetClicked, undefined)
+    pulse.emit(Decrement, undefined)
   }
 
   willDestroy(): void {
     super.willDestroy()
-    this.countSignal.destroy()
-    this.tweenedDisplay.destroy()
+    this.countBinding.destroy()
+    this.animatedCount.destroy()
+    this.colorIntensity.destroy()
+    this.bounceScale.destroy()
   }
 }

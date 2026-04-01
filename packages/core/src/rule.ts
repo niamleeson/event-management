@@ -17,6 +17,7 @@ export interface RuleConfig {
  */
 export function createRule(config: RuleConfig): Rule {
   const id = `rule_${ruleCounter++}`
+  const isJoin = config.mode === 'join'
   const rule: Rule = {
     id,
     name: config.name ?? id,
@@ -27,6 +28,8 @@ export function createRule(config: RuleConfig): Rule {
     outputs: config.outputs,
     priority: config.priority ?? 0,
     _disposed: false,
+    _joinPending: isJoin ? config.triggers.map(() => []) : null,
+    _joinReady: 0,
   }
   return rule
 }
@@ -37,6 +40,8 @@ export function createRule(config: RuleConfig): Rule {
 export function registerRuleConsumers(rule: Rule): void {
   for (const trigger of rule.triggers) {
     trigger._consumers.add(rule)
+    // Cache solo consumer for fast-path dispatch
+    trigger._solo = trigger._consumers.size === 1 ? rule : null
   }
 }
 
@@ -46,6 +51,11 @@ export function registerRuleConsumers(rule: Rule): void {
 export function unregisterRuleConsumers(rule: Rule): void {
   for (const trigger of rule.triggers) {
     trigger._consumers.delete(rule)
+    if (trigger._consumers.size === 1) {
+      trigger._solo = trigger._consumers.values().next().value ?? null
+    } else {
+      trigger._solo = null
+    }
   }
   rule._disposed = true
 }

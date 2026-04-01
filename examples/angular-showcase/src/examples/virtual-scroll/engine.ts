@@ -1,3 +1,9 @@
+// DAG
+// ScrollTo ──→ ScrollTopChanged
+//          └──→ ItemsChanged
+//          └──→ TotalLoadedChanged
+//          └──→ LoadingPagesChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -15,8 +21,8 @@ let loadedPages = new Set<number>()
 let loadingPages = new Set<number>()
 let totalLoaded = 0
 
-engine.on(ScrollTo, async (scrollTop) => {
-  engine.emit(ScrollTopChanged, scrollTop)
+engine.on(ScrollTo, [ScrollTopChanged], async (scrollTop, setScrollTop) => {
+  setScrollTop(scrollTop)
   const visibleStart = Math.floor(scrollTop / ITEM_HEIGHT)
   const visibleEnd = visibleStart + Math.ceil(600 / ITEM_HEIGHT)
   const prefetchEnd = visibleEnd + PREFETCH_THRESHOLD
@@ -39,3 +45,6 @@ engine.on(ScrollTo, async (scrollTop) => {
     }
   }
 })
+
+export function startLoop() {}
+export function stopLoop() {}

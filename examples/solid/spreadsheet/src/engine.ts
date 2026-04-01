@@ -1,6 +1,14 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// CellEdited ──┬──→ CellsChanged
+//              └──→ FormulaError
+//
+// CellSelected ──→ SelectedCellChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -114,26 +122,29 @@ export const SelectedCellChanged = engine.event<CellCoord>('SelectedCellChanged'
 let cells = makeEmptyGrid()
 let selectedCell: CellCoord = { row: 0, col: 0 }
 
-engine.on(CellEdited, (payload) => {
+engine.on(CellEdited, [CellsChanged, FormulaError], (payload, setCells, setError) => {
   const newGrid = cells.map(r => r.map(c => ({ ...c })))
   newGrid[payload.row][payload.col] = { raw: payload.value, computed: payload.value }
   cells = recomputeGrid(newGrid)
-  engine.emit(CellsChanged, cells)
+  setCells(cells)
 
   // Check for formula errors
   const cell = cells[payload.row][payload.col]
   if (cell.error) {
-    engine.emit(FormulaError, { row: payload.row, col: payload.col, error: cell.error })
+    setError({ row: payload.row, col: payload.col, error: cell.error })
   }
 })
 
-engine.on(CellSelected, (coord) => {
+engine.on(CellSelected, [SelectedCellChanged], (coord, setSelected) => {
   selectedCell = coord
-  engine.emit(SelectedCellChanged, coord)
+  setSelected(coord)
 })
 
 // Emit initial state
 engine.emit(CellsChanged, cells)
 engine.emit(SelectedCellChanged, selectedCell)
+
+export function startLoop() {}
+export function stopLoop() {}
 
 export { colLabel, ROWS, COLS }

@@ -1,3 +1,8 @@
+// DAG
+// PriceUpdate ──→ StocksChanged
+// DismissAlert ──→ StocksChanged
+// ToggleFeed ──→ FeedRunningChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -23,7 +28,7 @@ export const FeedRunningChanged = engine.event<boolean>('FeedRunningChanged')
 let stocks = [...INITIAL_STOCKS]
 let feedRunning = true
 
-engine.on(PriceUpdate, (update) => {
+engine.on(PriceUpdate, [StocksChanged], (update, setStocks) => {
   stocks = stocks.map((s) => {
     if (s.symbol !== update.symbol) return s
     const change = update.price - s.price
@@ -31,10 +36,11 @@ engine.on(PriceUpdate, (update) => {
     const history = [...s.history, update.price].slice(-30)
     return { ...s, price: update.price, change, changePercent, history }
   })
-  engine.emit(StocksChanged, stocks)
+  setStocks(stocks)
 })
-engine.on(DismissAlert, (sym) => { stocks = stocks.map((s) => s.symbol === sym ? { ...s, alert: undefined } : s); engine.emit(StocksChanged, stocks) })
-engine.on(ToggleFeed, () => { feedRunning = !feedRunning; engine.emit(FeedRunningChanged, feedRunning) })
+
+engine.on(DismissAlert, [StocksChanged], (sym, setStocks) => { stocks = stocks.map((s) => s.symbol === sym ? { ...s, alert: undefined } : s); setStocks(stocks) })
+engine.on(ToggleFeed, [FeedRunningChanged], (_payload, setRunning) => { feedRunning = !feedRunning; setRunning(feedRunning) })
 
 let feedInterval: ReturnType<typeof setInterval> | null = null
 export function startFeed() {
@@ -48,3 +54,6 @@ export function startFeed() {
   }, 500)
 }
 export function stopFeed() { if (feedInterval) { clearInterval(feedInterval); feedInterval = null } }
+
+export function startLoop() { startFeed() }
+export function stopLoop() { stopFeed() }

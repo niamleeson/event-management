@@ -1,3 +1,8 @@
+// DAG
+// TasksUpdated ──→ TasksChanged
+// TaskMoved ──→ TasksUpdated
+// TaskResized ──→ TasksUpdated
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 
@@ -48,10 +53,15 @@ const INITIAL_TASKS: Task[] = [
 
 export let tasks = INITIAL_TASKS
 export const TasksChanged = engine.event('TasksChanged')
-engine.on(TasksUpdated, (v: any) => { tasks = ((_prev, updated) => updated)(tasks, v); engine.emit(TasksChanged, tasks) })
+engine.on(TasksUpdated, [TasksChanged], (updated, setTasks) => {
+  tasks = updated
+  setTasks(tasks)
+})
 
 export let zoom = 'day' as ZoomLevel
-engine.on(ZoomChanged, (v: any) => { zoom = ((_prev, z) => z)(zoom, v); engine.emit(ZoomChanged, zoom) })
+engine.on(ZoomChanged, (z) => {
+  zoom = z as ZoomLevel
+})
 
 /* ------------------------------------------------------------------ */
 /*  Auto-shift dependents when a task is moved                        */
@@ -88,15 +98,15 @@ function shiftDependents(taskList: Task[], movedId: number): Task[] {
   return result
 }
 
-engine.on(TaskMoved, (v: any) => { engine.emit(TasksUpdated, (({ id, newStart }) => {
+engine.on(TaskMoved, [TasksUpdated], ({ id, newStart }, setUpdated) => {
   let updated = tasks.map(t => t.id === id ? { ...t, start: Math.max(0, newStart) } : { ...t })
-  return shiftDependents(updated, id)
-})(v)) })
+  setUpdated(shiftDependents(updated, id))
+})
 
-engine.on(TaskResized, (v: any) => { engine.emit(TasksUpdated, (({ id, newDuration }) => {
+engine.on(TaskResized, [TasksUpdated], ({ id, newDuration }, setUpdated) => {
   let updated = tasks.map(t => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : { ...t })
-  return shiftDependents(updated, id)
-})(v)) })
+  setUpdated(shiftDependents(updated, id))
+})
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -114,3 +124,6 @@ function dayWidth(z: ZoomLevel): number {
 
 
 export { dayWidth }
+
+export function startLoop() {}
+export function stopLoop() {}

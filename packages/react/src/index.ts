@@ -44,7 +44,10 @@ function useEngine(): Engine {
 function usePulse<T>(event: EventType<T>, initial: T): T {
   const engine = useEngine()
   const [val, setVal] = useState(initial)
-  useEffect(() => engine.on(event, setVal), [engine, event])
+  useEffect(() => {
+    const handle = engine.on(event, setVal as (payload: T) => void)
+    return () => handle()
+  }, [engine, event])
   return val
 }
 

@@ -1,3 +1,13 @@
+// DAG
+// SearchInput ──→ SearchQueryChanged
+//             └──→ ErrorChanged
+//             └──→ SearchingChanged
+//             └──→ SearchResultsChanged
+// UserSelected ──→ SelectedUserChanged
+//              └──→ LoadingDetailsChanged
+//              └──→ UserDetailsChanged
+//              └──→ ErrorChanged
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -117,9 +127,9 @@ export const UserDetailsChanged = engine.event<UserDetails | null>('UserDetailsC
 let searchAbort: AbortController | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-engine.on(SearchInput, (query: string) => {
-  engine.emit(SearchQueryChanged, query)
-  engine.emit(ErrorChanged, null)
+engine.on(SearchInput, [SearchQueryChanged, ErrorChanged], (query: string, setQuery, setError) => {
+  setQuery(query)
+  setError(null)
 
   // Cancel previous
   if (debounceTimer) clearTimeout(debounceTimer)
@@ -154,9 +164,9 @@ engine.on(SearchInput, (query: string) => {
 
 let detailsAbort: AbortController | null = null
 
-engine.on(UserSelected, async (userId: string) => {
-  engine.emit(SelectedUserChanged, userId)
-  engine.emit(LoadingDetailsChanged, true)
+engine.on(UserSelected, [SelectedUserChanged, LoadingDetailsChanged], async (userId: string, setSelected, setLoading) => {
+  setSelected(userId)
+  setLoading(true)
 
   if (detailsAbort) detailsAbort.abort()
   detailsAbort = new AbortController()
@@ -172,3 +182,6 @@ engine.on(UserSelected, async (userId: string) => {
     }
   }
 })
+
+export function startLoop() {}
+export function stopLoop() {}

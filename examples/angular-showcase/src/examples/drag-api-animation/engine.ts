@@ -1,3 +1,13 @@
+// DAG
+// DragStart ──→ DragStateChanged
+//           └──→ DragPositionChanged
+// DragMove ──→ DragPositionChanged
+// DragEnd ──→ DragStateChanged
+// CardMoved ──→ CardsChanged
+//           └──→ CardStatusesChanged
+// UndoRequested ──→ CardsChanged
+//               └──→ CardMoved
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -39,29 +49,29 @@ let dragInfo: DragInfo | null = null
 let cardStatuses: Record<string, CardStatus> = {}
 const undoHistory = new Map<string, MoveInfo>()
 
-engine.on(DragStart, (info) => {
+engine.on(DragStart, [DragStateChanged, DragPositionChanged], (info, setState, setPos) => {
   dragInfo = info
-  engine.emit(DragStateChanged, info)
-  engine.emit(DragPositionChanged, { x: info.startX, y: info.startY })
+  setState(info)
+  setPos({ x: info.startX, y: info.startY })
 })
 
-engine.on(DragMove, (pos) => {
-  engine.emit(DragPositionChanged, pos)
+engine.on(DragMove, [DragPositionChanged], (pos, setPos) => {
+  setPos(pos)
 })
 
-engine.on(DragEnd, () => {
+engine.on(DragEnd, [DragStateChanged], (_payload, setState) => {
   dragInfo = null
-  engine.emit(DragStateChanged, null)
+  setState(null)
 })
 
-engine.on(CardMoved, async (move) => {
+engine.on(CardMoved, [CardsChanged, CardStatusesChanged], async (move, setCards, setStatuses) => {
   cards = cards.map((c) => (c.id === move.cardId ? { ...c, column: move.toColumn } : c))
-  engine.emit(CardsChanged, cards)
+  setCards(cards)
   undoHistory.set(move.cardId, move)
 
   // Save with mock API
   cardStatuses = { ...cardStatuses, [move.cardId]: 'saving' }
-  engine.emit(CardStatusesChanged, cardStatuses)
+  setStatuses(cardStatuses)
 
   await new Promise((r) => setTimeout(r, 800 + Math.random() * 400))
 
@@ -83,13 +93,16 @@ engine.on(CardMoved, async (move) => {
   }
 })
 
-engine.on(UndoRequested, (cardId) => {
+engine.on(UndoRequested, [CardsChanged], (cardId, setCards) => {
   const lastMove = undoHistory.get(cardId)
   if (lastMove) {
     undoHistory.delete(cardId)
     const reverseMove: MoveInfo = { cardId, fromColumn: lastMove.toColumn, toColumn: lastMove.fromColumn }
     cards = cards.map((c) => (c.id === cardId ? { ...c, column: reverseMove.toColumn } : c))
-    engine.emit(CardsChanged, cards)
+    setCards(cards)
     engine.emit(CardMoved, reverseMove)
   }
 })
+
+export function startLoop() {}
+export function stopLoop() {}

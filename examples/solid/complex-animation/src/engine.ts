@@ -1,6 +1,18 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// PageLoaded ──→ (triggers staggered card entrance via setTimeout)
+//
+// HoverCard ──→ (updates hover target array)
+// UnhoverCard ──→ (updates hover target array)
+//
+// Frame ──┬──→ AllCardsEnteredEvent
+//         ├──→ WelcomeAnimChanged
+//         └──→ CardAnimStateChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -99,7 +111,7 @@ engine.on(UnhoverCard, (index) => {
 // Frame loop: animate everything
 // ---------------------------------------------------------------------------
 
-engine.on(Frame, (_dt) => {
+engine.on(Frame, [AllCardsEnteredEvent, WelcomeAnimChanged, CardAnimStateChanged], (_dt, setAllEntered, setWelcome, setCardAnim) => {
   let dirty = false
 
   for (let i = 0; i < CARD_COUNT; i++) {
@@ -113,7 +125,7 @@ engine.on(Frame, (_dt) => {
         cardEnteredCount++
         if (cardEnteredCount === CARD_COUNT && !allEntered) {
           allEntered = true
-          engine.emit(AllCardsEnteredEvent, true)
+          setAllEntered(true)
           welcomePhase = 'fadingIn'
         }
       }
@@ -145,7 +157,7 @@ engine.on(Frame, (_dt) => {
       welcomeOpacity = 1
       welcomePhase = 'slidingUp'
     }
-    engine.emit(WelcomeAnimChanged, { opacity: welcomeOpacity, translateY: welcomeTranslateY })
+    setWelcome({ opacity: welcomeOpacity, translateY: welcomeTranslateY })
     dirty = true
   } else if (welcomePhase === 'slidingUp') {
     welcomeTranslateY += (0 - welcomeTranslateY) * 0.08
@@ -153,12 +165,12 @@ engine.on(Frame, (_dt) => {
       welcomeTranslateY = 0
       welcomePhase = 'done'
     }
-    engine.emit(WelcomeAnimChanged, { opacity: welcomeOpacity, translateY: welcomeTranslateY })
+    setWelcome({ opacity: welcomeOpacity, translateY: welcomeTranslateY })
     dirty = true
   }
 
   if (dirty) {
-    engine.emit(CardAnimStateChanged, {
+    setCardAnim({
       opacities: [...cardOpacity],
       translateYs: [...cardTranslateY],
       hoverScales: [...cardHoverScale],
@@ -171,10 +183,18 @@ engine.on(Frame, (_dt) => {
 // Start frame loop
 // ---------------------------------------------------------------------------
 
-let last = performance.now()
-requestAnimationFrame(function loop() {
-  const now = performance.now()
-  engine.emit(Frame, now - last)
-  last = now
-  requestAnimationFrame(loop)
-})
+let _rafId: number | null = null
+export function startLoop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
+    const now = performance.now()
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
+  }
+  _rafId = requestAnimationFrame(loop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}

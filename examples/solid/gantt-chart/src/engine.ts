@@ -1,6 +1,13 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// TaskDragMove ──→ TasksRecomputed
+// TaskDragEnd  ──→ DragSnap
+// TaskUpdated  ──→ TasksRecomputed
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -151,7 +158,7 @@ function cascadeDependencies(taskList: Task[], movedTaskId: string): Task[] {
 // Drag handling
 // ---------------------------------------------------------------------------
 
-engine.on(TaskDragMove, (payload) => {
+engine.on(TaskDragMove, [TasksRecomputed], (payload, setRecomputed) => {
   const state = dragState.value
   if (!state.taskId || state.taskId !== payload.id) return
 
@@ -180,26 +187,28 @@ engine.on(TaskDragMove, (payload) => {
   // Cascade dependencies
   newTasks = cascadeDependencies(newTasks, payload.id)
 
-  engine.emit(TasksRecomputed, newTasks)
+  setRecomputed(newTasks)
 })
 
-engine.on(TaskDragEnd, (payload) => {
+engine.on(TaskDragEnd, [DragSnap], (payload, setSnap) => {
   // Snap to grid
   const currentTasks = tasks.value
   const task = currentTasks.find(t => t.id === payload.id)
   if (task) {
     snapTarget.set(task.start)
-    engine.emit(DragSnap, undefined)
+    setSnap(undefined)
   }
 })
 
-engine.on(TaskUpdated, (updated) => {
+engine.on(TaskUpdated, [TasksRecomputed], (updated, setRecomputed) => {
   let newTasks = tasks.value.map(t => t.id === updated.id ? updated : t)
   newTasks = cascadeDependencies(newTasks, updated.id)
-  engine.emit(TasksRecomputed, newTasks)
+  setRecomputed(newTasks)
 })
 
-// Start frame loop for springs
+// Start/stop frame loop
+export function startLoop() {}
+export function stopLoop() {}
 
 // ---------------------------------------------------------------------------
 // Exports

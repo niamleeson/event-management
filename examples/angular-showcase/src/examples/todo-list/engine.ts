@@ -1,3 +1,11 @@
+// DAG
+// TodoTextChanged ──→ InputTextChanged
+//                 └──→ ValidationChanged
+// TodoAdded ──→ TodosChanged
+// TodoRemoved ──→ TodosChanged
+// TodoToggled ──→ TodosChanged
+// FilterChanged ──→ ActiveFilterChanged
+
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -50,32 +58,35 @@ let todos: Todo[] = []
 // ---------------------------------------------------------------------------
 
 // Validate text input
-engine.on(TodoTextChanged, (text: string) => {
-  engine.emit(InputTextChanged, text)
+engine.on(TodoTextChanged, [InputTextChanged, ValidationChanged], (text: string, setInput, setValidation) => {
+  setInput(text)
   if (text.trim().length === 0) {
-    engine.emit(ValidationChanged, { valid: false, error: null })
+    setValidation({ valid: false, error: null })
   } else if (text.trim().length < 3) {
-    engine.emit(ValidationChanged, { valid: false, error: 'Todo must be at least 3 characters' })
+    setValidation({ valid: false, error: 'Todo must be at least 3 characters' })
   } else {
-    engine.emit(ValidationChanged, { valid: true, error: null })
+    setValidation({ valid: true, error: null })
   }
 })
 
-engine.on(TodoAdded, (todo: Todo) => {
+engine.on(TodoAdded, [TodosChanged], (todo: Todo, setTodos) => {
   todos = [...todos, todo]
-  engine.emit(TodosChanged, todos)
+  setTodos(todos)
 })
 
-engine.on(TodoRemoved, (id: string) => {
+engine.on(TodoRemoved, [TodosChanged], (id: string, setTodos) => {
   todos = todos.filter((t) => t.id !== id)
-  engine.emit(TodosChanged, todos)
+  setTodos(todos)
 })
 
-engine.on(TodoToggled, (id: string) => {
+engine.on(TodoToggled, [TodosChanged], (id: string, setTodos) => {
   todos = todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-  engine.emit(TodosChanged, todos)
+  setTodos(todos)
 })
 
-engine.on(FilterChanged, (filter: Filter) => {
-  engine.emit(ActiveFilterChanged, filter)
+engine.on(FilterChanged, [ActiveFilterChanged], (filter: Filter, setActive) => {
+  setActive(filter)
 })
+
+export function startLoop() {}
+export function stopLoop() {}

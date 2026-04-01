@@ -1,6 +1,16 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// Increment ──→ CountChanged
+// Decrement ──→ CountChanged
+//
+// Frame ──┬──→ AnimatedCountChanged
+//         ├──→ ColorIntensityChanged
+//         └──→ BounceScaleChanged
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -34,41 +44,41 @@ let bounceVel = 0
 // Handlers
 // ---------------------------------------------------------------------------
 
-engine.on(Increment, () => {
+engine.on(Increment, [CountChanged], (_, setCount) => {
   count += 1
   targetCount = count
   targetColorIntensity = Math.max(-1, Math.min(1, count / 10))
   bounceScale = 1.3
   bounceVel = 0
-  engine.emit(CountChanged, count)
+  setCount(count)
 })
 
-engine.on(Decrement, () => {
+engine.on(Decrement, [CountChanged], (_, setCount) => {
   count -= 1
   targetCount = count
   targetColorIntensity = Math.max(-1, Math.min(1, count / 10))
   bounceScale = 1.3
   bounceVel = 0
-  engine.emit(CountChanged, count)
+  setCount(count)
 })
 
 // ---------------------------------------------------------------------------
 // Frame loop: animate values
 // ---------------------------------------------------------------------------
 
-engine.on(Frame, () => {
+engine.on(Frame, [AnimatedCountChanged, ColorIntensityChanged, BounceScaleChanged], (_, setAnimatedCount, setColorIntensity, setBounceScale) => {
   // Animated count: ease toward target (easeOutCubic style)
   const countDiff = targetCount - animatedCount
   if (Math.abs(countDiff) > 0.01) {
     animatedCount += countDiff * 0.08
-    engine.emit(AnimatedCountChanged, animatedCount)
+    setAnimatedCount(animatedCount)
   }
 
   // Color intensity: ease toward target
   const colorDiff = targetColorIntensity - colorIntensity
   if (Math.abs(colorDiff) > 0.001) {
     colorIntensity += colorDiff * 0.05
-    engine.emit(ColorIntensityChanged, colorIntensity)
+    setColorIntensity(colorIntensity)
   }
 
   // Bounce: spring toward 1
@@ -77,15 +87,23 @@ engine.on(Frame, () => {
     bounceVel += force
     bounceVel *= 0.75
     bounceScale += bounceVel
-    engine.emit(BounceScaleChanged, bounceScale)
+    setBounceScale(bounceScale)
   }
 })
 
-// Start the frame loop
-let last = performance.now()
-requestAnimationFrame(function loop() {
-  const now = performance.now()
-  engine.emit(Frame, now - last)
-  last = now
-  requestAnimationFrame(loop)
-})
+// Start/stop the frame loop
+let _rafId: number | null = null
+export function startLoop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
+    const now = performance.now()
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
+  }
+  _rafId = requestAnimationFrame(loop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}

@@ -1,3 +1,10 @@
+// DAG
+// MouseMove ──→ CameraTiltXChanged (via spring loop)
+//           └──→ CameraTiltYChanged (via spring loop)
+// ToggleTheme ──→ IsDarkChanged
+// PageEnter ──→ LayerOpacityChanged[i]
+//           └──→ LayerTranslateYChanged[i]
+
 import { createEngine, type EventType } from '@pulse/core'
 
 export const engine = createEngine()
@@ -26,14 +33,22 @@ for (let i = 0; i < LAYER_COUNT; i++) {
 let isDark = true, tiltX = 0, tiltY = 0, posX = 0, posY = 0, velX = 0, velY = 0
 
 engine.on(MouseMove, (pos) => { tiltX = pos.x; tiltY = pos.y })
-engine.on(ToggleTheme, () => { isDark = !isDark; engine.emit(IsDarkChanged, isDark) })
+engine.on(ToggleTheme, [IsDarkChanged], (_payload, setDark) => { isDark = !isDark; setDark(isDark) })
 
+let _rafId: number | null = null
 function springLoop() {
   velX = (velX + (tiltX - posX) * 0.08) * 0.986; posX += velX; engine.emit(CameraTiltXChanged, posX)
   velY = (velY + (tiltY - posY) * 0.08) * 0.986; posY += velY; engine.emit(CameraTiltYChanged, posY)
-  requestAnimationFrame(springLoop)
+  _rafId = requestAnimationFrame(springLoop)
 }
-requestAnimationFrame(springLoop)
+
+export function startLoop() {
+  if (_rafId !== null) return
+  _rafId = requestAnimationFrame(springLoop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}
 
 function animateTo(from: number, to: number, dur: number, ease: (t: number) => number, cb: (v: number) => void) {
   const s = performance.now()

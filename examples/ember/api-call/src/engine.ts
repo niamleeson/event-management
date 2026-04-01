@@ -1,3 +1,8 @@
+// DAG
+// SearchInput ──→ SearchQueryChanged, SearchError
+// doSearch ──→ SearchLoading, SearchDone, SearchError
+// UserSelected ──→ UserDetailsLoading, UserDetailsDone, SearchError
+
 import { createEngine } from '@pulse/core'
 import { createPulseService } from '@pulse/ember'
 
@@ -12,119 +17,145 @@ export const engine = createEngine()
 // ---------------------------------------------------------------------------
 
 export interface User {
-  id: number
+  id: string
   name: string
   email: string
   avatar: string
+  role: string
 }
 
-export interface SearchState {
-  query: string
-  results: User[]
-  loading: boolean
-  error: string | null
+export interface UserDetails extends User {
+  bio: string
+  location: string
+  joinDate: string
+  projects: string[]
+}
+
+// ---------------------------------------------------------------------------
+// Mock data
+// ---------------------------------------------------------------------------
+
+const MOCK_USERS: User[] = [
+  { id: '1', name: 'Alice Chen', email: 'alice@example.com', avatar: 'AC', role: 'Engineer' },
+  { id: '2', name: 'Bob Martinez', email: 'bob@example.com', avatar: 'BM', role: 'Designer' },
+  { id: '3', name: 'Carol White', email: 'carol@example.com', avatar: 'CW', role: 'Product Manager' },
+  { id: '4', name: 'David Kim', email: 'david@example.com', avatar: 'DK', role: 'Engineer' },
+  { id: '5', name: 'Elena Popov', email: 'elena@example.com', avatar: 'EP', role: 'Data Scientist' },
+  { id: '6', name: 'Frank Johnson', email: 'frank@example.com', avatar: 'FJ', role: 'DevOps' },
+  { id: '7', name: 'Grace Liu', email: 'grace@example.com', avatar: 'GL', role: 'Engineer' },
+  { id: '8', name: 'Henry Tanaka', email: 'henry@example.com', avatar: 'HT', role: 'Designer' },
+]
+
+const MOCK_DETAILS: Record<string, UserDetails> = Object.fromEntries(
+  MOCK_USERS.map((u) => [
+    u.id,
+    {
+      ...u,
+      bio: `${u.name} is a talented ${u.role.toLowerCase()} with years of experience.`,
+      location: ['San Francisco', 'New York', 'London', 'Tokyo', 'Berlin'][
+        Math.floor(parseInt(u.id) % 5)
+      ],
+      joinDate: `202${parseInt(u.id) % 4}-0${(parseInt(u.id) % 9) + 1}-15`,
+      projects: ['Project Alpha', 'Project Beta', 'Project Gamma'].slice(
+        0,
+        (parseInt(u.id) % 3) + 1,
+      ),
+    },
+  ]),
+)
+
+// Mock API functions
+async function searchUsers(query: string): Promise<User[]> {
+  await new Promise((resolve) => setTimeout(resolve, 600 + Math.random() * 400))
+  const q = query.toLowerCase()
+  return MOCK_USERS.filter(
+    (u) =>
+      u.name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      u.role.toLowerCase().includes(q),
+  )
+}
+
+async function fetchUserDetails(userId: string): Promise<UserDetails> {
+  await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 300))
+  const details = MOCK_DETAILS[userId]
+  if (!details) throw new Error(`User ${userId} not found`)
+  return details
 }
 
 // ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
+export const SearchInput = engine.event<string>('SearchInput')
 export const SearchQueryChanged = engine.event<string>('SearchQueryChanged')
-export const SearchSubmitted = engine.event<string>('SearchSubmitted')
-export const SearchPending = engine.event<string>('SearchPending')
+export const SearchLoading = engine.event<boolean>('SearchLoading')
 export const SearchDone = engine.event<User[]>('SearchDone')
-export const SearchError = engine.event<Error>('SearchError')
-export const SearchCleared = engine.event<void>('SearchCleared')
+export const SearchError = engine.event<string | null>('SearchError')
+export const UserSelected = engine.event<string | null>('UserSelected')
+export const UserDetailsDone = engine.event<UserDetails | null>('UserDetailsDone')
+export const UserDetailsLoading = engine.event<boolean>('UserDetailsLoading')
 
 // ---------------------------------------------------------------------------
-// Pipes
+// Debounce
 // ---------------------------------------------------------------------------
 
-// When a non-empty query is submitted, forward to the async handler
-engine.pipe(SearchQueryChanged, SearchSubmitted, (query: string) => query)
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-// ---------------------------------------------------------------------------
-// Async: simulated API search
-// ---------------------------------------------------------------------------
+engine.on(SearchInput, [SearchQueryChanged, SearchError], (query: string, setQuery, setError) => {
+  setQuery(query)
+  setError(null)
 
-const MOCK_USERS: User[] = [
-  { id: 1, name: 'Alice Johnson', email: 'alice@example.com', avatar: 'AJ' },
-  { id: 2, name: 'Bob Smith', email: 'bob@example.com', avatar: 'BS' },
-  { id: 3, name: 'Carol Davis', email: 'carol@example.com', avatar: 'CD' },
-  { id: 4, name: 'David Wilson', email: 'david@example.com', avatar: 'DW' },
-  { id: 5, name: 'Eva Martinez', email: 'eva@example.com', avatar: 'EM' },
-  { id: 6, name: 'Frank Brown', email: 'frank@example.com', avatar: 'FB' },
-  { id: 7, name: 'Grace Lee', email: 'grace@example.com', avatar: 'GL' },
-  { id: 8, name: 'Henry Taylor', email: 'henry@example.com', avatar: 'HT' },
-]
-
-engine.async(SearchSubmitted, {
-  pending: SearchPending,
-  done: SearchDone,
-  error: SearchError,
-  strategy: 'latest',
-  do: async (query: string, { signal }) => {
-    // Simulate network delay
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 800)
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new DOMException('Aborted', 'AbortError'))
-      })
-    })
-
-    if (!query.trim()) return []
-
-    // Simulate occasional errors
-    if (query.toLowerCase() === 'error') {
-      throw new Error('Search service unavailable')
-    }
-
-    const lower = query.toLowerCase()
-    return MOCK_USERS.filter(
-      (u) =>
-        u.name.toLowerCase().includes(lower) ||
-        u.email.toLowerCase().includes(lower),
-    )
-  },
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    doSearch(query)
+  }, 300)
 })
 
 // ---------------------------------------------------------------------------
-// Signals
+// Async search handler
 // ---------------------------------------------------------------------------
 
-// Current search query text
-export const queryText = engine.signal<string>(
-  SearchQueryChanged,
-  '',
-  (_prev, query) => query,
-)
+async function doSearch(query: string) {
+  if (query.trim().length === 0) {
+    engine.emit(SearchDone, [])
+    return
+  }
+  engine.emit(SearchLoading, true)
+  try {
+    const results = await searchUsers(query)
+    engine.emit(SearchDone, results)
+  } catch (e: any) {
+    engine.emit(SearchError, e instanceof Error ? e.message : String(e))
+  }
+  engine.emit(SearchLoading, false)
+}
 
-// Loading state
-export const isLoading = engine.signal<boolean>(
-  SearchPending,
-  false,
-  () => true,
-)
-engine.signalUpdate(isLoading, SearchDone, () => false)
-engine.signalUpdate(isLoading, SearchError, () => false)
+// ---------------------------------------------------------------------------
+// Async user details handler
+// ---------------------------------------------------------------------------
 
-// Search results
-export const searchResults = engine.signal<User[]>(
-  SearchDone,
-  [],
-  (_prev, results) => results,
-)
-engine.signalUpdate(searchResults, SearchCleared, () => [])
+engine.on(UserSelected, [UserDetailsLoading, UserDetailsDone, SearchError], async (userId: string | null, setLoading, setDetails, setError) => {
+  if (!userId) {
+    setDetails(null)
+    return
+  }
+  setLoading(true)
+  try {
+    const details = await fetchUserDetails(userId)
+    setDetails(details)
+  } catch (e: any) {
+    setError(e instanceof Error ? e.message : String(e))
+  }
+  setLoading(false)
+})
 
-// Error state
-export const searchError = engine.signal<string | null>(
-  SearchError,
-  null,
-  (_prev, err) => err.message,
-)
-engine.signalUpdate(searchError, SearchDone, () => null)
-engine.signalUpdate(searchError, SearchQueryChanged, () => null)
+// ---------------------------------------------------------------------------
+// Start/stop loop (no-op: this example has no animation frame loop)
+// ---------------------------------------------------------------------------
+
+export function startLoop() {}
+export function stopLoop() {}
 
 // ---------------------------------------------------------------------------
 // Pulse Service

@@ -112,20 +112,32 @@ let zoom: ZoomLevel = 'day'
 let dragState: DragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// ViewChanged ──→ ViewStateChanged
+// ZoomChanged ──→ ZoomStateChanged
+// TaskDragStart ──→ DragStateChanged
+// TaskDragEnd ──→ DragStateChanged
+// TaskCreated ──→ TasksChanged
+// TaskDragMove ──→ TasksChanged
+// TaskUpdated ──→ TasksChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event handlers
 // ---------------------------------------------------------------------------
 
-engine.on(ViewChanged, (range) => {
+engine.on(ViewChanged, [ViewStateChanged], (range, setView) => {
   view = range
-  engine.emit(ViewStateChanged, view)
+  setView(view)
 })
 
-engine.on(ZoomChanged, (level) => {
+engine.on(ZoomChanged, [ZoomStateChanged], (level, setZoom) => {
   zoom = level
-  engine.emit(ZoomStateChanged, zoom)
+  setZoom(zoom)
 })
 
-engine.on(TaskDragStart, (payload) => {
+engine.on(TaskDragStart, [DragStateChanged], (payload, setDrag) => {
   const task = tasks.find(t => t.id === payload.id)
   if (!task) return
   dragState = {
@@ -135,17 +147,17 @@ engine.on(TaskDragStart, (payload) => {
     originalStart: task.start,
     originalDuration: task.duration,
   }
-  engine.emit(DragStateChanged, dragState)
+  setDrag(dragState)
 })
 
-engine.on(TaskDragEnd, () => {
+engine.on(TaskDragEnd, [DragStateChanged], (_, setDrag) => {
   dragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
-  engine.emit(DragStateChanged, dragState)
+  setDrag(dragState)
 })
 
-engine.on(TaskCreated, (task) => {
+engine.on(TaskCreated, [TasksChanged], (task, setTasks) => {
   tasks = [...tasks, task]
-  engine.emit(TasksChanged, tasks)
+  setTasks(tasks)
 })
 
 // ---------------------------------------------------------------------------
@@ -187,7 +199,7 @@ function cascadeDependencies(taskList: Task[], movedTaskId: string): Task[] {
 // Drag handling
 // ---------------------------------------------------------------------------
 
-engine.on(TaskDragMove, (payload) => {
+engine.on(TaskDragMove, [TasksChanged], (payload, setTasks) => {
   if (!dragState.taskId || dragState.taskId !== payload.id) return
 
   const task = tasks.find(t => t.id === payload.id)
@@ -214,14 +226,14 @@ engine.on(TaskDragMove, (payload) => {
   newTasks = cascadeDependencies(newTasks, payload.id)
 
   tasks = newTasks
-  engine.emit(TasksChanged, tasks)
+  setTasks(tasks)
 })
 
-engine.on(TaskUpdated, (updated) => {
+engine.on(TaskUpdated, [TasksChanged], (updated, setTasks) => {
   let newTasks = tasks.map(t => t.id === updated.id ? updated : t)
   newTasks = cascadeDependencies(newTasks, updated.id)
   tasks = newTasks
-  engine.emit(TasksChanged, tasks)
+  setTasks(tasks)
 })
 
 // ---------------------------------------------------------------------------
@@ -229,3 +241,6 @@ engine.on(TaskUpdated, (updated) => {
 // ---------------------------------------------------------------------------
 
 export { categoryColors }
+
+export function startLoop() {}
+export function stopLoop() {}

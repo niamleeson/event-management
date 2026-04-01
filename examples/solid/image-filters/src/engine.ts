@@ -1,6 +1,38 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// FilterAdded       ──┬──→ SnapshotPushed
+//                     ├──→ FiltersChanged
+//                     └──→ TransitionStart
+//
+// FilterRemoved     ──┬──→ SnapshotPushed
+//                     ├──→ FiltersChanged
+//                     └──→ TransitionStart
+//
+// FilterReordered   ──┬──→ SnapshotPushed
+//                     ├──→ FiltersChanged
+//                     └──→ TransitionStart
+//
+// FilterParamChanged──┬──→ SnapshotPushed
+//                     ├──→ FiltersChanged
+//                     └──→ TransitionStart
+//
+// ResetAll          ──┬──→ SnapshotPushed
+//                     ├──→ FiltersChanged
+//                     └──→ TransitionStart
+//
+// UndoRequested ──┬──→ RedoStackPush
+//                 ├──→ UndoStackPop
+//                 ├──→ FiltersChanged
+//                 └──→ TransitionStart
+//
+// RedoRequested ──┬──→ RedoStackPop
+//                 ├──→ FiltersChanged
+//                 └──→ TransitionStart
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -102,31 +134,31 @@ export function computeFilterString(filterList: Filter[]): string {
 // Pipes: filter changes -> recompute + push to undo
 // ---------------------------------------------------------------------------
 
-function pushChange(newFilters: Filter[]) {
-  const current = filters.value
-  engine.emit(SnapshotPushed, [...current])
-  engine.emit(FiltersChanged, newFilters)
-  engine.emit(TransitionStart, undefined)
-}
-
-engine.on(FilterAdded, (filter) => {
-  pushChange([...filters.value, filter])
+engine.on(FilterAdded, [SnapshotPushed, FiltersChanged, TransitionStart], (filter, setSnapshot, setFilters, setTransition) => {
+  setSnapshot([...filters.value])
+  setFilters([...filters.value, filter])
+  setTransition(undefined)
 })
 
-engine.on(FilterRemoved, (index) => {
+engine.on(FilterRemoved, [SnapshotPushed, FiltersChanged, TransitionStart], (index, setSnapshot, setFilters, setTransition) => {
+  setSnapshot([...filters.value])
   const next = [...filters.value]
   next.splice(index, 1)
-  pushChange(next)
+  setFilters(next)
+  setTransition(undefined)
 })
 
-engine.on(FilterReordered, (payload) => {
+engine.on(FilterReordered, [SnapshotPushed, FiltersChanged, TransitionStart], (payload, setSnapshot, setFilters, setTransition) => {
+  setSnapshot([...filters.value])
   const next = [...filters.value]
   const [moved] = next.splice(payload.from, 1)
   next.splice(payload.to, 0, moved)
-  pushChange(next)
+  setFilters(next)
+  setTransition(undefined)
 })
 
-engine.on(FilterParamChanged, (payload) => {
+engine.on(FilterParamChanged, [SnapshotPushed, FiltersChanged, TransitionStart], (payload, setSnapshot, setFilters, setTransition) => {
+  setSnapshot([...filters.value])
   const next = filters.value.map((f, i) => {
     if (i !== payload.index) return f
     if (payload.param === 'enabled') {
@@ -134,35 +166,38 @@ engine.on(FilterParamChanged, (payload) => {
     }
     return { ...f, value: payload.value as number }
   })
-  pushChange(next)
+  setFilters(next)
+  setTransition(undefined)
 })
 
-engine.on(ResetAll, () => {
-  pushChange([])
+engine.on(ResetAll, [SnapshotPushed, FiltersChanged, TransitionStart], (_, setSnapshot, setFilters, setTransition) => {
+  setSnapshot([...filters.value])
+  setFilters([])
+  setTransition(undefined)
 })
 
-engine.on(UndoRequested, () => {
+engine.on(UndoRequested, [RedoStackPush, UndoStackPop, FiltersChanged, TransitionStart], (_, setRedoPush, setUndoPop, setFilters, setTransition) => {
   const stack = undoStack.value
   if (stack.length === 0) return
   const prev = stack[stack.length - 1]
-  engine.emit(RedoStackPush, [...filters.value])
-  engine.emit(UndoStackPop, undefined)
-  engine.emit(FiltersChanged, prev)
-  engine.emit(TransitionStart, undefined)
+  setRedoPush([...filters.value])
+  setUndoPop(undefined)
+  setFilters(prev)
+  setTransition(undefined)
 })
 
-engine.on(RedoRequested, () => {
+engine.on(RedoRequested, [RedoStackPop, FiltersChanged, TransitionStart], (_, setRedoPop, setFilters, setTransition) => {
   const stack = redoStack.value
   if (stack.length === 0) return
   const next = stack[stack.length - 1]
-  // Push current to undo without clearing redo
-  const currentUndo = [...undoStack.value, [...filters.value]]
-  engine.emit(RedoStackPop, undefined)
-  engine.emit(FiltersChanged, next)
-  engine.emit(TransitionStart, undefined)
+  setRedoPop(undefined)
+  setFilters(next)
+  setTransition(undefined)
 })
 
-// Start frame loop for tweens
+// Start/stop frame loop
+export function startLoop() {}
+export function stopLoop() {}
 
 // ---------------------------------------------------------------------------
 // Sample image URL (placeholder)

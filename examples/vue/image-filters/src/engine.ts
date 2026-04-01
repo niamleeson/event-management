@@ -1,3 +1,15 @@
+// DAG
+// FilterValueChanged ──→ FiltersChanged
+//                    └──→ CanUndoChanged
+//                    └──→ CanRedoChanged
+// FilterReordered ──→ FiltersChanged
+// ResetAll ──→ FiltersChanged
+// SplitChanged ──→ SplitPositionChanged
+// Undo ──→ ResetAll
+//      └──→ FilterValueChanged (restore)
+// Redo ──→ ResetAll
+//      └──→ FilterValueChanged (restore)
+
 import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 
@@ -80,20 +92,30 @@ function makeDefaultFilters(): FilterState[] {
 
 export let filters = makeDefaultFilters()
 export const FiltersChanged = engine.event('FiltersChanged')
-engine.on(FilterValueChanged, (v: any) => { filters = ((prev, { id, value }) => prev.map(f => f.id === id ? { ...f, value } : f))(filters, v); engine.emit(FiltersChanged, filters) })
+engine.on(FilterValueChanged, [FiltersChanged], ({ id, value }, setFilters) => {
+  filters = filters.map(f => f.id === id ? { ...f, value } : f)
+  setFilters(filters)
+})
 
-engine.on(FilterReordered, (v: any) => { filters = ((prev, { fromIdx, toIdx }) => {
-  const next = [...prev]
+engine.on(FilterReordered, [FiltersChanged], ({ fromIdx, toIdx }, setFilters) => {
+  const next = [...filters]
   const [item] = next.splice(fromIdx, 1)
   next.splice(toIdx, 0, item)
-  return next
-})(filters, v); engine.emit(FiltersChanged, filters) })
+  filters = next
+  setFilters(filters)
+})
 
-engine.on(ResetAll, (v: any) => { filters = (() => makeDefaultFilters())(filters, v); engine.emit(FiltersChanged, filters) })
+engine.on(ResetAll, [FiltersChanged], (_payload, setFilters) => {
+  filters = makeDefaultFilters()
+  setFilters(filters)
+})
 
 export let splitPosition = 50
 export const SplitPositionChanged = engine.event('SplitPositionChanged')
-engine.on(SplitChanged, (v: any) => { splitPosition = ((_prev, val) => val)(splitPosition, v); engine.emit(SplitPositionChanged, splitPosition) })
+engine.on(SplitChanged, [SplitPositionChanged], (val, setSplit) => {
+  splitPosition = val
+  setSplit(splitPosition)
+})
 
 /* ------------------------------------------------------------------ */
 /*  Undo/Redo stack                                                   */
@@ -104,10 +126,16 @@ const redoStack: HistoryEntry[] = []
 
 export let canUndo = false
 export const CanUndoChanged = engine.event('CanUndoChanged')
-engine.on(FilterValueChanged, (v: any) => { canUndo = (() => undoStack.length > 0)(canUndo, v); engine.emit(CanUndoChanged, canUndo) })
+engine.on(FilterValueChanged, [CanUndoChanged], (_payload, setCanUndo) => {
+  canUndo = undoStack.length > 0
+  setCanUndo(canUndo)
+})
 export let canRedo = false
 export const CanRedoChanged = engine.event('CanRedoChanged')
-engine.on(FilterValueChanged, (v: any) => { canRedo = (() => redoStack.length > 0)(canRedo, v); engine.emit(CanRedoChanged, canRedo) })
+engine.on(FilterValueChanged, [CanRedoChanged], (_payload, setCanRedo) => {
+  canRedo = redoStack.length > 0
+  setCanRedo(canRedo)
+})
 
 // Record history on each change
 engine.on(FilterValueChanged, ({ id }) => {
@@ -136,3 +164,6 @@ engine.on(Redo, () => {
     engine.emit(FilterValueChanged, { id: f.id, value: f.value })
   }
 })
+
+export function startLoop() {}
+export function stopLoop() {}

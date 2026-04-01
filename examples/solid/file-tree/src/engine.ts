@@ -1,6 +1,20 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// ToggleFolder    ──→ (toggles expanded set)
+// CreateFile      ──→ (adds file node)
+// CreateFolder    ──→ (adds folder node)
+// DeleteItem      ──→ SelectItem (if deleted item was selected)
+// RenameItem      ──→ (renames node)
+// DragItem        ──→ (moves node)
+// ContextMenuOpen ──→ (opens context menu)
+// ContextMenuClose──→ (closes context menu)
+// ClipboardCopy   ──→ (sets clipboard)
+// ClipboardPaste  ──→ (duplicates node)
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -311,6 +325,9 @@ engine.on(ClipboardPaste, (parentId) => {
   const copy: TreeNode = { ...node, id: newId, parentId, name: `${node.name} (copy)` }
   tree.set(addChild(current, parentId, copy))
 })
+
+export function startLoop() {}
+export function stopLoop() {}
 
 // Export helpers for components
 export { flattenTree, getPath }

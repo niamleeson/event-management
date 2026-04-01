@@ -56,6 +56,21 @@ function generateItem(index: number): Item {
 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// ScrollChanged ──┬──→ ScrollPositionChanged
+//                 ├──→ VisibleRangeChanged
+//                 └──→ PageRequested
+// PageRequested ──┬──→ LoadingPagesChanged
+//                 └──→ PageLoaded (async)
+// PageLoaded ──┬──→ ItemsChanged
+//              └──→ LoadingPagesChanged
+// ItemClicked ──→ SelectedItemChanged
+// SortChanged ──→ SortStateChanged
+// FilterChanged ──→ FilterStateChanged (debounced)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
@@ -93,10 +108,10 @@ const requestedPages = new Set<number>()
 // Async: PageRequested -> PageLoaded (simulated API)
 // ---------------------------------------------------------------------------
 
-engine.on(PageRequested, async (page) => {
+engine.on(PageRequested, [LoadingPagesChanged, PageLoaded], async (page, setLoading, pageLoaded) => {
   loadingPages = new Set(loadingPages)
   loadingPages.add(page)
-  engine.emit(LoadingPagesChanged, loadingPages)
+  setLoading(loadingPages)
 
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 100))
@@ -105,35 +120,35 @@ engine.on(PageRequested, async (page) => {
   for (let i = start; i < start + PAGE_SIZE && i < TOTAL_ITEMS; i++) {
     pageItems.push(generateItem(i))
   }
-  engine.emit(PageLoaded, { page, items: pageItems })
+  pageLoaded({ page, items: pageItems })
 })
 
 // ---------------------------------------------------------------------------
 // Event handlers
 // ---------------------------------------------------------------------------
 
-engine.on(PageLoaded, (payload) => {
+engine.on(PageLoaded, [ItemsChanged, LoadingPagesChanged], (payload, setItems, setLoading) => {
   const next = new Map(items)
   for (const item of payload.items) {
     const idx = parseInt(item.id.split('-')[1])
     next.set(idx, item)
   }
   items = next
-  engine.emit(ItemsChanged, items)
+  setItems(items)
 
   loadingPages = new Set(loadingPages)
   loadingPages.delete(payload.page)
-  engine.emit(LoadingPagesChanged, loadingPages)
+  setLoading(loadingPages)
 })
 
-engine.on(ScrollChanged, (scrollTop) => {
+engine.on(ScrollChanged, [ScrollPositionChanged, VisibleRangeChanged], (scrollTop, setScroll, setRange) => {
   scrollPosition = scrollTop
-  engine.emit(ScrollPositionChanged, scrollPosition)
+  setScroll(scrollPosition)
 
   const start = Math.floor(scrollTop / ITEM_HEIGHT)
   const end = Math.min(TOTAL_ITEMS - 1, start + Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) + 1)
   visibleRange = { start, end }
-  engine.emit(VisibleRangeChanged, visibleRange)
+  setRange(visibleRange)
 
   // Prefetch pages
   const startPage = Math.floor(start / PAGE_SIZE)
@@ -149,14 +164,14 @@ engine.on(ScrollChanged, (scrollTop) => {
   }
 })
 
-engine.on(ItemClicked, (id) => {
+engine.on(ItemClicked, [SelectedItemChanged], (id, setSelected) => {
   selectedItem = id
-  engine.emit(SelectedItemChanged, selectedItem)
+  setSelected(selectedItem)
 })
 
-engine.on(SortChanged, (dir) => {
+engine.on(SortChanged, [SortStateChanged], (dir, setSort) => {
   sort = dir
-  engine.emit(SortStateChanged, sort)
+  setSort(sort)
 })
 
 // Debounced filter
@@ -176,3 +191,6 @@ engine.on(FilterChanged, (value) => {
 
 requestedPages.add(0)
 engine.emit(PageRequested, 0)
+
+export function startLoop() {}
+export function stopLoop() {}

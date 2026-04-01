@@ -1,3 +1,9 @@
+// DAG
+// ToggleNode ──→ ExpandedChanged
+// SelectNode ──→ SelectedChanged
+// KeyboardNav ──→ SelectNode
+//             └──→ ToggleNode
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -42,11 +48,13 @@ export function flattenVisible(nodes: FileNode[], exp: Set<string>, depth = 0): 
   return result
 }
 
-engine.on(ToggleNode, (id) => {
+engine.on(ToggleNode, [ExpandedChanged], (id, setExpanded) => {
   expanded = new Set(expanded); if (expanded.has(id)) expanded.delete(id); else expanded.add(id)
-  engine.emit(ExpandedChanged, expanded)
+  setExpanded(expanded)
 })
-engine.on(SelectNode, (id) => { selected = id; engine.emit(SelectedChanged, id) })
+
+engine.on(SelectNode, [SelectedChanged], (id, setSelected) => { selected = id; setSelected(id) })
+
 engine.on(KeyboardNav, (key) => {
   const flat = flattenVisible(FILE_TREE, expanded)
   const idx = flat.findIndex((f) => f.node.id === selected)
@@ -57,3 +65,6 @@ engine.on(KeyboardNav, (key) => {
     case 'left': { const c = flat[idx]; if (c?.node.type === 'folder' && expanded.has(c.node.id)) engine.emit(ToggleNode, c.node.id); break }
   }
 })
+
+export function startLoop() {}
+export function stopLoop() {}

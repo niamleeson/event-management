@@ -1,3 +1,10 @@
+// DAG
+// CursorMove ──→ CursorsChanged
+//            └──→ CursorXChanged
+//            └──→ CursorYChanged
+// TextEdit ──→ DocLinesChanged
+//          └──→ EditHistoryChanged
+
 import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
@@ -31,25 +38,24 @@ let cursors: Record<string, CursorPosition> = {}
 let docLines = [...INITIAL_TEXT]
 let editHistory: HistoryEntry[] = []
 
-engine.on(CursorMove, (cursor) => {
+engine.on(CursorMove, [CursorsChanged, CursorXChanged, CursorYChanged], (cursor, setCursors, setCursorX, setCursorY) => {
   cursors = { ...cursors, [cursor.user]: cursor }
-  engine.emit(CursorsChanged, cursors)
-  // Spring-like smooth cursor (simplified: just emit target position)
-  engine.emit(CursorXChanged, { user: cursor.user, value: cursor.col * 8.4 })
-  engine.emit(CursorYChanged, { user: cursor.user, value: cursor.line * 24 })
+  setCursors(cursors)
+  setCursorX({ user: cursor.user, value: cursor.col * 8.4 })
+  setCursorY({ user: cursor.user, value: cursor.line * 24 })
 })
 
-engine.on(TextEdit, (edit) => {
+engine.on(TextEdit, [DocLinesChanged, EditHistoryChanged], (edit, setLines, setHistory) => {
   const lines = [...docLines]
   if (edit.line >= 0 && edit.line < lines.length) {
     const line = lines[edit.line]
     lines[edit.line] = line.slice(0, edit.col) + edit.text + line.slice(edit.col)
   }
   docLines = lines
-  engine.emit(DocLinesChanged, docLines)
+  setLines(docLines)
   const entry: HistoryEntry = { user: edit.user, action: `Typed "${edit.text}" at line ${edit.line + 1}`, timestamp: edit.timestamp }
   editHistory = [entry, ...editHistory].slice(0, 50)
-  engine.emit(EditHistoryChanged, editHistory)
+  setHistory(editHistory)
 })
 
 const BOT_EDITS = [{ text: ' ', lineOffset: 0 }, { text: '//', lineOffset: 1 }, { text: ' ', lineOffset: -1 }, { text: 'x', lineOffset: 0 }, { text: '!', lineOffset: 2 }]
@@ -69,3 +75,6 @@ export function startBots() {
   }, 2000)
 }
 export function stopBots() { if (botInterval) { clearInterval(botInterval); botInterval = null } }
+
+export function startLoop() { startBots() }
+export function stopLoop() { stopBots() }

@@ -2,6 +2,21 @@ import { createEngine } from '@pulse/core'
 
 export const engine = createEngine()
 
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// DragStart ──→ DragStateChanged
+// DragMove ──→ DragStateChanged
+// DragOver ──→ DragStateChanged
+// DragEnd ──┬──→ ItemsChanged
+//           └──→ DragStateChanged
+// ShuffleAll ──→ ItemsChanged
+// AddItem ──┬──→ EnteringIdsChanged
+//           └──→ ItemsChanged
+// RemoveItem ┬──→ ExitingIdsChanged
+//            └──→ ItemsChanged
+// ---------------------------------------------------------------------------
+
 export interface GridItem { id: string; color: string; label: string }
 export interface DragState { active: boolean; dragIndex: number; overIndex: number; startX: number; startY: number; currentX: number; currentY: number; offsetX: number; offsetY: number }
 
@@ -28,49 +43,49 @@ let dragState: DragState = { active: false, dragIndex: -1, overIndex: -1, startX
 let enteringIds = new Set<string>()
 let exitingIds = new Set<string>()
 
-engine.on(DragStart, ({ index, x, y, offsetX, offsetY }) => {
+engine.on(DragStart, [DragStateChanged], ({ index, x, y, offsetX, offsetY }, setDrag) => {
   dragState = { active: true, dragIndex: index, overIndex: index, startX: x, startY: y, currentX: x, currentY: y, offsetX, offsetY }
-  engine.emit(DragStateChanged, { ...dragState })
+  setDrag({ ...dragState })
 })
 
-engine.on(DragMove, ({ x, y }) => {
+engine.on(DragMove, [DragStateChanged], ({ x, y }, setDrag) => {
   if (!dragState.active) return
   dragState = { ...dragState, currentX: x, currentY: y }
-  engine.emit(DragStateChanged, { ...dragState })
+  setDrag({ ...dragState })
 })
 
-engine.on(DragOver, ({ index }) => {
+engine.on(DragOver, [DragStateChanged], ({ index }, setDrag) => {
   if (!dragState.active) return
   dragState = { ...dragState, overIndex: index }
-  engine.emit(DragStateChanged, { ...dragState })
+  setDrag({ ...dragState })
 })
 
-engine.on(DragEnd, () => {
+engine.on(DragEnd, [ItemsChanged, DragStateChanged], (_, setItems, setDrag) => {
   if (!dragState.active) return
   if (dragState.dragIndex !== dragState.overIndex) {
     const arr = [...items]; const [moved] = arr.splice(dragState.dragIndex, 1); arr.splice(dragState.overIndex, 0, moved)
-    items = arr; engine.emit(ItemsChanged, [...items])
+    items = arr; setItems([...items])
   }
   dragState = { active: false, dragIndex: -1, overIndex: -1, startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0 }
-  engine.emit(DragStateChanged, { ...dragState })
+  setDrag({ ...dragState })
 })
 
-engine.on(ShuffleAll, () => {
+engine.on(ShuffleAll, [ItemsChanged], (_, setItems) => {
   const arr = [...items]; for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]] }
-  items = arr; engine.emit(ItemsChanged, [...items])
+  items = arr; setItems([...items])
 })
 
-engine.on(AddItem, () => {
+engine.on(AddItem, [EnteringIdsChanged, ItemsChanged], (_, setEntering, setItems) => {
   const newItem = makeItem()
-  enteringIds = new Set(enteringIds); enteringIds.add(newItem.id); engine.emit(EnteringIdsChanged, new Set(enteringIds))
-  items = [...items, newItem]; engine.emit(ItemsChanged, [...items])
+  enteringIds = new Set(enteringIds); enteringIds.add(newItem.id); setEntering(new Set(enteringIds))
+  items = [...items, newItem]; setItems([...items])
   setTimeout(() => { enteringIds = new Set(enteringIds); enteringIds.delete(newItem.id); engine.emit(EnteringIdsChanged, new Set(enteringIds)) }, 400)
 })
 
-engine.on(RemoveItem, (index) => {
+engine.on(RemoveItem, [ExitingIdsChanged], (index, setExiting) => {
   if (index < 0 || index >= items.length) return
   const item = items[index]
-  exitingIds = new Set(exitingIds); exitingIds.add(item.id); engine.emit(ExitingIdsChanged, new Set(exitingIds))
+  exitingIds = new Set(exitingIds); exitingIds.add(item.id); setExiting(new Set(exitingIds))
   setTimeout(() => {
     items = items.filter((i) => i.id !== item.id); engine.emit(ItemsChanged, [...items])
     exitingIds = new Set(exitingIds); exitingIds.delete(item.id); engine.emit(ExitingIdsChanged, new Set(exitingIds))
@@ -78,3 +93,6 @@ engine.on(RemoveItem, (index) => {
 })
 
 engine.emit(ItemsChanged, [...items])
+
+export function startLoop() {}
+export function stopLoop() {}
