@@ -149,3 +149,14 @@ export function startLoop() {
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
+
+export function resetState() {
+  currentTrack = samplePlaylist[0]
+  isPlaying = false
+  progress = 0
+  volume = 0.75
+  shuffleOn = false
+  repeatOn = false
+  beatTimer = 0
+  _rafId = null
+}

@@ -196,3 +196,13 @@ export function startLoop() {
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
+
+export function resetState() {
+  nextId = 0
+  for (const [id] of liveParticles) {
+    const entry = liveParticles.get(id)
+    if (entry) for (const d of entry.disposers) d()
+  }
+  liveParticles.clear()
+  _rafId = null
+}

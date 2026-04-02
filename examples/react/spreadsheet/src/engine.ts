@@ -178,3 +178,8 @@ export { colLabel, ROWS, COLS }
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  cells = makeEmptyGrid()
+  selectedCell = { row: 0, col: 0 }
+}

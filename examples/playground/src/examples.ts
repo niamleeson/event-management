@@ -10,6 +10,7 @@ export interface ExampleEntry {
     engine: any
     startLoop: () => void
     stopLoop: () => void
+    resetState: () => void
   }>
 }
 
@@ -37,6 +38,7 @@ function loadExample(appImport: () => Promise<any>, engineImport: () => Promise<
       engine: eng.engine,
       startLoop: (eng.startLoop ?? eng.startFeed ?? eng.startTicker ?? (() => {})) as () => void,
       stopLoop: (eng.stopLoop ?? eng.stopFeed ?? eng.stopTicker ?? (() => {})) as () => void,
+      resetState: (eng.resetState ?? (() => {})) as () => void,
     }))
 }
 

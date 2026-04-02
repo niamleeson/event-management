@@ -93,3 +93,9 @@ simulateBot('bot-bob')
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  doc = initialText
+  cursors = new Map<string, number>([['local', initialText.length], ['bot-alice', 50], ['bot-bob', 120]])
+  editHistory = []
+}

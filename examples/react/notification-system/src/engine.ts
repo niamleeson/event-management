@@ -73,3 +73,8 @@ engine.on(DismissAll, () => { for (const n of notifications) if (!n.exiting) sta
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  notifications = []
+  nextId = 0
+}

@@ -305,3 +305,23 @@ function simulateLoad() {
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  sortState = { column: '', direction: null }
+  filters = {}
+  currentPage = 1
+  selectedRows = new Set()
+  expandedRows = new Set()
+  searchQuery = ''
+  columnWidths = {
+    id: 60,
+    name: 160,
+    email: 200,
+    role: 100,
+    status: 90,
+    created: 110,
+    revenue: 110,
+    actions: 80,
+  }
+  isLoading = false
+}

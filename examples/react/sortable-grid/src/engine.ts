@@ -96,3 +96,11 @@ engine.emit(ItemsChanged, [...items])
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  idCounter = 0
+  items = Array.from({ length: 12 }, () => makeItem())
+  dragState = { active: false, dragIndex: -1, overIndex: -1, startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0 }
+  enteringIds = new Set<string>()
+  exitingIds = new Set<string>()
+}

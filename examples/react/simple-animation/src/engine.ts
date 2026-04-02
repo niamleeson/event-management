@@ -123,3 +123,14 @@ export function startLoop() {
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
+
+export function resetState() {
+  count = 0
+  animatedCount = 0
+  targetCount = 0
+  colorIntensity = 0
+  targetColorIntensity = 0
+  bounceScale = 1
+  bounceVel = 0
+  _rafId = null
+}

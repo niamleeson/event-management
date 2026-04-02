@@ -244,3 +244,10 @@ export { categoryColors }
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  tasks = initialTasks
+  view = { start: -2, end: 50 }
+  zoom = 'day'
+  dragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+}

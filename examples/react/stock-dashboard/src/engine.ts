@@ -258,3 +258,17 @@ startTicker()
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  prices = initPrices()
+  alerts = []
+  watchlist = ['AAPL', 'GOOGL', 'NVDA', 'TSLA']
+  timeframe = '1m'
+  isLive = true
+  selectedStock = 'AAPL'
+  alertCounter = 0
+  if (tickerInterval) {
+    clearInterval(tickerInterval)
+    tickerInterval = null
+  }
+}

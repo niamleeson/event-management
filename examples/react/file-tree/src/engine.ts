@@ -350,3 +350,13 @@ engine.on(ClipboardPaste, [TreeChanged], (parentId, setTree) => {
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  nodeCounter = 100
+  tree = INITIAL_TREE
+  selectedId = null
+  expandedIds = new Set(['root', 'src'])
+  searchFilter = ''
+  clipboard = null
+  contextMenu = { visible: false, x: 0, y: 0, targetId: null }
+}

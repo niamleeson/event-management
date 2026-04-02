@@ -195,3 +195,17 @@ export function stopFeed() {
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  currentMetrics = {}
+  alerts = []
+  chartData = Object.fromEntries(METRICS.map((m) => [m.name, []]))
+  feedRunning = true
+  breachCount = 0
+  lastBreachTime = 0
+  lastChartUpdate = 0
+  if (feedInterval) {
+    clearInterval(feedInterval)
+    feedInterval = null
+  }
+}

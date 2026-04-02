@@ -216,5 +216,25 @@ export function stopLoop() {
 }
 engine.on(Frame, () => { if (!canvasRef) return; const ctx = canvasRef.getContext('2d'); if (!ctx) return; ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, canvasRef.width, canvasRef.height); for (const s of strokes) drawStroke(ctx, s); if (currentStroke) drawStroke(ctx, currentStroke) })
 
+export function resetState() {
+  currentTool = 'brush'
+  currentColor = '#3b82f6'
+  brushSize = 4
+  strokes = []
+  undoArr = []
+  redoArr = []
+  layers = [{ id: 1, name: 'Layer 1', visible: true }]
+  activeLayer = 1
+  currentStroke = null
+  strokeCounter = 0
+  lastMoveTime = 0
+  layerCounter = 1
+  lastStrokeAction = 'add'
+  lastUndoneStroke = null
+  lastRedoneStroke = null
+  canvasRef = null
+  _rafId = null
+}
+
 export function saveProject() { return new Map() }
 export function loadProject(_snap: any) {}

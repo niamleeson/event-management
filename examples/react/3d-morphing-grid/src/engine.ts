@@ -26,3 +26,7 @@ export function startLoop() {
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
+
+export function resetState() {
+  _rafId = null
+}

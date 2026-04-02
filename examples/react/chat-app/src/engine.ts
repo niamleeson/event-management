@@ -118,3 +118,9 @@ engine.on(MessageSent, (payload) => {
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  messages = []
+  typingUsers = []
+  unreadCount = 0
+}

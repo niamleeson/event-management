@@ -236,5 +236,18 @@ export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
 
+export function resetState() {
+  cards = [...INITIAL_CARDS]
+  dragState = null
+  dragPos = { x: 0, y: 0 }
+  springX = 0
+  springY = 0
+  springVelX = 0
+  springVelY = 0
+  cardStatuses = {}
+  undoHistory.clear()
+  _rafId = null
+}
+
 // Emit initial state
 engine.emit(CardsChanged, [...cards])

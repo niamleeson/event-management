@@ -194,3 +194,16 @@ engine.emit(PageRequested, 0)
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  items = new Map()
+  scrollPosition = 0
+  visibleRange = { start: 0, end: Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) }
+  filter = ''
+  sort = 'asc'
+  loadingPages = new Set()
+  selectedItem = null
+  requestedPages.clear()
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
+}

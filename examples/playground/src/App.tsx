@@ -22,6 +22,7 @@ interface LoadedExample {
   engine: any
   startLoop: () => void
   stopLoop: () => void
+  resetState: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -59,9 +60,11 @@ export default function App() {
           engine: mod.engine,
           startLoop: mod.startLoop,
           stopLoop: mod.stopLoop,
+          resetState: mod.resetState,
         }
 
-        // Start the example's loop (if it has one)
+        // Reset module-level state and start loop
+        try { ex.resetState() } catch { /* ignore */ }
         try { ex.startLoop() } catch { /* ignore */ }
 
         prevRef.current = ex
@@ -188,7 +191,7 @@ export default function App() {
           )}
 
           {loaded && !loading && (
-            <PulseProvider engine={loaded.engine}>
+            <PulseProvider key={loaded.id} engine={loaded.engine}>
               <div style={styles.exampleWrapper}>
                 <ExampleRenderer
                   key={loaded.id}

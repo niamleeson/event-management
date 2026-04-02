@@ -78,3 +78,8 @@ engine.on(CancelAction).emit(CloseModal)
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  modalStack = []
+  activeModalId = null
+}

@@ -121,3 +121,8 @@ engine.on(ActiveFilterChanged, [FilteredTodosChanged], (_filter, setFiltered) =>
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  todos = []
+  activeFilter = 'all'
+}

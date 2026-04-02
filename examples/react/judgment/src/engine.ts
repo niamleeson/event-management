@@ -506,3 +506,15 @@ export function startLoop() {
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
+
+export function resetState() {
+  npcs = new Map()
+  mousePos = { x: 0, y: 0 }
+  mouseVel = { x: 0, y: 0 }
+  dragId = null
+  queueIndex = 0
+  score = { heaven: 0, hell: 0 }
+  screenW = window.innerWidth
+  screenH = window.innerHeight
+  _rafId = null
+}

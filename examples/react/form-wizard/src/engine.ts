@@ -218,3 +218,16 @@ engine.on(IsSubmittingChanged, [SubmitResultChanged], (submitting, setResult) =>
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  currentStep = 0
+  prevStep = 0
+  fieldValues = {
+    firstName: '', lastName: '', email: '', phone: '',
+    street: '', city: '', state: '', zip: '',
+  }
+  fieldErrors = {}
+  isSubmitting = false
+  shakeCount = 0
+  lastUpdatedField = null
+}

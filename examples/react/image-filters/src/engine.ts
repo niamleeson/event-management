@@ -99,3 +99,9 @@ export const SAMPLE_IMAGE = 'https://picsum.photos/800/600?random=42'
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  filters = []
+  undoStack = []
+  redoStack = []
+}
