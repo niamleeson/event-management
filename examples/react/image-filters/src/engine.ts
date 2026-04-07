@@ -46,9 +46,6 @@ let filters: Filter[] = []
 let undoStack: Filter[][] = []
 let redoStack: Filter[][] = []
 
-// Track whether the current change is from undo/redo (skip pushing to undo stack)
-let isUndoRedo = false
-
 function pushAndEmit(newFilters: Filter[], setFilters: (v: Filter[]) => void) {
   undoStack = [...undoStack, [...filters]]
   redoStack = []
@@ -61,35 +58,29 @@ function pushAndEmit(newFilters: Filter[], setFilters: (v: Filter[]) => void) {
 // ---------------------------------------------------------------------------
 
 engine.on(FilterAdded, [FiltersChanged], (f, setFilters) => {
-  isUndoRedo = false
   pushAndEmit([...filters, f], setFilters)
 })
 
 engine.on(FilterRemoved, [FiltersChanged], (i, setFilters) => {
-  isUndoRedo = false
   const n = [...filters]; n.splice(i, 1)
   pushAndEmit(n, setFilters)
 })
 
 engine.on(FilterReordered, [FiltersChanged], (p, setFilters) => {
-  isUndoRedo = false
   const n = [...filters]; const [m] = n.splice(p.from, 1); n.splice(p.to, 0, m)
   pushAndEmit(n, setFilters)
 })
 
 engine.on(FilterParamChanged, [FiltersChanged], (p, setFilters) => {
-  isUndoRedo = false
   pushAndEmit(filters.map((f, i) => i !== p.index ? f : p.param === 'enabled' ? { ...f, enabled: p.value as boolean } : { ...f, value: p.value as number }), setFilters)
 })
 
 engine.on(ResetAll, [FiltersChanged], (_, setFilters) => {
-  isUndoRedo = false
   pushAndEmit([], setFilters)
 })
 
 engine.on(UndoRequested, [FiltersChanged], (_, setFilters) => {
   if (undoStack.length === 0) return
-  isUndoRedo = true
   redoStack = [...redoStack, [...filters]]
   filters = undoStack[undoStack.length - 1]
   undoStack = undoStack.slice(0, -1)
@@ -98,7 +89,6 @@ engine.on(UndoRequested, [FiltersChanged], (_, setFilters) => {
 
 engine.on(RedoRequested, [FiltersChanged], (_, setFilters) => {
   if (redoStack.length === 0) return
-  isUndoRedo = true
   undoStack = [...undoStack, [...filters]]
   filters = redoStack[redoStack.length - 1]
   redoStack = redoStack.slice(0, -1)
@@ -132,5 +122,4 @@ export function resetState() {
   filters = []
   undoStack = []
   redoStack = []
-  isUndoRedo = false
 }

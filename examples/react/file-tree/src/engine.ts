@@ -14,61 +14,38 @@ export interface TreeNode {
   parentId: string | null
 }
 
-export interface ContextMenuState {
-  visible: boolean
-  x: number
-  y: number
-  targetId: string | null
-}
-
 // ---------------------------------------------------------------------------
-// DAG (3 levels)
+// DAG
 // ---------------------------------------------------------------------------
 //
-//  CreateFile ────→ TreeChanged ──┬──→ ExpandedIdsChanged
-//  CreateFolder ──→ TreeChanged   ├──→ SelectedIdChanged (cleanup)
-//  DeleteItem ────→ TreeChanged   └──→ SearchFilterChanged (re-filter)
-//  RenameItem ────→ TreeChanged
-//  DragItem ──────→ TreeChanged
-//  ClipboardPaste → TreeChanged
+//  CreateFile ──→ ItemCreated ──→ TreeChanged
+//  CreateFolder → ItemCreated
+//  ClipboardPaste → ItemCreated
 //
-//  SelectItem ──┬──→ SelectedIdChanged
-//              └──→ ExpandedIdsChanged (auto-toggle if folder)
-//  ToggleFolder ──→ ExpandedIdsChanged
-//  SearchChanged ─→ SearchFilterChanged
+//  DeleteItem ──→ ItemDeleted ──→ TreeChanged
 //
-//  ContextMenuOpen ──→ ContextMenuChanged
-//  ContextMenuClose ─→ ContextMenuChanged
-//  ClipboardCopy ────→ ClipboardChanged
+//  RenameItem ──→ TreeChanged
+//  DragItem ────→ TreeChanged
 //
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Events
+// Events — domain only (tree mutations)
 // ---------------------------------------------------------------------------
 
-// Layer 0: User actions
-export const ToggleFolder = engine.event<string>('ToggleFolder')
-export const SelectItem = engine.event<string>('SelectItem')
 export const CreateFile = engine.event<{ parentId: string; name: string }>('CreateFile')
 export const CreateFolder = engine.event<{ parentId: string; name: string }>('CreateFolder')
 export const DeleteItem = engine.event<string>('DeleteItem')
 export const RenameItem = engine.event<{ id: string; name: string }>('RenameItem')
 export const DragItem = engine.event<{ id: string; targetId: string }>('DragItem')
-export const SearchChanged = engine.event<string>('SearchChanged')
-export const ContextMenuOpen = engine.event<{ x: number; y: number; targetId: string }>('ContextMenuOpen')
-export const ContextMenuClose = engine.event<void>('ContextMenuClose')
-export const ClipboardCopy = engine.event<string>('ClipboardCopy')
 export const ClipboardPaste = engine.event<string>('ClipboardPaste')
-export const KeyNav = engine.event<string>('KeyNav')
 
-// Layer 1: Primary state
+// Intermediate events (carry context for downstream)
+export const ItemCreated = engine.event<{ parentId: string }>('ItemCreated')
+export const ItemDeleted = engine.event<{ deletedId: string }>('ItemDeleted')
+
+// State event (tree data)
 export const TreeChanged = engine.event<TreeNode[]>('TreeChanged')
-export const SelectedIdChanged = engine.event<string | null>('SelectedIdChanged')
-export const ExpandedIdsChanged = engine.event<Set<string>>('ExpandedIdsChanged')
-export const SearchFilterChanged = engine.event<string>('SearchFilterChanged')
-export const ClipboardChanged = engine.event<string | null>('ClipboardChanged')
-export const ContextMenuChanged = engine.event<ContextMenuState>('ContextMenuChanged')
 
 // ---------------------------------------------------------------------------
 // Initial tree
@@ -142,7 +119,7 @@ function deepCloneTree(nodes: TreeNode[]): TreeNode[] {
   return nodes.map(n => ({ ...n, children: n.children ? deepCloneTree(n.children) : undefined }))
 }
 
-function findNode(nodes: TreeNode[], id: string): TreeNode | null {
+export function findNode(nodes: TreeNode[], id: string): TreeNode | null {
   for (const n of nodes) {
     if (n.id === id) return n
     if (n.children) { const f = findNode(n.children, id); if (f) return f }
@@ -197,44 +174,58 @@ export function getPath(nodes: TreeNode[], id: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// State
+// State — only tree data (selection, expansion, search are UI state)
 // ---------------------------------------------------------------------------
 
 let tree: TreeNode[] = INITIAL_TREE
-let selectedId: string | null = null
-let expandedIds: Set<string> = new Set(['root', 'src'])
-let searchFilter = ''
 let clipboard: string | null = null
-let contextMenu: ContextMenuState = { visible: false, x: 0, y: 0, targetId: null }
-// Track last created parent for downstream auto-expand
-let _lastCreatedParentId: string | null = null
-// Track last deleted id for downstream selection cleanup
-let _lastDeletedId: string | null = null
+
+export function getTree() { return tree }
+export function getClipboard() { return clipboard }
 
 // ---------------------------------------------------------------------------
-// Layer 0 → Layer 1: User actions → TreeChanged (primary state)
+// Layer 0 → 1: Create mutations → ItemCreated + TreeChanged
 // ---------------------------------------------------------------------------
 
-engine.on(CreateFile, [TreeChanged], ({ parentId, name }, setTree) => {
+engine.on(CreateFile, [TreeChanged, ItemCreated], ({ parentId, name }, setTree, setCreated) => {
   const id = `file-${++nodeCounter}`
   tree = addChild(deepCloneTree(tree), parentId, { id, name, type: 'file', parentId })
-  _lastCreatedParentId = parentId
   setTree(tree)
+  setCreated({ parentId })
 })
 
-engine.on(CreateFolder, [TreeChanged], ({ parentId, name }, setTree) => {
+engine.on(CreateFolder, [TreeChanged, ItemCreated], ({ parentId, name }, setTree, setCreated) => {
   const id = `folder-${++nodeCounter}`
   tree = addChild(deepCloneTree(tree), parentId, { id, name, type: 'folder', parentId, children: [] })
-  _lastCreatedParentId = parentId
   setTree(tree)
+  setCreated({ parentId })
 })
 
-engine.on(DeleteItem, [TreeChanged], (id, setTree) => {
+engine.on(ClipboardPaste, [TreeChanged, ItemCreated], (parentId, setTree, setCreated) => {
+  if (!clipboard) return
+  const current = deepCloneTree(tree)
+  const node = findNode(current, clipboard)
+  if (!node) return
+  const newId = `copy-${++nodeCounter}`
+  tree = addChild(current, parentId, { ...node, id: newId, parentId, name: `${node.name} (copy)` })
+  setTree(tree)
+  setCreated({ parentId })
+})
+
+// ---------------------------------------------------------------------------
+// Layer 0 → 1: Delete → ItemDeleted + TreeChanged
+// ---------------------------------------------------------------------------
+
+engine.on(DeleteItem, [TreeChanged, ItemDeleted], (id, setTree, setDeleted) => {
   if (id === 'root') return
-  _lastDeletedId = id
   tree = removeNode(deepCloneTree(tree), id)
   setTree(tree)
+  setDeleted({ deletedId: id })
 })
+
+// ---------------------------------------------------------------------------
+// Layer 0 → 1: Simple mutations → TreeChanged only
+// ---------------------------------------------------------------------------
 
 engine.on(RenameItem, [TreeChanged], ({ id, name }, setTree) => {
   tree = renameNode(deepCloneTree(tree), id, name)
@@ -252,93 +243,11 @@ engine.on(DragItem, [TreeChanged], ({ id, targetId }, setTree) => {
   setTree(tree)
 })
 
-engine.on(ClipboardPaste, [TreeChanged], (parentId, setTree) => {
-  if (!clipboard) return
-  const current = deepCloneTree(tree)
-  const node = findNode(current, clipboard)
-  if (!node) return
-  const newId = `copy-${++nodeCounter}`
-  tree = addChild(current, parentId, { ...node, id: newId, parentId, name: `${node.name} (copy)` })
-  _lastCreatedParentId = parentId
-  setTree(tree)
-})
-
-// ---------------------------------------------------------------------------
-// Layer 1 → Layer 2: TreeChanged → derived state
-// ---------------------------------------------------------------------------
-
-// Auto-expand parent folder when creating items
-engine.on(TreeChanged, [ExpandedIdsChanged], (_newTree, setExpanded) => {
-  if (_lastCreatedParentId) {
-    const exp = new Set(expandedIds)
-    exp.add(_lastCreatedParentId)
-    expandedIds = exp
-    _lastCreatedParentId = null
-    setExpanded(expandedIds)
-  }
-})
-
-// Clean up selection when deleted item was selected
-engine.on(TreeChanged, [SelectedIdChanged], (_newTree, setSelected) => {
-  if (_lastDeletedId && selectedId === _lastDeletedId) {
-    selectedId = null
-    _lastDeletedId = null
-    setSelected(selectedId)
-  }
-  _lastDeletedId = null
-})
-
-// ---------------------------------------------------------------------------
-// Layer 0 → Layer 1: Direct state changes (no chaining needed)
-// ---------------------------------------------------------------------------
-
-// SelectItem → SelectedIdChanged, and auto-toggle if folder
-engine.on(SelectItem, [SelectedIdChanged, ExpandedIdsChanged], (id, setSelected, setExpanded) => {
-  selectedId = id
-  setSelected(selectedId)
-  // Auto-toggle folder expansion on click
-  const node = findNode(tree, id)
-  if (node && node.type === 'folder') {
-    const current = new Set(expandedIds)
-    if (current.has(id)) current.delete(id)
-    else current.add(id)
-    expandedIds = current
-    setExpanded(expandedIds)
-  }
-})
-
-// ToggleFolder still exists for programmatic toggle (keyboard, etc.)
-engine.on(ToggleFolder, [ExpandedIdsChanged], (id, setExpanded) => {
-  const current = new Set(expandedIds)
-  if (current.has(id)) current.delete(id)
-  else current.add(id)
-  expandedIds = current
-  setExpanded(expandedIds)
-})
-
-engine.on(SearchChanged, [SearchFilterChanged], (value, setFilter) => {
-  searchFilter = value
-  setFilter(searchFilter)
-})
-
-engine.on(ContextMenuOpen, [ContextMenuChanged], ({ x, y, targetId }, setMenu) => {
-  contextMenu = { visible: true, x, y, targetId }
-  setMenu(contextMenu)
-})
-
-engine.on(ContextMenuClose, [ContextMenuChanged], (_, setMenu) => {
-  contextMenu = { visible: false, x: 0, y: 0, targetId: null }
-  setMenu(contextMenu)
-})
-
-engine.on(ClipboardCopy, [ClipboardChanged], (id, setClipboard) => {
-  clipboard = id
-  setClipboard(clipboard)
-})
-
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
+
+export function setClipboard(id: string | null) { clipboard = id }
 
 export function startLoop() {}
 export function stopLoop() {}
@@ -346,11 +255,5 @@ export function stopLoop() {}
 export function resetState() {
   nodeCounter = 100
   tree = INITIAL_TREE
-  selectedId = null
-  expandedIds = new Set(['root', 'src'])
-  searchFilter = ''
   clipboard = null
-  contextMenu = { visible: false, x: 0, y: 0, targetId: null }
-  _lastCreatedParentId = null
-  _lastDeletedId = null
 }

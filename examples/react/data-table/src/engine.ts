@@ -62,7 +62,6 @@ export const RowExpanded = engine.event<string>('RowExpanded')
 export const BulkAction = engine.event<{ action: string; ids: string[] }>('BulkAction')
 export const SearchChanged = engine.event<string>('SearchChanged')
 export const ColumnResized = engine.event<{ column: string; width: number }>('ColumnResized')
-export const ExportRequested = engine.event<void>('ExportRequested')
 export const SelectAll = engine.event<void>('SelectAll')
 export const DeselectAll = engine.event<void>('DeselectAll')
 

@@ -33,11 +33,6 @@ export interface ViewRange {
   end: number
 }
 
-export interface Dependency {
-  from: string
-  to: string
-}
-
 export type ZoomLevel = 'day' | 'week' | 'month'
 
 // ---------------------------------------------------------------------------
@@ -92,7 +87,6 @@ export const TaskDragMove = engine.event<{ id: string; dx: number }>('TaskDragMo
 export const TaskDragEnd = engine.event<{ id: string }>('TaskDragEnd')
 export const TaskCreated = engine.event<Task>('TaskCreated')
 export const TaskUpdated = engine.event<Task>('TaskUpdated')
-export const DependencyAdded = engine.event<Dependency>('DependencyAdded')
 export const ViewChanged = engine.event<ViewRange>('ViewChanged')
 export const ZoomChanged = engine.event<ZoomLevel>('ZoomChanged')
 

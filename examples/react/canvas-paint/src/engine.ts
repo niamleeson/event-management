@@ -78,11 +78,6 @@ let strokes: Stroke[] = [], undoArr: Stroke[] = [], redoArr: Stroke[] = []
 let layers: Layer[] = [{ id: 1, name: 'Layer 1', visible: true }], activeLayer = 1
 let currentStroke: Stroke | null = null, strokeCounter = 0, lastMoveTime = 0, layerCounter = 1
 
-// Track what kind of stroke change happened for undo/redo derivation
-let lastStrokeAction: 'add' | 'undo' | 'redo' | 'clear' = 'add'
-let lastUndoneStroke: Stroke | null = null
-let lastRedoneStroke: Stroke | null = null
-
 // ---------------------------------------------------------------------------
 // Layer 0 → Layer 1: Input handlers → primary state
 // ---------------------------------------------------------------------------
@@ -119,7 +114,6 @@ engine.on(StrokeEnd, [StrokesChanged], (_, setStrokes) => {
     strokes = [...strokes, currentStroke]
     undoArr = [...undoArr, currentStroke]
     redoArr = []
-    lastStrokeAction = 'add'
     setStrokes([...strokes])
   }
   currentStroke = null
@@ -131,8 +125,6 @@ engine.on(UndoStroke, [StrokesChanged], (_, setStrokes) => {
   undoArr = undoArr.slice(0, -1)
   redoArr = [...redoArr, l]
   strokes = strokes.filter(s => s.id !== l.id)
-  lastStrokeAction = 'undo'
-  lastUndoneStroke = l
   setStrokes([...strokes])
 })
 
@@ -142,8 +134,6 @@ engine.on(RedoStroke, [StrokesChanged], (_, setStrokes) => {
   redoArr = redoArr.slice(0, -1)
   undoArr = [...undoArr, l]
   strokes = [...strokes, l]
-  lastStrokeAction = 'redo'
-  lastRedoneStroke = l
   setStrokes([...strokes])
 })
 
@@ -152,7 +142,6 @@ engine.on(ClearCanvas, [StrokesChanged], (_, setStrokes) => {
   undoArr = []
   redoArr = []
   currentStroke = null
-  lastStrokeAction = 'clear'
   setStrokes([])
 })
 
@@ -230,9 +219,6 @@ export function resetState() {
   strokeCounter = 0
   lastMoveTime = 0
   layerCounter = 1
-  lastStrokeAction = 'add'
-  lastUndoneStroke = null
-  lastRedoneStroke = null
   canvasRef = null
   _rafId = null
 }
