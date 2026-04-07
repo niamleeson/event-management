@@ -13,8 +13,10 @@ export const engine = createEngine()
 // ShuffleAll ──→ ItemsChanged
 // AddItem ──┬──→ EnteringIdsChanged
 //           └──→ ItemsChanged
-// RemoveItem ┬──→ ExitingIdsChanged
-//            └──→ ItemsChanged
+// EnterAnimDone ──→ EnteringIdsChanged (clear entering flag)
+// RemoveItem ──→ ExitingIdsChanged
+// ExitAnimDone ──┬──→ ItemsChanged (remove)
+//               └──→ ExitingIdsChanged (clear exiting flag)
 // ---------------------------------------------------------------------------
 
 export interface GridItem { id: string; color: string; label: string }
@@ -27,6 +29,10 @@ export const DragOver = engine.event<{ index: number }>('DragOver')
 export const ShuffleAll = engine.event<void>('ShuffleAll')
 export const AddItem = engine.event<void>('AddItem')
 export const RemoveItem = engine.event<number>('RemoveItem')
+
+// Internal animation transition events
+const EnterAnimDone = engine.event<string>('EnterAnimDone')
+const ExitAnimDone = engine.event<string>('ExitAnimDone')
 
 export const ItemsChanged = engine.event<GridItem[]>('ItemsChanged')
 export const DragStateChanged = engine.event<DragState>('DragStateChanged')
@@ -79,17 +85,23 @@ engine.on(AddItem, [EnteringIdsChanged, ItemsChanged], (_, setEntering, setItems
   const newItem = makeItem()
   enteringIds = new Set(enteringIds); enteringIds.add(newItem.id); setEntering(new Set(enteringIds))
   items = [...items, newItem]; setItems([...items])
-  setTimeout(() => { enteringIds = new Set(enteringIds); enteringIds.delete(newItem.id); engine.emit(EnteringIdsChanged, new Set(enteringIds)) }, 400)
+  setTimeout(() => engine.emit(EnterAnimDone, newItem.id), 400)
+})
+
+engine.on(EnterAnimDone, [EnteringIdsChanged], (id, setEntering) => {
+  enteringIds = new Set(enteringIds); enteringIds.delete(id); setEntering(new Set(enteringIds))
 })
 
 engine.on(RemoveItem, [ExitingIdsChanged], (index, setExiting) => {
   if (index < 0 || index >= items.length) return
   const item = items[index]
   exitingIds = new Set(exitingIds); exitingIds.add(item.id); setExiting(new Set(exitingIds))
-  setTimeout(() => {
-    items = items.filter((i) => i.id !== item.id); engine.emit(ItemsChanged, [...items])
-    exitingIds = new Set(exitingIds); exitingIds.delete(item.id); engine.emit(ExitingIdsChanged, new Set(exitingIds))
-  }, 300)
+  setTimeout(() => engine.emit(ExitAnimDone, item.id), 300)
+})
+
+engine.on(ExitAnimDone, [ItemsChanged, ExitingIdsChanged], (id, setItems, setExiting) => {
+  items = items.filter((i) => i.id !== id); setItems([...items])
+  exitingIds = new Set(exitingIds); exitingIds.delete(id); setExiting(new Set(exitingIds))
 })
 
 engine.emit(ItemsChanged, [...items])

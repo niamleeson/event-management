@@ -160,3 +160,8 @@ engine.on(UserSelected, [UserDetailsDone, UserDetailsLoading, SearchError], asyn
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
+}

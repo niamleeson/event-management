@@ -1,8 +1,3 @@
-// DAG
-// SearchInput ──→ SearchQueryChanged, SearchError
-// doSearch ──→ SearchLoading, SearchDone, SearchError
-// UserSelected ──→ UserDetailsLoading, UserDetailsDone, SearchError
-
 import { createEngine } from '@pulse/core'
 import { createPulseService } from '@pulse/ember'
 
@@ -84,6 +79,17 @@ async function fetchUserDetails(userId: string): Promise<UserDetails> {
 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// SearchInput ──┬──→ SearchQueryChanged
+//               └──→ SearchError
+//               (debounced → doSearch → SearchLoading, SearchDone, SearchError)
+// UserSelected ──┬──→ UserDetailsDone
+//                ├──→ UserDetailsLoading
+//                └──→ SearchError
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
@@ -135,7 +141,7 @@ async function doSearch(query: string) {
 // Async user details handler
 // ---------------------------------------------------------------------------
 
-engine.on(UserSelected, [UserDetailsLoading, UserDetailsDone, SearchError], async (userId: string | null, setLoading, setDetails, setError) => {
+engine.on(UserSelected, [UserDetailsDone, UserDetailsLoading, SearchError], async (userId: string | null, setDetails, setLoading, setError) => {
   if (!userId) {
     setDetails(null)
     return
@@ -150,12 +156,13 @@ engine.on(UserSelected, [UserDetailsLoading, UserDetailsDone, SearchError], asyn
   setLoading(false)
 })
 
-// ---------------------------------------------------------------------------
-// Start/stop loop (no-op: this example has no animation frame loop)
-// ---------------------------------------------------------------------------
-
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
+}
 
 // ---------------------------------------------------------------------------
 // Pulse Service

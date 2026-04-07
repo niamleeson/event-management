@@ -52,8 +52,8 @@ function FormulaBar() {
   const label = `${colLabel(sel.col)}${sel.row + 1}`
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') { e.preventDefault(); emit(CellEdited, { row: sel.row, col: sel.col, value: (e.target as HTMLInputElement).value }); if (sel.row < ROWS - 1) emit(CellSelected, { row: sel.row + 1, col: sel.col }) }
-    else if (e.key === 'Tab') { e.preventDefault(); emit(CellEdited, { row: sel.row, col: sel.col, value: (e.target as HTMLInputElement).value }); if (sel.col < COLS - 1) emit(CellSelected, { row: sel.row, col: sel.col + 1 }); else if (sel.row < ROWS - 1) emit(CellSelected, { row: sel.row + 1, col: 0 }) }
+    if (e.key === 'Enter') { e.preventDefault(); emit(CellEdited, { row: sel.row, col: sel.col, value: (e.target as HTMLInputElement).value, advance: 'down' }) }
+    else if (e.key === 'Tab') { e.preventDefault(); emit(CellEdited, { row: sel.row, col: sel.col, value: (e.target as HTMLInputElement).value, advance: 'right' }) }
     else if (e.key === 'Escape' && inputRef.current) { inputRef.current.value = currentCell?.raw ?? '' }
   }
 

@@ -34,18 +34,20 @@ export interface FilterState {
 // ---------------------------------------------------------------------------
 // DAG
 // ---------------------------------------------------------------------------
-// SortChanged ──→ SortStateChanged
+// SortChanged ──→ SortStateChanged (+ LoadStarted)
 // FilterChanged ┬──→ FiltersChanged
 //               └──→ CurrentPageChanged
-// PageChanged ──→ CurrentPageChanged
+// PageChanged ──→ CurrentPageChanged (+ LoadStarted)
 // RowSelected ──→ SelectedRowsChanged
 // RowExpanded ──→ ExpandedRowsChanged
 // SelectAll ──→ SelectedRowsChanged
 // DeselectAll ──→ SelectedRowsChanged
 // BulkAction ──→ SelectedRowsChanged
 // ColumnResized ──→ ColumnWidthsChanged
-// SearchChanged ┬──→ SearchQueryChanged
+// SearchChanged ┬──→ SearchQueryChanged (+ LoadStarted)
 //               └──→ CurrentPageChanged
+// LoadStarted ──→ IsLoadingChanged
+// LoadFinished ──→ IsLoadingChanged
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -294,13 +296,22 @@ engine.on(SearchChanged, [SearchQueryChanged, CurrentPageChanged], (query, setSe
 })
 
 // Simulate async data fetch delay on sort/filter/page change
-function simulateLoad() {
+const LoadStarted = engine.event<void>('LoadStarted')
+const LoadFinished = engine.event<void>('LoadFinished')
+
+engine.on(LoadStarted, [IsLoadingChanged], (_, setLoading) => {
   isLoading = true
-  engine.emit(IsLoadingChanged, isLoading)
-  setTimeout(() => {
-    isLoading = false
-    engine.emit(IsLoadingChanged, isLoading)
-  }, 200)
+  setLoading(isLoading)
+  setTimeout(() => engine.emit(LoadFinished, undefined), 200)
+})
+
+engine.on(LoadFinished, [IsLoadingChanged], (_, setLoading) => {
+  isLoading = false
+  setLoading(isLoading)
+})
+
+function simulateLoad() {
+  engine.emit(LoadStarted, undefined)
 }
 
 export function startLoop() {}

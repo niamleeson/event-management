@@ -1,13 +1,6 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
-// DAG
-// ---------------------------------------------------------------------------
-// TaskDragMove ──→ TasksRecomputed
-// TaskDragEnd  ──→ DragSnap
-// TaskUpdated  ──→ TasksRecomputed
-
-// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -102,22 +95,70 @@ export const TaskUpdated = engine.event<Task>('TaskUpdated')
 export const DependencyAdded = engine.event<Dependency>('DependencyAdded')
 export const ViewChanged = engine.event<ViewRange>('ViewChanged')
 export const ZoomChanged = engine.event<ZoomLevel>('ZoomChanged')
-export const TasksRecomputed = engine.event<Task[]>('TasksRecomputed')
-export const DragSnap = engine.event<void>('DragSnap')
-export const DragSnapDone = engine.event<void>('DragSnapDone')
 
-// State change events
+// State-changed events for React subscriptions
 export const TasksChanged = engine.event<Task[]>('TasksChanged')
+export const ViewStateChanged = engine.event<ViewRange>('ViewStateChanged')
+export const ZoomStateChanged = engine.event<ZoomLevel>('ZoomStateChanged')
 export const DragStateChanged = engine.event<DragState>('DragStateChanged')
-export const SnapTargetChanged = engine.event<number>('SnapTargetChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
+let tasks: Task[] = initialTasks
+let view: ViewRange = { start: -2, end: 50 }
+let zoom: ZoomLevel = 'day'
+let dragState: DragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
 
-// Spring signal for snap animation
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// ViewChanged ──→ ViewStateChanged
+// ZoomChanged ──→ ZoomStateChanged
+// TaskDragStart ──→ DragStateChanged
+// TaskDragEnd ──→ DragStateChanged
+// TaskCreated ──→ TasksChanged
+// TaskDragMove ──→ TasksChanged
+// TaskUpdated ──→ TasksChanged
+// ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(ViewChanged, [ViewStateChanged], (range, setView) => {
+  view = range
+  setView(view)
+})
+
+engine.on(ZoomChanged, [ZoomStateChanged], (level, setZoom) => {
+  zoom = level
+  setZoom(zoom)
+})
+
+engine.on(TaskDragStart, [DragStateChanged], (payload, setDrag) => {
+  const task = tasks.find(t => t.id === payload.id)
+  if (!task) return
+  dragState = {
+    taskId: payload.id,
+    type: payload.type,
+    startX: 0,
+    originalStart: task.start,
+    originalDuration: task.duration,
+  }
+  setDrag(dragState)
+})
+
+engine.on(TaskDragEnd, [DragStateChanged], (_, setDrag) => {
+  dragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+  setDrag(dragState)
+})
+
+engine.on(TaskCreated, [TasksChanged], (task, setTasks) => {
+  tasks = [...tasks, task]
+  setTasks(tasks)
+})
 
 // ---------------------------------------------------------------------------
 // Cascade dependencies when a task moves
@@ -158,60 +199,55 @@ function cascadeDependencies(taskList: Task[], movedTaskId: string): Task[] {
 // Drag handling
 // ---------------------------------------------------------------------------
 
-engine.on(TaskDragMove, [TasksRecomputed], (payload, setRecomputed) => {
-  const state = dragState.value
-  if (!state.taskId || state.taskId !== payload.id) return
+engine.on(TaskDragMove, [TasksChanged], (payload, setTasks) => {
+  if (!dragState.taskId || dragState.taskId !== payload.id) return
 
-  const currentTasks = tasks.value
-  const task = currentTasks.find(t => t.id === payload.id)
+  const task = tasks.find(t => t.id === payload.id)
   if (!task) return
 
   // Convert dx (pixels) to days based on zoom
-  const zoomLevel = zoom.value
-  const dayWidth = zoomLevel === 'day' ? 40 : zoomLevel === 'week' ? 20 : 8
+  const dayWidth = zoom === 'day' ? 40 : zoom === 'week' ? 20 : 8
   const dayDelta = Math.round(payload.dx / dayWidth)
 
   let updated: Task
-  if (state.type === 'move') {
-    const newStart = Math.max(0, state.originalStart + dayDelta)
+  if (dragState.type === 'move') {
+    const newStart = Math.max(0, dragState.originalStart + dayDelta)
     updated = { ...task, start: newStart }
   } else {
     // Resize
-    const newDuration = Math.max(1, state.originalDuration + dayDelta)
+    const newDuration = Math.max(1, dragState.originalDuration + dayDelta)
     updated = { ...task, duration: newDuration }
   }
 
   // Update the single task
-  let newTasks = currentTasks.map(t => t.id === payload.id ? updated : t)
+  let newTasks = tasks.map(t => t.id === payload.id ? updated : t)
 
   // Cascade dependencies
   newTasks = cascadeDependencies(newTasks, payload.id)
 
-  setRecomputed(newTasks)
+  tasks = newTasks
+  setTasks(tasks)
 })
 
-engine.on(TaskDragEnd, [DragSnap], (payload, setSnap) => {
-  // Snap to grid
-  const currentTasks = tasks.value
-  const task = currentTasks.find(t => t.id === payload.id)
-  if (task) {
-    snapTarget.set(task.start)
-    setSnap(undefined)
-  }
-})
-
-engine.on(TaskUpdated, [TasksRecomputed], (updated, setRecomputed) => {
-  let newTasks = tasks.value.map(t => t.id === updated.id ? updated : t)
+engine.on(TaskUpdated, [TasksChanged], (updated, setTasks) => {
+  let newTasks = tasks.map(t => t.id === updated.id ? updated : t)
   newTasks = cascadeDependencies(newTasks, updated.id)
-  setRecomputed(newTasks)
+  tasks = newTasks
+  setTasks(tasks)
 })
-
-// Start/stop frame loop
-export function startLoop() {}
-export function stopLoop() {}
 
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
 export { categoryColors }
+
+export function startLoop() {}
+export function stopLoop() {}
+
+export function resetState() {
+  tasks = initialTasks
+  view = { start: -2, end: 50 }
+  zoom = 'day'
+  dragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+}

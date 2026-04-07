@@ -60,14 +60,14 @@ function generateItem(index: number): Item {
 // ---------------------------------------------------------------------------
 // ScrollChanged ──┬──→ ScrollPositionChanged
 //                 ├──→ VisibleRangeChanged
-//                 └──→ PageRequested
+//                 └──→ PageRequested (prefetch via engine.emit)
 // PageRequested ──┬──→ LoadingPagesChanged
 //                 └──→ PageLoaded (async)
 // PageLoaded ──┬──→ ItemsChanged
 //              └──→ LoadingPagesChanged
 // ItemClicked ──→ SelectedItemChanged
 // SortChanged ──→ SortStateChanged
-// FilterChanged ──→ FilterStateChanged (debounced)
+// FilterChanged ──→ ApplyFilter (debounced) ──→ FilterStateChanged
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -176,13 +176,18 @@ engine.on(SortChanged, [SortStateChanged], (dir, setSort) => {
 
 // Debounced filter
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+const ApplyFilter = engine.event<string>('ApplyFilter')
 
 engine.on(FilterChanged, (value) => {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
-    filter = value
-    engine.emit(FilterStateChanged, filter)
+    engine.emit(ApplyFilter, value)
   }, 300)
+})
+
+engine.on(ApplyFilter, [FilterStateChanged], (value, setFilter) => {
+  filter = value
+  setFilter(filter)
 })
 
 // ---------------------------------------------------------------------------

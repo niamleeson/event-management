@@ -280,7 +280,6 @@ function Editor() {
     if (textareaRef.current) {
       const pos = textareaRef.current.selectionStart
       emit(CursorMoved, { user: 'local', pos })
-      if (target) target.set(pos)
     }
   }, [emit])
 

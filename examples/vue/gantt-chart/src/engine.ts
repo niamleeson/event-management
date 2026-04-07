@@ -1,96 +1,193 @@
-// DAG
-// TasksUpdated ──→ TasksChanged
-// TaskMoved ──→ TasksUpdated
-// TaskResized ──→ TasksUpdated
-
 import { createEngine } from '@pulse/core'
+
+// ---------------------------------------------------------------------------
+// Engine
+// ---------------------------------------------------------------------------
+
 export const engine = createEngine()
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export interface Task {
-  id: number
-  name: string
+  id: string
+  title: string
+  category: string
   start: number   // day offset from project start
-  duration: number // days
+  duration: number // in days
+  dependencies: string[] // ids of tasks this depends on
   color: string
-  dependsOn: number[] // task ids
+}
+
+export interface DragState {
+  taskId: string | null
+  type: 'move' | 'resize' | null
+  startX: number
+  originalStart: number
+  originalDuration: number
+}
+
+export interface ViewRange {
+  start: number
+  end: number
+}
+
+export interface Dependency {
+  from: string
+  to: string
 }
 
 export type ZoomLevel = 'day' | 'week' | 'month'
 
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-export const TaskMoved = engine.event<{ id: number; newStart: number }>('TaskMoved')
-export const TaskResized = engine.event<{ id: number; newDuration: number }>('TaskResized')
-export const ZoomChanged = engine.event<ZoomLevel>('ZoomChanged')
-export const TasksUpdated = engine.event<Task[]>('TasksUpdated')
+const categoryColors: Record<string, string> = {
+  'Planning': '#4361ee',
+  'Design': '#e91e63',
+  'Development': '#4caf50',
+  'Testing': '#ff9800',
+  'Deployment': '#9c27b0',
+}
 
-/* ------------------------------------------------------------------ */
-/*  Initial tasks                                                     */
-/* ------------------------------------------------------------------ */
+export const PROJECT_START = new Date(2026, 0, 5) // Jan 5, 2026
 
-const INITIAL_TASKS: Task[] = [
-  { id: 1, name: 'Research', start: 0, duration: 5, color: '#6c5ce7', dependsOn: [] },
-  { id: 2, name: 'Design', start: 5, duration: 7, color: '#00b894', dependsOn: [1] },
-  { id: 3, name: 'Frontend', start: 12, duration: 10, color: '#0984e3', dependsOn: [2] },
-  { id: 4, name: 'Backend', start: 12, duration: 12, color: '#e17055', dependsOn: [2] },
-  { id: 5, name: 'Database', start: 10, duration: 6, color: '#fdcb6e', dependsOn: [2] },
-  { id: 6, name: 'Testing', start: 24, duration: 5, color: '#d63031', dependsOn: [3, 4] },
-  { id: 7, name: 'Documentation', start: 22, duration: 8, color: '#00cec9', dependsOn: [3] },
-  { id: 8, name: 'Deployment', start: 29, duration: 3, color: '#a29bfe', dependsOn: [6] },
-  { id: 9, name: 'Training', start: 30, duration: 4, color: '#f368e0', dependsOn: [7] },
-  { id: 10, name: 'Launch', start: 32, duration: 2, color: '#ff9f43', dependsOn: [8, 9] },
+export function dayToDate(day: number): Date {
+  const d = new Date(PROJECT_START)
+  d.setDate(d.getDate() + day)
+  return d
+}
+
+export function formatDate(day: number): string {
+  const d = dayToDate(day)
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${months[d.getMonth()]} ${d.getDate()}`
+}
+
+// ---------------------------------------------------------------------------
+// Sample tasks
+// ---------------------------------------------------------------------------
+
+const initialTasks: Task[] = [
+  { id: 't1', title: 'Project Kickoff', category: 'Planning', start: 0, duration: 3, dependencies: [], color: categoryColors['Planning'] },
+  { id: 't2', title: 'Requirements Gathering', category: 'Planning', start: 3, duration: 5, dependencies: ['t1'], color: categoryColors['Planning'] },
+  { id: 't3', title: 'UI/UX Design', category: 'Design', start: 8, duration: 7, dependencies: ['t2'], color: categoryColors['Design'] },
+  { id: 't4', title: 'Architecture Design', category: 'Design', start: 8, duration: 5, dependencies: ['t2'], color: categoryColors['Design'] },
+  { id: 't5', title: 'Frontend Development', category: 'Development', start: 15, duration: 14, dependencies: ['t3'], color: categoryColors['Development'] },
+  { id: 't6', title: 'Backend Development', category: 'Development', start: 13, duration: 16, dependencies: ['t4'], color: categoryColors['Development'] },
+  { id: 't7', title: 'API Integration', category: 'Development', start: 29, duration: 5, dependencies: ['t5', 't6'], color: categoryColors['Development'] },
+  { id: 't8', title: 'Unit Testing', category: 'Testing', start: 29, duration: 7, dependencies: ['t5'], color: categoryColors['Testing'] },
+  { id: 't9', title: 'Integration Testing', category: 'Testing', start: 34, duration: 5, dependencies: ['t7', 't8'], color: categoryColors['Testing'] },
+  { id: 't10', title: 'Deployment & Launch', category: 'Deployment', start: 39, duration: 3, dependencies: ['t9'], color: categoryColors['Deployment'] },
 ]
 
-/* ------------------------------------------------------------------ */
-/*  Signals                                                           */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Event declarations
+// ---------------------------------------------------------------------------
 
-export let tasks = INITIAL_TASKS
-export const TasksChanged = engine.event('TasksChanged')
-engine.on(TasksUpdated, [TasksChanged], (updated, setTasks) => {
-  tasks = updated
+export const TaskDragStart = engine.event<{ id: string; type: 'move' | 'resize' }>('TaskDragStart')
+export const TaskDragMove = engine.event<{ id: string; dx: number }>('TaskDragMove')
+export const TaskDragEnd = engine.event<{ id: string }>('TaskDragEnd')
+export const TaskCreated = engine.event<Task>('TaskCreated')
+export const TaskUpdated = engine.event<Task>('TaskUpdated')
+export const DependencyAdded = engine.event<Dependency>('DependencyAdded')
+export const ViewChanged = engine.event<ViewRange>('ViewChanged')
+export const ZoomChanged = engine.event<ZoomLevel>('ZoomChanged')
+
+// State-changed events for subscriptions
+export const TasksChanged = engine.event<Task[]>('TasksChanged')
+export const ViewStateChanged = engine.event<ViewRange>('ViewStateChanged')
+export const ZoomStateChanged = engine.event<ZoomLevel>('ZoomStateChanged')
+export const DragStateChanged = engine.event<DragState>('DragStateChanged')
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+let tasks: Task[] = initialTasks
+let view: ViewRange = { start: -2, end: 50 }
+let zoom: ZoomLevel = 'day'
+let dragState: DragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// ViewChanged ──→ ViewStateChanged
+// ZoomChanged ──→ ZoomStateChanged
+// TaskDragStart ──→ DragStateChanged
+// TaskDragEnd ──→ DragStateChanged
+// TaskCreated ──→ TasksChanged
+// TaskDragMove ──→ TasksChanged
+// TaskUpdated ──→ TasksChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+engine.on(ViewChanged, [ViewStateChanged], (range, setView) => {
+  view = range
+  setView(view)
+})
+
+engine.on(ZoomChanged, [ZoomStateChanged], (level, setZoom) => {
+  zoom = level
+  setZoom(zoom)
+})
+
+engine.on(TaskDragStart, [DragStateChanged], (payload, setDrag) => {
+  const task = tasks.find(t => t.id === payload.id)
+  if (!task) return
+  dragState = {
+    taskId: payload.id,
+    type: payload.type,
+    startX: 0,
+    originalStart: task.start,
+    originalDuration: task.duration,
+  }
+  setDrag(dragState)
+})
+
+engine.on(TaskDragEnd, [DragStateChanged], (_, setDrag) => {
+  dragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+  setDrag(dragState)
+})
+
+engine.on(TaskCreated, [TasksChanged], (task, setTasks) => {
+  tasks = [...tasks, task]
   setTasks(tasks)
 })
 
-export let zoom = 'day' as ZoomLevel
-engine.on(ZoomChanged, (z) => {
-  zoom = z as ZoomLevel
-})
+// ---------------------------------------------------------------------------
+// Cascade dependencies when a task moves
+// ---------------------------------------------------------------------------
 
-/* ------------------------------------------------------------------ */
-/*  Auto-shift dependents when a task is moved                        */
-/* ------------------------------------------------------------------ */
-
-function shiftDependents(taskList: Task[], movedId: number): Task[] {
+function cascadeDependencies(taskList: Task[], movedTaskId: string): Task[] {
   const result = taskList.map(t => ({ ...t }))
-  const movedTask = result.find(t => t.id === movedId)!
-  const movedEnd = movedTask.start + movedTask.duration
+  const taskMap = new Map(result.map(t => [t.id, t]))
 
-  // BFS through dependents
-  const queue = [movedId]
-  const visited = new Set<number>()
+  // BFS from moved task through dependents
+  const visited = new Set<string>()
+  const queue = [movedTaskId]
 
   while (queue.length > 0) {
     const currentId = queue.shift()!
     if (visited.has(currentId)) continue
     visited.add(currentId)
 
-    const current = result.find(t => t.id === currentId)!
-    const currentEnd = current.start + current.duration
+    const current = taskMap.get(currentId)
+    if (!current) continue
 
-    for (const dep of result) {
-      if (dep.dependsOn.includes(currentId)) {
-        const requiredStart = currentEnd
-        if (dep.start < requiredStart) {
-          dep.start = requiredStart
+    // Find tasks that depend on current
+    for (const task of result) {
+      if (task.dependencies.includes(currentId)) {
+        const depEnd = current.start + current.duration
+        if (task.start < depEnd) {
+          task.start = depEnd
         }
-        queue.push(dep.id)
+        queue.push(task.id)
       }
     }
   }
@@ -98,32 +195,59 @@ function shiftDependents(taskList: Task[], movedId: number): Task[] {
   return result
 }
 
-engine.on(TaskMoved, [TasksUpdated], ({ id, newStart }, setUpdated) => {
-  let updated = tasks.map(t => t.id === id ? { ...t, start: Math.max(0, newStart) } : { ...t })
-  setUpdated(shiftDependents(updated, id))
-})
+// ---------------------------------------------------------------------------
+// Drag handling
+// ---------------------------------------------------------------------------
 
-engine.on(TaskResized, [TasksUpdated], ({ id, newDuration }, setUpdated) => {
-  let updated = tasks.map(t => t.id === id ? { ...t, duration: Math.max(1, newDuration) } : { ...t })
-  setUpdated(shiftDependents(updated, id))
-})
+engine.on(TaskDragMove, [TasksChanged], (payload, setTasks) => {
+  if (!dragState.taskId || dragState.taskId !== payload.id) return
 
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                           */
-/* ------------------------------------------------------------------ */
+  const task = tasks.find(t => t.id === payload.id)
+  if (!task) return
 
-export const TOTAL_DAYS = 40
+  // Convert dx (pixels) to days based on zoom
+  const dayWidth = zoom === 'day' ? 40 : zoom === 'week' ? 20 : 8
+  const dayDelta = Math.round(payload.dx / dayWidth)
 
-function dayWidth(z: ZoomLevel): number {
-  switch (z) {
-    case 'day': return 30
-    case 'week': return 12
-    case 'month': return 4
+  let updated: Task
+  if (dragState.type === 'move') {
+    const newStart = Math.max(0, dragState.originalStart + dayDelta)
+    updated = { ...task, start: newStart }
+  } else {
+    // Resize
+    const newDuration = Math.max(1, dragState.originalDuration + dayDelta)
+    updated = { ...task, duration: newDuration }
   }
-}
 
+  // Update the single task
+  let newTasks = tasks.map(t => t.id === payload.id ? updated : t)
 
-export { dayWidth }
+  // Cascade dependencies
+  newTasks = cascadeDependencies(newTasks, payload.id)
+
+  tasks = newTasks
+  setTasks(tasks)
+})
+
+engine.on(TaskUpdated, [TasksChanged], (updated, setTasks) => {
+  let newTasks = tasks.map(t => t.id === updated.id ? updated : t)
+  newTasks = cascadeDependencies(newTasks, updated.id)
+  tasks = newTasks
+  setTasks(tasks)
+})
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+
+export { categoryColors }
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  tasks = initialTasks
+  view = { start: -2, end: 50 }
+  zoom = 'day'
+  dragState = { taskId: null, type: null, startX: 0, originalStart: 0, originalDuration: 0 }
+}

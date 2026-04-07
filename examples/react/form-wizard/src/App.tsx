@@ -15,6 +15,9 @@ import {
   type FormData,
 } from './engine'
 
+// Engine events used only internally (not needed in UI):
+// SubmitForm, StepValidated — triggered by NextStep, consumed by engine
+
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------

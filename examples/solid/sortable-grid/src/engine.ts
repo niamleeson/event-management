@@ -84,12 +84,12 @@ engine.on(AddItem, [EnteringIdsChanged, ItemsChanged], (_, setEntering, setItems
   setTimeout(() => { enteringIds = new Set(enteringIds); enteringIds.delete(newItem.id); engine.emit(EnteringIdsChanged, new Set(enteringIds)) }, 400)
 })
 
-engine.on(RemoveItem, [ExitingIdsChanged, ItemsChanged], (index, setExiting, setItems) => {
+engine.on(RemoveItem, [ExitingIdsChanged], (index, setExiting) => {
   if (index < 0 || index >= items.length) return
   const item = items[index]
   exitingIds = new Set(exitingIds); exitingIds.add(item.id); setExiting(new Set(exitingIds))
   setTimeout(() => {
-    items = items.filter((i) => i.id !== item.id); setItems([...items])
+    items = items.filter((i) => i.id !== item.id); engine.emit(ItemsChanged, [...items])
     exitingIds = new Set(exitingIds); exitingIds.delete(item.id); engine.emit(ExitingIdsChanged, new Set(exitingIds))
   }, 300)
 })
@@ -98,3 +98,11 @@ engine.emit(ItemsChanged, [...items])
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  idCounter = 0
+  items = Array.from({ length: 12 }, () => makeItem())
+  dragState = { active: false, dragIndex: -1, overIndex: -1, startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0 }
+  enteringIds = new Set<string>()
+  exitingIds = new Set<string>()
+}

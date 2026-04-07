@@ -80,12 +80,10 @@ async function fetchUserDetails(userId: string): Promise<UserDetails> {
 // ---------------------------------------------------------------------------
 // DAG
 // ---------------------------------------------------------------------------
-// SearchInput ──┬──→ SearchQueryChanged
-//               └──→ SearchError
-//               (debounced → doSearch → SearchLoading, SearchDone, SearchError)
-// UserSelected ──┬──→ UserDetailsDone
-//                ├──→ UserDetailsLoading
-//                └──→ SearchError
+// SearchInput ──→ SearchQueryChanged
+//             └──→ DoSearch (debounced)
+// DoSearch ──→ SearchLoading, SearchDone, SearchError (async)
+// UserSelected ──→ UserDetailsDone, UserDetailsLoading, SearchError (async)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -101,40 +99,43 @@ export const UserSelected = engine.event<string | null>('UserSelected')
 export const UserDetailsDone = engine.event<UserDetails | null>('UserDetailsDone')
 export const UserDetailsLoading = engine.event<boolean>('UserDetailsLoading')
 
+// Internal trigger for the debounced async search
+const DoSearch = engine.event<string>('DoSearch')
+
 // ---------------------------------------------------------------------------
-// Debounce
+// Debounce: SearchInput -> SearchQueryChanged + debounced DoSearch
 // ---------------------------------------------------------------------------
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-engine.on(SearchInput, [SearchQueryChanged, SearchError], (query: string, setQuery, setError) => {
+engine.on(SearchInput, [SearchQueryChanged], (query: string, setQuery) => {
   setQuery(query)
-  setError(null)
 
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
-    doSearch(query)
+    engine.emit(DoSearch, query)
   }, 300)
 })
 
 // ---------------------------------------------------------------------------
-// Async search handler
+// Async search handler: DoSearch -> SearchLoading, SearchDone, SearchError
 // ---------------------------------------------------------------------------
 
-async function doSearch(query: string) {
+engine.on(DoSearch, [SearchLoading, SearchDone, SearchError], async (query, setLoading, setDone, setError) => {
+  setError(null)
   if (query.trim().length === 0) {
-    engine.emit(SearchDone, [])
+    setDone([])
     return
   }
-  engine.emit(SearchLoading, true)
+  setLoading(true)
   try {
     const results = await searchUsers(query)
-    engine.emit(SearchDone, results)
+    setDone(results)
   } catch (e: any) {
-    engine.emit(SearchError, e instanceof Error ? e.message : String(e))
+    setError(e instanceof Error ? e.message : String(e))
   }
-  engine.emit(SearchLoading, false)
-}
+  setLoading(false)
+})
 
 // ---------------------------------------------------------------------------
 // Async user details handler

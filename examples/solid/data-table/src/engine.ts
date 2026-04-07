@@ -1,18 +1,6 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
-// DAG
-// ---------------------------------------------------------------------------
-// FilterChanged ──→ PageChanged
-// SearchChanged ──→ PageChanged
-// SortChanged   ──→ (triggers simulated load)
-// PageChanged   ──→ (triggers simulated load)
-// RowSelected   ──→ (toggles selection)
-// RowExpanded   ──→ (toggles expansion)
-// SelectAll     ──→ (toggles all visible)
-// DeselectAll   ──→ (clears selection)
-
-// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -44,6 +32,25 @@ export interface FilterState {
 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// SortChanged ──→ SortStateChanged (+ LoadStarted)
+// FilterChanged ┬──→ FiltersChanged
+//               └──→ CurrentPageChanged
+// PageChanged ──→ CurrentPageChanged (+ LoadStarted)
+// RowSelected ──→ SelectedRowsChanged
+// RowExpanded ──→ ExpandedRowsChanged
+// SelectAll ──→ SelectedRowsChanged
+// DeselectAll ──→ SelectedRowsChanged
+// BulkAction ──→ SelectedRowsChanged
+// ColumnResized ──→ ColumnWidthsChanged
+// SearchChanged ┬──→ SearchQueryChanged (+ LoadStarted)
+//               └──→ CurrentPageChanged
+// LoadStarted ──→ IsLoadingChanged
+// LoadFinished ──→ IsLoadingChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
@@ -59,16 +66,14 @@ export const ExportRequested = engine.event<void>('ExportRequested')
 export const SelectAll = engine.event<void>('SelectAll')
 export const DeselectAll = engine.event<void>('DeselectAll')
 
-// Internal for async loading simulation
-const DataLoading = engine.event<void>('DataLoading')
-const DataLoaded = engine.event<void>('DataLoaded')
-
-// State change events
-export const DataChanged = engine.event<RowData[]>('DataChanged')
+// State-changed events for React subscriptions
 export const SortStateChanged = engine.event<SortState>('SortStateChanged')
 export const FiltersChanged = engine.event<FilterState>('FiltersChanged')
 export const CurrentPageChanged = engine.event<number>('CurrentPageChanged')
+export const SelectedRowsChanged = engine.event<Set<string>>('SelectedRowsChanged')
+export const ExpandedRowsChanged = engine.event<Set<string>>('ExpandedRowsChanged')
 export const SearchQueryChanged = engine.event<string>('SearchQueryChanged')
+export const ColumnWidthsChanged = engine.event<Record<string, number>>('ColumnWidthsChanged')
 export const IsLoadingChanged = engine.event<boolean>('IsLoadingChanged')
 
 // ---------------------------------------------------------------------------
@@ -120,12 +125,27 @@ function generateData(): RowData[] {
 const ALL_DATA = generateData()
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-
+let sortState: SortState = { column: '', direction: null }
+let filters: FilterState = {}
+let currentPage = 1
 export const pageSize = 20
-
+let selectedRows: Set<string> = new Set()
+let expandedRows: Set<string> = new Set()
+let searchQuery = ''
+let columnWidths: Record<string, number> = {
+  id: 60,
+  name: 160,
+  email: 200,
+  role: 100,
+  status: 90,
+  created: 110,
+  revenue: 110,
+  actions: 80,
+}
+let isLoading = false
 
 // ---------------------------------------------------------------------------
 // Data processing: sort, filter, search, paginate
@@ -139,7 +159,7 @@ export function getProcessedData(): {
   let result = [...ALL_DATA]
 
   // Search
-  const query = searchQuery.value.toLowerCase()
+  const query = searchQuery.toLowerCase()
   if (query) {
     result = result.filter(
       (row) =>
@@ -151,8 +171,7 @@ export function getProcessedData(): {
   }
 
   // Filters
-  const f = filters.value
-  for (const [col, val] of Object.entries(f)) {
+  for (const [col, val] of Object.entries(filters)) {
     if (!val) continue
     result = result.filter((row) => {
       const cellVal = String((row as any)[col]).toLowerCase()
@@ -161,8 +180,8 @@ export function getProcessedData(): {
   }
 
   // Sort
-  const sort = sortState.value
-  if (sort.column && sort.direction) {
+  if (sortState.column && sortState.direction) {
+    const sort = sortState
     result.sort((a, b) => {
       const aVal = (a as any)[sort.column]
       const bVal = (b as any)[sort.column]
@@ -180,8 +199,7 @@ export function getProcessedData(): {
   const totalPages = Math.ceil(totalRows / pageSize)
 
   // Paginate
-  const page = currentPage.value
-  const start = (page - 1) * pageSize
+  const start = (currentPage - 1) * pageSize
   const rows = result.slice(start, start + pageSize)
 
   return { rows, totalRows, totalPages }
@@ -191,85 +209,130 @@ export function getProcessedData(): {
 // Event handlers
 // ---------------------------------------------------------------------------
 
-engine.on(FilterChanged, ({ column, value }) => {
-  const current = { ...filters.value }
+engine.on(SortChanged, [SortStateChanged], (state, setSortState) => {
+  sortState = state
+  setSortState(sortState)
+  simulateLoad()
+})
+
+engine.on(FilterChanged, [FiltersChanged, CurrentPageChanged], ({ column, value }, setFilters, setPage) => {
+  const current = { ...filters }
   if (value) {
     current[column] = value
   } else {
     delete current[column]
   }
-  filters.set(current)
+  filters = current
+  setFilters(filters)
   // Reset to page 1 on filter change
-  engine.emit(PageChanged, 1)
+  currentPage = 1
+  setPage(currentPage)
 })
 
-engine.on(RowSelected, (id) => {
-  const current = new Set(selectedRows.value)
-  if (current.has(id)) {
-    current.delete(id)
-  } else {
-    current.add(id)
-  }
-  selectedRows.set(current)
-})
-
-engine.on(RowExpanded, (id) => {
-  const current = new Set(expandedRows.value)
-  if (current.has(id)) {
-    current.delete(id)
-  } else {
-    current.add(id)
-  }
-  expandedRows.set(current)
-})
-
-engine.on(SelectAll, () => {
-  const { rows } = getProcessedData()
-  const allIds = new Set(rows.map((r) => r.id))
-  const current = new Set(selectedRows.value)
-  const allSelected = rows.every((r) => current.has(r.id))
-  if (allSelected) {
-    // Deselect all visible
-    for (const id of allIds) current.delete(id)
-  } else {
-    // Select all visible
-    for (const id of allIds) current.add(id)
-  }
-  selectedRows.set(current)
-})
-
-engine.on(DeselectAll, () => {
-  selectedRows.set(new Set())
-})
-
-engine.on(BulkAction, ({ action, ids }) => {
-  // In a real app, this would trigger an API call
-  console.log(`Bulk action: ${action} on ${ids.length} rows`)
-  selectedRows.set(new Set())
-})
-
-engine.on(ColumnResized, ({ column, width }) => {
-  columnWidths.set({ ...columnWidths.value, [column]: Math.max(50, width) })
-})
-
-// Simulate async data fetch delay on sort/filter/page change
-function simulateLoad() {
-  isLoading.set(true)
-  setTimeout(() => {
-    isLoading.set(false)
-  }, 200)
-}
-
-engine.on(SortChanged, () => simulateLoad())
-engine.on(PageChanged, () => simulateLoad())
-engine.on(SearchChanged, () => {
-  engine.emit(PageChanged, 1)
+engine.on(PageChanged, [CurrentPageChanged], (page, setPage) => {
+  currentPage = page
+  setPage(currentPage)
   simulateLoad()
 })
 
-// ---------------------------------------------------------------------------
-// Start/stop frame loop
-// ---------------------------------------------------------------------------
+engine.on(RowSelected, [SelectedRowsChanged], (id, setSelected) => {
+  const current = new Set(selectedRows)
+  if (current.has(id)) {
+    current.delete(id)
+  } else {
+    current.add(id)
+  }
+  selectedRows = current
+  setSelected(selectedRows)
+})
+
+engine.on(RowExpanded, [ExpandedRowsChanged], (id, setExpanded) => {
+  const current = new Set(expandedRows)
+  if (current.has(id)) {
+    current.delete(id)
+  } else {
+    current.add(id)
+  }
+  expandedRows = current
+  setExpanded(expandedRows)
+})
+
+engine.on(SelectAll, [SelectedRowsChanged], (_, setSelected) => {
+  const { rows } = getProcessedData()
+  const allIds = new Set(rows.map((r) => r.id))
+  const current = new Set(selectedRows)
+  const allSelected = rows.every((r) => current.has(r.id))
+  if (allSelected) {
+    for (const id of allIds) current.delete(id)
+  } else {
+    for (const id of allIds) current.add(id)
+  }
+  selectedRows = current
+  setSelected(selectedRows)
+})
+
+engine.on(DeselectAll, [SelectedRowsChanged], (_, setSelected) => {
+  selectedRows = new Set()
+  setSelected(selectedRows)
+})
+
+engine.on(BulkAction, [SelectedRowsChanged], ({ action, ids }, setSelected) => {
+  console.log(`Bulk action: ${action} on ${ids.length} rows`)
+  selectedRows = new Set()
+  setSelected(selectedRows)
+})
+
+engine.on(ColumnResized, [ColumnWidthsChanged], ({ column, width }, setWidths) => {
+  columnWidths = { ...columnWidths, [column]: Math.max(50, width) }
+  setWidths(columnWidths)
+})
+
+engine.on(SearchChanged, [SearchQueryChanged, CurrentPageChanged], (query, setSearchQuery, setPage) => {
+  searchQuery = query
+  setSearchQuery(searchQuery)
+  currentPage = 1
+  setPage(currentPage)
+  simulateLoad()
+})
+
+// Simulate async data fetch delay on sort/filter/page change
+const LoadStarted = engine.event<void>('LoadStarted')
+const LoadFinished = engine.event<void>('LoadFinished')
+
+engine.on(LoadStarted, [IsLoadingChanged], (_, setLoading) => {
+  isLoading = true
+  setLoading(isLoading)
+  setTimeout(() => engine.emit(LoadFinished, undefined), 200)
+})
+
+engine.on(LoadFinished, [IsLoadingChanged], (_, setLoading) => {
+  isLoading = false
+  setLoading(isLoading)
+})
+
+function simulateLoad() {
+  engine.emit(LoadStarted, undefined)
+}
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  sortState = { column: '', direction: null }
+  filters = {}
+  currentPage = 1
+  selectedRows = new Set()
+  expandedRows = new Set()
+  searchQuery = ''
+  columnWidths = {
+    id: 60,
+    name: 160,
+    email: 200,
+    role: 100,
+    status: 90,
+    created: 110,
+    revenue: 110,
+    actions: 80,
+  }
+  isLoading = false
+}

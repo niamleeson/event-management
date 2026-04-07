@@ -8,6 +8,7 @@ import {
   DragStart,
   DragMove,
   DragEnd,
+  DropOnColumn,
   CardMoved,
   UndoRequested,
   type KanbanCard,
@@ -198,7 +199,7 @@ const styles = {
 
 function KanbanCardComponent({ card }: { card: KanbanCard }) {
   const emit = useEmit()
-  const drag = usePulse(DragStateChanged, null as ReturnType<typeof DragStateChanged['__type']> | null)
+  const drag = usePulse(DragStateChanged, null as any)
   const statuses = usePulse(CardStatusesChanged, {} as Record<string, CardStatus>)
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -336,15 +337,7 @@ function Column({
           }}
           onMouseUp={() => {
             if (drag) {
-              const card = allCards.find((c) => c.id === drag.cardId)
-              if (card && card.column !== id) {
-                emit(CardMoved, {
-                  cardId: drag.cardId,
-                  fromColumn: card.column,
-                  toColumn: id,
-                })
-              }
-              emit(DragEnd, undefined)
+              emit(DropOnColumn, id)
             }
           }}
         >

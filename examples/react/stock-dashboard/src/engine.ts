@@ -254,10 +254,15 @@ function startTicker() {
   }, 500)
 }
 
-startTicker()
+function stopTicker() {
+  if (tickerInterval) {
+    clearInterval(tickerInterval)
+    tickerInterval = null
+  }
+}
 
-export function startLoop() {}
-export function stopLoop() {}
+export function startLoop() { startTicker() }
+export function stopLoop() { stopTicker() }
 
 export function resetState() {
   prices = initPrices()

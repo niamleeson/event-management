@@ -1,11 +1,6 @@
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
-// DAG
-// ---------------------------------------------------------------------------
-// ScrollChanged ──→ PageRequested (prefetch pages)
-
-// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -61,6 +56,21 @@ function generateItem(index: number): Item {
 }
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// ScrollChanged ──┬──→ ScrollPositionChanged
+//                 ├──→ VisibleRangeChanged
+//                 └──→ PageRequested (prefetch via engine.emit)
+// PageRequested ──┬──→ LoadingPagesChanged
+//                 └──→ PageLoaded (async)
+// PageLoaded ──┬──→ ItemsChanged
+//              └──→ LoadingPagesChanged
+// ItemClicked ──→ SelectedItemChanged
+// SortChanged ──→ SortStateChanged
+// FilterChanged ──→ ApplyFilter (debounced) ──→ FilterStateChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
@@ -70,38 +80,79 @@ export const PageLoaded = engine.event<PagePayload>('PageLoaded')
 export const ItemClicked = engine.event<string>('ItemClicked')
 export const FilterChanged = engine.event<string>('FilterChanged')
 export const SortChanged = engine.event<SortDir>('SortChanged')
-export const DebounceFilterApply = engine.event<string>('DebounceFilterApply')
 
-// State change events
+// State-changed events for React subscriptions
+export const ItemsChanged = engine.event<Map<number, Item>>('ItemsChanged')
 export const ScrollPositionChanged = engine.event<number>('ScrollPositionChanged')
 export const VisibleRangeChanged = engine.event<VisibleRange>('VisibleRangeChanged')
+export const FilterStateChanged = engine.event<string>('FilterStateChanged')
+export const SortStateChanged = engine.event<SortDir>('SortStateChanged')
+export const LoadingPagesChanged = engine.event<Set<number>>('LoadingPagesChanged')
 export const SelectedItemChanged = engine.event<string | null>('SelectedItemChanged')
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+let items: Map<number, Item> = new Map()
+let scrollPosition = 0
+let visibleRange: VisibleRange = { start: 0, end: Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) }
+let filter = ''
+let sort: SortDir = 'asc'
+let loadingPages: Set<number> = new Set()
+let selectedItem: string | null = null
+
+const requestedPages = new Set<number>()
 
 // ---------------------------------------------------------------------------
 // Async: PageRequested -> PageLoaded (simulated API)
 // ---------------------------------------------------------------------------
 
-const requestedPages = new Set<number>()
+engine.on(PageRequested, [LoadingPagesChanged, PageLoaded], async (page, setLoading, pageLoaded) => {
+  loadingPages = new Set(loadingPages)
+  loadingPages.add(page)
+  setLoading(loadingPages)
 
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 100))
+  const start = page * PAGE_SIZE
+  const pageItems: Item[] = []
+  for (let i = start; i < start + PAGE_SIZE && i < TOTAL_ITEMS; i++) {
+    pageItems.push(generateItem(i))
+  }
+  pageLoaded({ page, items: pageItems })
+})
 
 // ---------------------------------------------------------------------------
-// Signals
+// Event handlers
 // ---------------------------------------------------------------------------
 
+engine.on(PageLoaded, [ItemsChanged, LoadingPagesChanged], (payload, setItems, setLoading) => {
+  const next = new Map(items)
+  for (const item of payload.items) {
+    const idx = parseInt(item.id.split('-')[1])
+    next.set(idx, item)
+  }
+  items = next
+  setItems(items)
 
-// ---------------------------------------------------------------------------
-// Pipe: ScrollChanged -> prefetch pages
-// ---------------------------------------------------------------------------
+  loadingPages = new Set(loadingPages)
+  loadingPages.delete(payload.page)
+  setLoading(loadingPages)
+})
 
-engine.on(ScrollChanged, (scrollTop) => {
-  const startIdx = Math.floor(scrollTop / ITEM_HEIGHT)
-  const endIdx = startIdx + Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) + 1
+engine.on(ScrollChanged, [ScrollPositionChanged, VisibleRangeChanged], (scrollTop, setScroll, setRange) => {
+  scrollPosition = scrollTop
+  setScroll(scrollPosition)
 
-  // Calculate which pages we need
-  const startPage = Math.floor(startIdx / PAGE_SIZE)
-  const endPage = Math.floor(endIdx / PAGE_SIZE)
+  const start = Math.floor(scrollTop / ITEM_HEIGHT)
+  const end = Math.min(TOTAL_ITEMS - 1, start + Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) + 1)
+  visibleRange = { start, end }
+  setRange(visibleRange)
 
-  // Also prefetch next page
+  // Prefetch pages
+  const startPage = Math.floor(start / PAGE_SIZE)
+  const endPage = Math.floor(end / PAGE_SIZE)
   const prefetchPage = endPage + 1
 
   for (let p = startPage; p <= prefetchPage; p++) {
@@ -113,10 +164,31 @@ engine.on(ScrollChanged, (scrollTop) => {
   }
 })
 
-// ---------------------------------------------------------------------------
-// Debounced filter
-// ---------------------------------------------------------------------------
+engine.on(ItemClicked, [SelectedItemChanged], (id, setSelected) => {
+  selectedItem = id
+  setSelected(selectedItem)
+})
 
+engine.on(SortChanged, [SortStateChanged], (dir, setSort) => {
+  sort = dir
+  setSort(sort)
+})
+
+// Debounced filter
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+const ApplyFilter = engine.event<string>('ApplyFilter')
+
+engine.on(FilterChanged, (value) => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    engine.emit(ApplyFilter, value)
+  }, 300)
+})
+
+engine.on(ApplyFilter, [FilterStateChanged], (value, setFilter) => {
+  filter = value
+  setFilter(filter)
+})
 
 // ---------------------------------------------------------------------------
 // Load initial page
@@ -125,19 +197,18 @@ engine.on(ScrollChanged, (scrollTop) => {
 requestedPages.add(0)
 engine.emit(PageRequested, 0)
 
-// Start/stop frame loop
-let _rafId: number | null = null
-export function startLoop() {
-  if (_rafId !== null) return
-  let last = performance.now()
-  const loop = () => {
-    const now = performance.now()
-    engine.emit(Frame, now - last)
-    last = now
-    _rafId = requestAnimationFrame(loop)
-  }
-  _rafId = requestAnimationFrame(loop)
-}
-export function stopLoop() {
-  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+export function startLoop() {}
+export function stopLoop() {}
+
+export function resetState() {
+  items = new Map()
+  scrollPosition = 0
+  visibleRange = { start: 0, end: Math.ceil(VIEWPORT_HEIGHT / ITEM_HEIGHT) }
+  filter = ''
+  sort = 'asc'
+  loadingPages = new Set()
+  selectedItem = null
+  requestedPages.clear()
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
 }

@@ -1,13 +1,3 @@
-// DAG
-// MetricReceived ──→ ChartDataUpdated
-//                └──→ ThresholdBreached (conditional)
-//                └──→ CurrentMetricsChanged
-// ThresholdBreached ──→ AlertCreated (after 3 breaches)
-// AlertCreated ──→ AlertsChanged
-// AlertDismissed ──→ AlertsChanged
-// ChartDataUpdated ──→ ChartDataChanged
-// FeedToggled ──→ FeedRunningChanged
-
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -52,27 +42,34 @@ export const METRICS = [
   { name: 'Requests/s', unit: 'req/s', threshold: 1000, baseValue: 650 },
 ]
 
-const ROLLING_WINDOW = 30 // keep last 30 data points per metric
+const ROLLING_WINDOW = 30
+
+// ---------------------------------------------------------------------------
+// DAG (4 levels deep)
+// ---------------------------------------------------------------------------
+// MetricReceived ──→ CurrentMetricsChanged ──→ ChartDataChanged ──→ AlertsChanged
+// AlertDismissed ──→ AlertsChanged
+// FeedToggled ──→ FeedRunningChanged
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
+// Layer 0: User / external input events
 export const MetricReceived = engine.event<Metric>('MetricReceived')
-export const ThresholdBreached = engine.event<Metric>('ThresholdBreached')
-export const AlertCreated = engine.event<Alert>('AlertCreated')
 export const AlertDismissed = engine.event<string>('AlertDismissed')
-export const ChartDataUpdated = engine.event<{ name: string; point: ChartDataPoint }>('ChartDataUpdated')
 export const FeedToggled = engine.event<boolean>('FeedToggled')
 
-// ---------------------------------------------------------------------------
-// State-changed events
-// ---------------------------------------------------------------------------
-
+// Layer 1: Primary state events
 export const CurrentMetricsChanged = engine.event<Record<string, Metric>>('CurrentMetricsChanged')
-export const AlertsChanged = engine.event<Alert[]>('AlertsChanged')
-export const ChartDataChanged = engine.event<Record<string, ChartDataPoint[]>>('ChartDataChanged')
 export const FeedRunningChanged = engine.event<boolean>('FeedRunningChanged')
+
+// Layer 2: Derived state events (from metrics)
+export const ChartDataChanged = engine.event<Record<string, ChartDataPoint[]>>('ChartDataChanged')
+
+// Layer 3: Alert detection (derived from chart/metrics thresholds)
+export const AlertsChanged = engine.event<Alert[]>('AlertsChanged')
 
 // ---------------------------------------------------------------------------
 // State
@@ -80,89 +77,88 @@ export const FeedRunningChanged = engine.event<boolean>('FeedRunningChanged')
 
 let currentMetrics: Record<string, Metric> = {}
 let alerts: Alert[] = []
-let chartData: Record<string, ChartDataPoint[]> = Object.fromEntries(METRICS.map((m) => [m.name, []]))
+let chartData: Record<string, ChartDataPoint[]> = Object.fromEntries(
+  METRICS.map((m) => [m.name, []])
+)
 let feedRunning = true
 
-// ---------------------------------------------------------------------------
-// Pipes & Rules
-// ---------------------------------------------------------------------------
+// Breach tracking for alert generation
+let breachCount = 0
+let lastBreachTime = 0
 
-// MetricReceived -> ChartDataUpdated (always fires for every metric)
-engine.on(MetricReceived, [ChartDataUpdated], (metric, setChart) => {
-  setChart({
-    name: metric.name,
-    point: { timestamp: metric.timestamp, value: metric.value },
-  })
-})
-
-// MetricReceived -> ThresholdBreached (conditional: only when value > threshold)
-engine.on(MetricReceived, [ThresholdBreached], (metric, setBreach) => {
-  const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value > config.threshold) {
-    setBreach(metric)
-  }
-})
-
-// Track breach counts per metric; create alert when count hits 3
-let breachCounts: Record<string, number> = {}
-
-engine.on(ThresholdBreached, [AlertCreated], (metric: Metric, setAlert) => {
-  const key = metric.name
-  breachCounts[key] = (breachCounts[key] ?? 0) + 1
-  if (breachCounts[key] >= 3) {
-    breachCounts[key] = 0
-    const config = METRICS.find((m) => m.name === metric.name)
-    setAlert({
-      id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      metric: metric.name,
-      value: metric.value,
-      threshold: config?.threshold ?? 0,
-      timestamp: Date.now(),
-      message: `${metric.name} exceeded threshold ${config?.threshold}${config?.unit} (current: ${metric.value.toFixed(1)}${config?.unit})`,
-    })
-  }
-})
-
-// Reset breach count when metric goes back below threshold
-engine.on(MetricReceived, (metric: Metric) => {
-  const config = METRICS.find((m) => m.name === metric.name)
-  if (config && metric.value <= config.threshold) {
-    breachCounts[metric.name] = 0
-  }
-})
+// Throttle chart updates
+let lastChartUpdate = 0
 
 // ---------------------------------------------------------------------------
-// State reducers
+// Layer 0 → Layer 1: Input handlers → primary state
 // ---------------------------------------------------------------------------
 
-// Current metric values
 engine.on(MetricReceived, [CurrentMetricsChanged], (metric, setMetrics) => {
   currentMetrics = { ...currentMetrics, [metric.name]: metric }
-  setMetrics(currentMetrics)
+  setMetrics({ ...currentMetrics })
 })
 
-// Alert list
-engine.on(AlertCreated, [AlertsChanged], (alert, setAlerts) => {
-  alerts = [alert, ...alerts].slice(0, 20)
-  setAlerts(alerts)
-})
-engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
-  alerts = alerts.filter((a) => a.id !== id)
-  setAlerts(alerts)
-})
-
-// Chart data (rolling window per metric)
-engine.on(ChartDataUpdated, [ChartDataChanged], (update, setChartData) => {
-  const existing = chartData[update.name] ?? []
-  const next = [...existing, update.point].slice(-ROLLING_WINDOW)
-  chartData = { ...chartData, [update.name]: next }
-  setChartData(chartData)
-})
-
-// Feed running state
 engine.on(FeedToggled, [FeedRunningChanged], (running, setRunning) => {
   feedRunning = running
-  setRunning(feedRunning)
+  setRunning(running)
+})
+
+// ---------------------------------------------------------------------------
+// Layer 1 → Layer 2: Primary state → chart data (throttled)
+// ---------------------------------------------------------------------------
+
+engine.on(CurrentMetricsChanged, [ChartDataChanged], (metrics, setChart) => {
+  const now = Date.now()
+  if (now - lastChartUpdate < 1000) return
+  lastChartUpdate = now
+
+  // Update chart data for each metric that was updated
+  for (const name of Object.keys(metrics)) {
+    const metric = metrics[name]
+    const existing = chartData[name] ?? []
+    const next = [...existing, { timestamp: metric.timestamp, value: metric.value }].slice(-ROLLING_WINDOW)
+    chartData = { ...chartData, [name]: next }
+  }
+  setChart({ ...chartData })
+})
+
+// ---------------------------------------------------------------------------
+// Layer 2 → Layer 3: Chart data → alert detection
+// ---------------------------------------------------------------------------
+
+engine.on(ChartDataChanged, [AlertsChanged], (_chartData, setAlerts) => {
+  const now = Date.now()
+
+  // Check each metric against its threshold
+  for (const config of METRICS) {
+    const metric = currentMetrics[config.name]
+    if (!metric) continue
+
+    if (metric.value > config.threshold) {
+      breachCount++
+      if (breachCount >= 3 && now - lastBreachTime > 10000) {
+        lastBreachTime = now
+        breachCount = 0
+        const alert: Alert = {
+          id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          metric: config.name,
+          value: metric.value,
+          threshold: config.threshold,
+          timestamp: Date.now(),
+          message: `${config.name} exceeded threshold ${config.threshold}${config.unit} (current: ${metric.value.toFixed(1)}${config.unit})`,
+        }
+        alerts = [alert, ...alerts].slice(0, 20)
+        setAlerts([...alerts])
+        return
+      }
+    }
+  }
+})
+
+// AlertDismissed directly updates alerts (Layer 0 → Layer 3 shortcut)
+engine.on(AlertDismissed, [AlertsChanged], (id, setAlerts) => {
+  alerts = alerts.filter((a) => a.id !== id)
+  setAlerts([...alerts])
 })
 
 // ---------------------------------------------------------------------------
@@ -171,12 +167,11 @@ engine.on(FeedToggled, [FeedRunningChanged], (running, setRunning) => {
 
 let feedInterval: ReturnType<typeof setInterval> | null = null
 
-function startFeed() {
+export function startFeed() {
   if (feedInterval) return
   feedInterval = setInterval(() => {
     if (!feedRunning) return
     for (const config of METRICS) {
-      // Generate realistic-looking random data with occasional spikes
       const spike = Math.random() < 0.15 ? config.threshold * 0.4 : 0
       const noise = (Math.random() - 0.5) * config.baseValue * 0.3
       const value = Math.max(0, config.baseValue + noise + spike)
@@ -191,23 +186,26 @@ function startFeed() {
   }, 1000)
 }
 
-function stopFeed() {
+export function stopFeed() {
   if (feedInterval) {
     clearInterval(feedInterval)
     feedInterval = null
   }
 }
 
-// ---------------------------------------------------------------------------
-// Initial values
-// ---------------------------------------------------------------------------
-
-export function getCurrentMetrics() { return currentMetrics }
-export function getAlerts() { return alerts }
-export function getChartData() { return chartData }
-export function getFeedRunning() { return feedRunning }
-
-export { startFeed, stopFeed }
-
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  currentMetrics = {}
+  alerts = []
+  chartData = Object.fromEntries(METRICS.map((m) => [m.name, []]))
+  feedRunning = true
+  breachCount = 0
+  lastBreachTime = 0
+  lastChartUpdate = 0
+  if (feedInterval) {
+    clearInterval(feedInterval)
+    feedInterval = null
+  }
+}

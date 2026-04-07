@@ -4,7 +4,8 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "pnpm -r --parallel dev",
+    "start": "open docs/index.html && cd examples/playground && npx vite --port 3200 --open"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

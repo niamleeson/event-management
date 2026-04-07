@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { usePulse, useEmit } from '@pulse/react'
 import {
   TodoAdded,
@@ -8,7 +9,6 @@ import {
   TodosChanged,
   FilteredTodosChanged,
   RemainingCountChanged,
-  CurrentTextChanged,
   ActiveFilterChanged,
   ValidationResultEvent,
   type Todo,
@@ -147,8 +147,13 @@ const styles = {
 
 function TodoInput() {
   const emit = useEmit()
-  const text = usePulse(CurrentTextChanged, '')
+  const [text, setText] = useState('')
   const validation = usePulse(ValidationResultEvent, { valid: false, error: null } as ValidationResult)
+
+  const handleChange = (value: string) => {
+    setText(value)
+    emit(TodoTextChanged, value)  // engine validates
+  }
 
   const handleAdd = () => {
     if (!validation.valid) return
@@ -158,7 +163,7 @@ function TodoInput() {
       completed: false,
     }
     emit(TodoAdded, todo)
-    emit(TodoTextChanged, '')
+    setText('')  // UI-only, no event fired
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -172,7 +177,7 @@ function TodoInput() {
           style={styles.input}
           value={text}
           placeholder="What needs to be done?"
-          onChange={(e) => emit(TodoTextChanged, e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
         />
         <button

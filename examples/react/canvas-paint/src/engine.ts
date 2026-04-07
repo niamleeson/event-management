@@ -9,7 +9,7 @@ export const engine = createEngine()
 // ColorChanged ──→ CurrentColorChanged
 // SizeChanged ──→ BrushSizeChanged
 // LayerSelected ──→ ActiveLayerChanged
-// LayerAdded ──→ LayersChanged
+// LayerAdded ──→ LayersChanged, ActiveLayerChanged
 // LayerToggled ──→ LayersChanged
 //
 // StrokeStart ──→ CurrentStrokeChanged
@@ -169,11 +169,12 @@ engine.on(StrokesChanged, [UndoStackChanged, RedoStackChanged], (_strokes, setUn
 // Layer management
 // ---------------------------------------------------------------------------
 
-engine.on(LayerAdded, [LayersChanged], (_, setLayers) => {
+engine.on(LayerAdded, [LayersChanged, ActiveLayerChanged], (_, setLayers, setActive) => {
   layerCounter++
   layers = [...layers, { id: layerCounter, name: `Layer ${layerCounter}`, visible: true }]
+  activeLayer = layerCounter
   setLayers([...layers])
-  engine.emit(LayerSelected, layerCounter)
+  setActive(layerCounter)
 })
 
 engine.on(LayerToggled, [LayersChanged], (id, setLayers) => {

@@ -384,11 +384,9 @@ export default function App() {
             style={{
               position: 'absolute',
               inset: 0,
-              background: 'rgba(0, 0, 0, 0.6)',
-              backdropFilter: `blur(${Math.min(stack.length * 4, 16)}px)`,
-              WebkitBackdropFilter: `blur(${Math.min(stack.length * 4, 16)}px)`,
+              background: `rgba(0, 0, 0, ${Math.min(0.3 + stack.length * 0.1, 0.7)})`,
               opacity: stack.some((m) => m.state === 'exiting') && stack.length <= 1 ? 0 : 1,
-              transition: 'opacity 0.3s ease, backdrop-filter 0.3s ease',
+              transition: 'opacity 0.3s ease',
             }}
           />
 

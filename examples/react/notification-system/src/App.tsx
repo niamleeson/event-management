@@ -9,7 +9,6 @@ import {
   NotifyError,
   DismissNotification,
   DismissAll,
-  ReflowTrigger,
 } from './engine'
 import type { Notification, NotificationType } from './engine'
 

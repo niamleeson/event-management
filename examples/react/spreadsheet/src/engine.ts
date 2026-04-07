@@ -17,7 +17,7 @@ engine.onError = (error, rule, _event) => {
 export interface CellData { raw: string; computed: string; error?: string }
 export type Grid = CellData[][]
 export interface CellCoord { row: number; col: number }
-export interface CellEditPayload { row: number; col: number; value: string }
+export interface CellEditPayload { row: number; col: number; value: string; advance?: 'down' | 'right' }
 export interface FormulaErrorPayload { row: number; col: number; error: string }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,8 @@ function recomputeGrid(grid: Grid): Grid {
 // ---------------------------------------------------------------------------
 // DAG (3 levels deep)
 // ---------------------------------------------------------------------------
-// CellEdited ──→ CellsChanged ──→ DependentCellsRecalculated ──→ FormulaError
+// CellEdited ──┬→ CellsChanged ──→ DependentCellsRecalculated ──→ FormulaError
+//              └→ SelectedCellChanged (when advance is set)
 // CellSelected ──→ SelectedCellChanged
 // ---------------------------------------------------------------------------
 
@@ -133,11 +134,26 @@ let selectedCell: CellCoord = { row: 0, col: 0 }
 // Layer 0 → Layer 1: Input handlers → primary state
 // ---------------------------------------------------------------------------
 
-engine.on(CellEdited, [CellsChanged], (payload, setCells) => {
+engine.on(CellEdited, [CellsChanged, SelectedCellChanged], (payload, setCells, setSelected) => {
   const newGrid = cells.map(r => r.map(c => ({ ...c })))
   newGrid[payload.row][payload.col] = { raw: payload.value, computed: payload.value }
   cells = newGrid
   setCells(cells)
+
+  if (payload.advance === 'down') {
+    if (payload.row < ROWS - 1) {
+      selectedCell = { row: payload.row + 1, col: payload.col }
+      setSelected(selectedCell)
+    }
+  } else if (payload.advance === 'right') {
+    if (payload.col < COLS - 1) {
+      selectedCell = { row: payload.row, col: payload.col + 1 }
+      setSelected(selectedCell)
+    } else if (payload.row < ROWS - 1) {
+      selectedCell = { row: payload.row + 1, col: 0 }
+      setSelected(selectedCell)
+    }
+  }
 })
 
 engine.on(CellSelected, [SelectedCellChanged], (coord, setSelected) => {

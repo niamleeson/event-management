@@ -64,10 +64,12 @@ const INITIAL_CARDS: KanbanCard[] = [
 // ---------------------------------------------------------------------------
 // DragStart ──→ DragStateChanged ──→ DragPositionChanged
 // DragEnd ──→ DragStateChanged
+// DropOnColumn ──→ CardsChanged + DragStateChanged (single user action)
 // DragMove (updates target position for spring physics)
 //
-// CardMoved ──→ CardsChanged ──→ CardStatusesChanged (saving)
-//                                    └──→ CardStatusesChanged (saved/error → settled)
+// CardMoved ──→ CardsChanged ──→ CardStatusesChanged (saving → saved/error)
+// CardSaveRetry ──→ CardMoved (re-emit to retry)
+// CardSaveSettled ──→ CardStatusesChanged (settled)
 //
 // UndoRequested ──→ CardMoved (re-emits)
 // Frame ──→ DragPositionChanged (spring physics)
@@ -81,6 +83,7 @@ const INITIAL_CARDS: KanbanCard[] = [
 export const DragStart = engine.event<DragInfo>('DragStart')
 export const DragMove = engine.event<DragMoveInfo>('DragMove')
 export const DragEnd = engine.event<void>('DragEnd')
+export const DropOnColumn = engine.event<ColumnId>('DropOnColumn')
 export const CardMoved = engine.event<MoveInfo>('CardMoved')
 export const UndoRequested = engine.event<string>('UndoRequested')
 export const Frame = engine.event<number>('Frame')
@@ -94,6 +97,10 @@ export const DragPositionChanged = engine.event<{ x: number; y: number }>('DragP
 
 // Layer 3: Async-derived state (from cards save operation)
 export const CardStatusesChanged = engine.event<Record<string, CardStatus>>('CardStatusesChanged')
+
+// Internal async trigger events
+const CardSaveRetry = engine.event<string>('CardSaveRetry')
+const CardSaveSettled = engine.event<string>('CardSaveSettled')
 
 // ---------------------------------------------------------------------------
 // State
@@ -125,6 +132,19 @@ engine.on(DragMove, (pos) => {
 })
 
 engine.on(DragEnd, [DragStateChanged], (_, setDragState) => {
+  dragState = null
+  setDragState(null)
+})
+
+engine.on(DropOnColumn, [CardsChanged, DragStateChanged], (columnId, setCards, setDragState) => {
+  if (!dragState) return
+  const currentDrag = dragState
+  const card = cards.find((c) => c.id === currentDrag.cardId)
+  if (card && card.column !== columnId) {
+    cards = cards.map((c) => (c.id === currentDrag.cardId ? { ...c, column: columnId } : c))
+    setCards([...cards])
+    undoHistory.set(currentDrag.cardId, { cardId: currentDrag.cardId, fromColumn: card.column, toColumn: columnId })
+  }
   dragState = null
   setDragState(null)
 })
@@ -167,21 +187,27 @@ engine.on(CardsChanged, [CardStatusesChanged], async (_cards, setStatuses) => {
     cardStatuses = { ...cardStatuses, [cardId]: 'error' as CardStatus }
     setStatuses({ ...cardStatuses })
     // Auto-retry after 2 seconds
-    setTimeout(() => {
-      const card = cards.find((c) => c.id === cardId)
-      if (card) {
-        engine.emit(CardMoved, { cardId, fromColumn: card.column, toColumn: card.column })
-      }
-    }, 2000)
+    setTimeout(() => engine.emit(CardSaveRetry, cardId), 2000)
   } else {
     cardStatuses = { ...cardStatuses, [cardId]: 'saved' as CardStatus }
     setStatuses({ ...cardStatuses })
     // Settle after animation
-    setTimeout(() => {
-      cardStatuses = { ...cardStatuses, [cardId]: 'settled' as CardStatus }
-      engine.emit(CardStatusesChanged, { ...cardStatuses })
-    }, 600)
+    setTimeout(() => engine.emit(CardSaveSettled, cardId), 600)
   }
+})
+
+// CardSaveRetry → re-emit CardMoved to trigger another save attempt
+engine.on(CardSaveRetry, [CardMoved], (cardId, cardMoved) => {
+  const card = cards.find((c) => c.id === cardId)
+  if (card) {
+    cardMoved({ cardId, fromColumn: card.column, toColumn: card.column })
+  }
+})
+
+// CardSaveSettled → update status to settled
+engine.on(CardSaveSettled, [CardStatusesChanged], (cardId, setStatuses) => {
+  cardStatuses = { ...cardStatuses, [cardId]: 'settled' as CardStatus }
+  setStatuses({ ...cardStatuses })
 })
 
 // ---------------------------------------------------------------------------

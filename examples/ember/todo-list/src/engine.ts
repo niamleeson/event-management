@@ -1,16 +1,5 @@
-// DAG
-// TodoTextChanged ──→ CurrentTextChanged, ValidationResultEvent
-// TodoAdded ──→ TodosChanged, FilteredTodosChanged, RemainingCountChanged
-// TodoRemoved ──→ TodosChanged, FilteredTodosChanged, RemainingCountChanged
-// TodoToggled ──→ TodosChanged, FilteredTodosChanged, RemainingCountChanged
-// FilterChanged ──→ ActiveFilterChanged, FilteredTodosChanged, RemainingCountChanged
-
 import { createEngine } from '@pulse/core'
 import { createPulseService } from '@pulse/ember'
-
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
 
 export const engine = createEngine()
 
@@ -32,20 +21,38 @@ export interface ValidationResult {
 }
 
 // ---------------------------------------------------------------------------
+// DAG (3 levels deep)
+// ---------------------------------------------------------------------------
+//
+//  TodoTextChanged ──→ ValidationResultEvent
+//
+//  TodoAdded ───→ TodosChanged ──┬──→ FilteredTodosChanged
+//  TodoRemoved ─→ TodosChanged   │
+//  TodoToggled ─→ TodosChanged   └──→ RemainingCountChanged
+//
+//  FilterChanged ──→ ActiveFilterChanged ──→ FilteredTodosChanged
+//
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
+// Layer 0: User input events
 export const TodoAdded = engine.event<Todo>('TodoAdded')
 export const TodoRemoved = engine.event<string>('TodoRemoved')
 export const TodoToggled = engine.event<string>('TodoToggled')
 export const TodoTextChanged = engine.event<string>('TodoTextChanged')
-export const ValidationResultEvent = engine.event<ValidationResult>('ValidationResult')
 export const FilterChanged = engine.event<Filter>('FilterChanged')
+
+// Layer 1: Primary state events
 export const TodosChanged = engine.event<Todo[]>('TodosChanged')
+export const ActiveFilterChanged = engine.event<Filter>('ActiveFilterChanged')
+export const ValidationResultEvent = engine.event<ValidationResult>('ValidationResult')
+
+// Layer 2: Derived state events
 export const FilteredTodosChanged = engine.event<Todo[]>('FilteredTodosChanged')
 export const RemainingCountChanged = engine.event<number>('RemainingCountChanged')
-export const CurrentTextChanged = engine.event<string>('CurrentTextChanged')
-export const ActiveFilterChanged = engine.event<Filter>('ActiveFilterChanged')
 
 // ---------------------------------------------------------------------------
 // State
@@ -53,7 +60,6 @@ export const ActiveFilterChanged = engine.event<Filter>('ActiveFilterChanged')
 
 let todos: Todo[] = []
 let activeFilter: Filter = 'all'
-let currentText = ''
 
 function computeFiltered(): Todo[] {
   return activeFilter === 'active' ? todos.filter(t => !t.completed) :
@@ -62,12 +68,10 @@ function computeFiltered(): Todo[] {
 }
 
 // ---------------------------------------------------------------------------
-// Validate text input: non-empty and minimum length of 3
+// Layer 0 → Layer 1: Input handlers → primary state
 // ---------------------------------------------------------------------------
 
-engine.on(TodoTextChanged, [CurrentTextChanged, ValidationResultEvent], (text: string, setText, setValidation) => {
-  currentText = text
-  setText(text)
+engine.on(TodoTextChanged, [ValidationResultEvent], (text, setValidation) => {
   if (text.trim().length === 0) {
     setValidation({ valid: false, error: null })
   } else if (text.trim().length < 3) {
@@ -77,44 +81,46 @@ engine.on(TodoTextChanged, [CurrentTextChanged, ValidationResultEvent], (text: s
   }
 })
 
-// ---------------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------------
-
-engine.on(TodoAdded, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (todo, setTodos, setFiltered, setRemaining) => {
+engine.on(TodoAdded, [TodosChanged], (todo, setTodos) => {
   todos = [...todos, todo]
   setTodos(todos)
-  setFiltered(computeFiltered())
-  setRemaining(todos.filter(t => !t.completed).length)
 })
 
-engine.on(TodoRemoved, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (id, setTodos, setFiltered, setRemaining) => {
-  todos = todos.filter((t) => t.id !== id)
+engine.on(TodoRemoved, [TodosChanged], (id, setTodos) => {
+  todos = todos.filter(t => t.id !== id)
   setTodos(todos)
-  setFiltered(computeFiltered())
-  setRemaining(todos.filter(t => !t.completed).length)
 })
 
-engine.on(TodoToggled, [TodosChanged, FilteredTodosChanged, RemainingCountChanged], (id, setTodos, setFiltered, setRemaining) => {
-  todos = todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+engine.on(TodoToggled, [TodosChanged], (id, setTodos) => {
+  todos = todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
   setTodos(todos)
-  setFiltered(computeFiltered())
-  setRemaining(todos.filter(t => !t.completed).length)
 })
 
-engine.on(FilterChanged, [ActiveFilterChanged, FilteredTodosChanged, RemainingCountChanged], (filter, setActive, setFiltered, setRemaining) => {
+engine.on(FilterChanged, [ActiveFilterChanged], (filter, setActive) => {
   activeFilter = filter
   setActive(filter)
-  setFiltered(computeFiltered())
-  setRemaining(todos.filter(t => !t.completed).length)
 })
 
 // ---------------------------------------------------------------------------
-// Start/stop loop (no-op: this example has no animation frame loop)
+// Layer 1 → Layer 2: Primary state → derived state
 // ---------------------------------------------------------------------------
+
+engine.on(TodosChanged, [FilteredTodosChanged, RemainingCountChanged], (allTodos, setFiltered, setRemaining) => {
+  setFiltered(computeFiltered())
+  setRemaining(allTodos.filter(t => !t.completed).length)
+})
+
+engine.on(ActiveFilterChanged, [FilteredTodosChanged], (_filter, setFiltered) => {
+  setFiltered(computeFiltered())
+})
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  todos = []
+  activeFilter = 'all'
+}
 
 // ---------------------------------------------------------------------------
 // Pulse Service (shared instance for all components)

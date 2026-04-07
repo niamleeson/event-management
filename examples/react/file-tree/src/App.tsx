@@ -74,10 +74,7 @@ function TreeItem({
 
   const handleClick = useCallback(() => {
     emit(SelectItem, node.id)
-    if (isFolder) {
-      emit(ToggleFolder, node.id)
-    }
-  }, [emit, node.id, isFolder])
+  }, [emit, node.id])
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {

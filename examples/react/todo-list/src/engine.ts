@@ -23,7 +23,7 @@ export interface ValidationResult {
 // DAG (3 levels deep)
 // ---------------------------------------------------------------------------
 //
-//  TodoTextChanged ──→ CurrentTextChanged ──→ ValidationResultEvent
+//  TodoTextChanged ──→ ValidationResultEvent
 //
 //  TodoAdded ───→ TodosChanged ──┬──→ FilteredTodosChanged
 //  TodoRemoved ─→ TodosChanged   │
@@ -47,7 +47,6 @@ export const FilterChanged = engine.event<Filter>('FilterChanged')
 // Layer 1: Primary state events
 export const TodosChanged = engine.event<Todo[]>('TodosChanged')
 export const ActiveFilterChanged = engine.event<Filter>('ActiveFilterChanged')
-export const CurrentTextChanged = engine.event<string>('CurrentTextChanged')
 export const ValidationResultEvent = engine.event<ValidationResult>('ValidationResult')
 
 // Layer 2: Derived state events
@@ -71,12 +70,7 @@ function computeFiltered(): Todo[] {
 // Layer 0 → Layer 1: Input handlers → primary state
 // ---------------------------------------------------------------------------
 
-engine.on(TodoTextChanged, [CurrentTextChanged], (text, setText) => {
-  setText(text)
-})
-
-// Layer 1 → Layer 2: CurrentTextChanged → ValidationResult
-engine.on(CurrentTextChanged, [ValidationResultEvent], (text, setValidation) => {
+engine.on(TodoTextChanged, [ValidationResultEvent], (text, setValidation) => {
   if (text.trim().length === 0) {
     setValidation({ valid: false, error: null })
   } else if (text.trim().length < 3) {
@@ -110,9 +104,9 @@ engine.on(FilterChanged, [ActiveFilterChanged], (filter, setActive) => {
 // Layer 1 → Layer 2: Primary state → derived state
 // ---------------------------------------------------------------------------
 
-engine.on(TodosChanged, [FilteredTodosChanged, RemainingCountChanged], (_allTodos, setFiltered, setRemaining) => {
+engine.on(TodosChanged, [FilteredTodosChanged, RemainingCountChanged], (allTodos, setFiltered, setRemaining) => {
   setFiltered(computeFiltered())
-  setRemaining(todos.filter(t => !t.completed).length)
+  setRemaining(allTodos.filter(t => !t.completed).length)
 })
 
 engine.on(ActiveFilterChanged, [FilteredTodosChanged], (_filter, setFiltered) => {

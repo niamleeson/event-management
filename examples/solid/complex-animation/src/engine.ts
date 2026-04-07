@@ -198,3 +198,19 @@ export function startLoop() {
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
+
+export function resetState() {
+  cardOpacity.fill(0)
+  cardTranslateY.fill(40)
+  cardHoverScale.fill(1)
+  cardHoverShadow.fill(0)
+  cardHoverTarget.fill(0)
+  cardHoverVel.fill(0)
+  cardEnteredCount = 0
+  cardEnterTriggered = Array(CARD_COUNT).fill(false)
+  allEntered = false
+  welcomeOpacity = 0
+  welcomeTranslateY = 20
+  welcomePhase = 'hidden'
+  _rafId = null
+}

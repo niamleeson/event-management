@@ -1,138 +1,80 @@
-// DAG
-// NotificationAdded ──→ NotificationsChanged
-// DismissNotification ──→ NotificationsChanged
-// AddNotification ──→ NotificationAdded
-//                 └──→ DismissNotification (delayed auto-dismiss)
-// FloodNotifications ──→ AddNotification (x10 staggered)
-
 import { createEngine } from '@pulse/core'
+
 export const engine = createEngine()
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
 
-export type Priority = 'info' | 'success' | 'warning' | 'error'
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// NotifyInfo ────┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// NotifySuccess ─┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// NotifyWarning ─┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// NotifyError ───┬──→ NotificationsChanged
+//                └──→ NotificationCountChanged
+// DismissNotification ┬──→ NotificationsChanged
+//                     └──→ NotificationCountChanged
+// DismissAll ──→ DismissNotification (per notification)
+// ---------------------------------------------------------------------------
 
-export interface Notification {
-  id: number
-  title: string
-  message: string
-  priority: Priority
-  createdAt: number
-  dismissAt: number
-}
+export type NotificationType = 'info' | 'success' | 'warning' | 'error'
+export interface NotificationData { title: string; message: string }
+export interface Notification { id: string; type: NotificationType; title: string; message: string; timestamp: number; entering: boolean; exiting: boolean }
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                         */
-/* ------------------------------------------------------------------ */
-
-const PRIORITY_COLORS: Record<Priority, string> = {
-  info: '#0984e3',
-  success: '#00b894',
-  warning: '#fdcb6e',
-  error: '#d63031',
-}
-
-const PRIORITY_ICONS: Record<Priority, string> = {
-  info: '\u2139',
-  success: '\u2713',
-  warning: '\u26A0',
-  error: '\u2717',
-}
-
-const AUTO_DISMISS_MS: Record<Priority, number> = {
-  info: 4000,
-  success: 3000,
-  warning: 6000,
-  error: 8000,
-}
-
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
-
-export const AddNotification = engine.event<{ title: string; message: string; priority: Priority }>('AddNotification')
-export const DismissNotification = engine.event<number>('DismissNotification')
-export const NotificationAdded = engine.event<Notification>('NotificationAdded')
-export const FloodNotifications = engine.event('FloodNotifications')
-
-/* ------------------------------------------------------------------ */
-/*  State-changed events                                              */
-/* ------------------------------------------------------------------ */
+export const NotifyInfo = engine.event<NotificationData>('NotifyInfo')
+export const NotifySuccess = engine.event<NotificationData>('NotifySuccess')
+export const NotifyWarning = engine.event<NotificationData>('NotifyWarning')
+export const NotifyError = engine.event<NotificationData>('NotifyError')
+export const DismissNotification = engine.event<string>('DismissNotification')
+export const DismissAll = engine.event<void>('DismissAll')
 
 export const NotificationsChanged = engine.event<Notification[]>('NotificationsChanged')
+export const NotificationCountChanged = engine.event<number>('NotificationCountChanged')
 
-/* ------------------------------------------------------------------ */
-/*  State                                                             */
-/* ------------------------------------------------------------------ */
-
-let nextId = 1
 let notifications: Notification[] = []
+let nextId = 0
 
-engine.on(NotificationAdded, [NotificationsChanged], (notif, setNotifs) => {
-  notifications = [notif, ...notifications].slice(0, 20)
-  setNotifs(notifications)
+const PRIORITY: Record<NotificationType, number> = { error: 0, warning: 1, success: 2, info: 3 }
+
+function sortByPriority(items: Notification[]): Notification[] {
+  return [...items].sort((a, b) => { const pd = PRIORITY[a.type] - PRIORITY[b.type]; return pd !== 0 ? pd : a.timestamp - b.timestamp })
+}
+
+function emitState() { engine.emit(NotificationsChanged, [...notifications]); engine.emit(NotificationCountChanged, notifications.length) }
+
+function addNotification(type: NotificationType, data: NotificationData, setNotifs: (v: Notification[]) => void, setCount: (v: number) => void) {
+  const notif: Notification = { id: `notif-${++nextId}`, type, title: data.title, message: data.message, timestamp: Date.now(), entering: true, exiting: false }
+  notifications = sortByPriority([...notifications, notif])
+  setNotifs([...notifications]); setCount(notifications.length)
+  setTimeout(() => { notifications = notifications.map(n => n.id === notif.id ? { ...n, entering: false } : n); emitState() }, 50)
+  const delays: Record<NotificationType, number | null> = { info: 5000, success: 5000, warning: 10000, error: null }
+  const delay = delays[type]
+  if (delay !== null) setTimeout(() => startExit(notif.id), delay)
+}
+
+function startExit(id: string) {
+  if (!notifications.find(n => n.id === id && !n.exiting)) return
+  notifications = notifications.map(n => n.id === id ? { ...n, exiting: true } : n); emitState()
+  setTimeout(() => { notifications = notifications.filter(n => n.id !== id); emitState() }, 400)
+}
+
+engine.on(NotifyInfo, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('info', d, setNotifs, setCount))
+engine.on(NotifySuccess, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('success', d, setNotifs, setCount))
+engine.on(NotifyWarning, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('warning', d, setNotifs, setCount))
+engine.on(NotifyError, [NotificationsChanged, NotificationCountChanged], (d, setNotifs, setCount) => addNotification('error', d, setNotifs, setCount))
+engine.on(DismissNotification, [NotificationsChanged, NotificationCountChanged], (id, setNotifs, setCount) => {
+  if (!notifications.find(n => n.id === id && !n.exiting)) return
+  notifications = notifications.map(n => n.id === id ? { ...n, exiting: true } : n)
+  setNotifs([...notifications]); setCount(notifications.length)
+  setTimeout(() => { notifications = notifications.filter(n => n.id !== id); emitState() }, 400)
 })
-engine.on(DismissNotification, [NotificationsChanged], (id, setNotifs) => {
-  notifications = notifications.filter(n => n.id !== id)
-  setNotifs(notifications)
-})
-
-/* ------------------------------------------------------------------ */
-/*  Add notification logic                                            */
-/* ------------------------------------------------------------------ */
-
-engine.on(AddNotification, [NotificationAdded], ({ title, message, priority }, setAdded) => {
-  const now = Date.now()
-  const notif: Notification = {
-    id: nextId++,
-    title,
-    message,
-    priority,
-    createdAt: now,
-    dismissAt: now + AUTO_DISMISS_MS[priority],
-  }
-  setAdded(notif)
-
-  // Auto-dismiss
-  setTimeout(() => {
-    engine.emit(DismissNotification, notif.id)
-  }, AUTO_DISMISS_MS[priority])
-})
-
-/* ------------------------------------------------------------------ */
-/*  Flood: spawn 10 random notifications rapidly                      */
-/* ------------------------------------------------------------------ */
-
-const FLOOD_TITLES = ['System Alert', 'Update Available', 'Task Complete', 'New Message', 'Warning']
-const FLOOD_MESSAGES = [
-  'Something happened in the system.',
-  'A new version is ready to install.',
-  'Your background task completed.',
-  'You received a new notification.',
-  'Resource usage is getting high.',
-]
-
-engine.on(FloodNotifications, () => {
-  const priorities: Priority[] = ['info', 'success', 'warning', 'error']
-  for (let i = 0; i < 10; i++) {
-    setTimeout(() => {
-      engine.emit(AddNotification, {
-        title: FLOOD_TITLES[Math.floor(Math.random() * FLOOD_TITLES.length)],
-        message: FLOOD_MESSAGES[Math.floor(Math.random() * FLOOD_MESSAGES.length)],
-        priority: priorities[Math.floor(Math.random() * priorities.length)],
-      })
-    }, i * 200)
-  }
-})
-
-/* ------------------------------------------------------------------ */
-/*  Initial values                                                    */
-/* ------------------------------------------------------------------ */
-
-export function getNotifications() { return notifications }
-
-export { PRIORITY_COLORS, PRIORITY_ICONS }
+engine.on(DismissAll, () => { for (const n of notifications) if (!n.exiting) startExit(n.id) })
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  notifications = []
+  nextId = 0
+}

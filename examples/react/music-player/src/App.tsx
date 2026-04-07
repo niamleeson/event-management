@@ -3,10 +3,10 @@ import {
   CurrentTrackChanged,
   IsPlayingChanged,
   ProgressChanged,
-  VolumeSet,
+  VolumeChanged,
   ShuffleChanged,
   RepeatChanged,
-  playlist,
+  samplePlaylist,
   VisualizerChanged,
   Play,
   Pause,
@@ -16,6 +16,7 @@ import {
   VolumeSet,
   ShuffleToggle,
   RepeatToggle,
+  TrackSelected,
 
   type Track,
 } from './engine'
@@ -259,13 +260,9 @@ function Sidebar() {
   const emit = useEmit()
   const pl = samplePlaylist
   const current = usePulse(CurrentTrackChanged, samplePlaylist[0])
-  const playing = usePulse(IsPlayingChanged, false)
 
   const handleSelect = (track: Track) => {
-    emit(TrackChanged, track)
-    if (!playing) {
-      emit(Play, undefined)
-    }
+    emit(TrackSelected, track)
   }
 
   return (

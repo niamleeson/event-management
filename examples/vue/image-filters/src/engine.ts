@@ -1,169 +1,105 @@
-// DAG
-// FilterValueChanged ──→ FiltersChanged
-//                    └──→ CanUndoChanged
-//                    └──→ CanRedoChanged
-// FilterReordered ──→ FiltersChanged
-// ResetAll ──→ FiltersChanged
-// SplitChanged ──→ SplitPositionChanged
-// Undo ──→ ResetAll
-//      └──→ FilterValueChanged (restore)
-// Redo ──→ ResetAll
-//      └──→ FilterValueChanged (restore)
-
 import { createEngine } from '@pulse/core'
+
 export const engine = createEngine()
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// FilterAdded ───┬──→ FiltersChanged
+//                ├──→ UndoStackChanged
+//                └──→ RedoStackChanged
+// FilterRemoved ─┬──→ FiltersChanged
+//                ├──→ UndoStackChanged
+//                └──→ RedoStackChanged
+// FilterReordered ┬──→ FiltersChanged
+//                 ├──→ UndoStackChanged
+//                 └──→ RedoStackChanged
+// FilterParamChanged ┬──→ FiltersChanged
+//                    ├──→ UndoStackChanged
+//                    └──→ RedoStackChanged
+// ResetAll ──┬──→ FiltersChanged
+//            ├──→ UndoStackChanged
+//            └──→ RedoStackChanged
+// UndoRequested ┬──→ FiltersChanged
+//               ├──→ UndoStackChanged
+//               └──→ RedoStackChanged
+// RedoRequested ┬──→ FiltersChanged
+//               ├──→ UndoStackChanged
+//               └──→ RedoStackChanged
+// ---------------------------------------------------------------------------
 
-export interface FilterDef {
-  name: string
-  prop: string
-  unit: string
-  min: number
-  max: number
-  default: number
+export type FilterName = 'brightness' | 'contrast' | 'saturate' | 'blur' | 'grayscale' | 'sepia' | 'hue-rotate' | 'invert'
+export interface Filter { id: string; name: FilterName; value: number; enabled: boolean }
+export interface FilterParamPayload { index: number; param: 'value' | 'enabled'; value: number | boolean }
+export interface ReorderPayload { from: number; to: number }
+
+export const filterConfigs: Record<FilterName, { label: string; unit: string; min: number; max: number; default: number; step: number }> = {
+  'brightness': { label: 'Brightness', unit: '%', min: 0, max: 200, default: 100, step: 1 },
+  'contrast': { label: 'Contrast', unit: '%', min: 0, max: 200, default: 100, step: 1 },
+  'saturate': { label: 'Saturate', unit: '%', min: 0, max: 200, default: 100, step: 1 },
+  'blur': { label: 'Blur', unit: 'px', min: 0, max: 20, default: 0, step: 0.5 },
+  'grayscale': { label: 'Grayscale', unit: '%', min: 0, max: 100, default: 0, step: 1 },
+  'sepia': { label: 'Sepia', unit: '%', min: 0, max: 100, default: 0, step: 1 },
+  'hue-rotate': { label: 'Hue Rotate', unit: 'deg', min: 0, max: 360, default: 0, step: 1 },
+  'invert': { label: 'Invert', unit: '%', min: 0, max: 100, default: 0, step: 1 },
 }
 
-export interface FilterState {
-  id: string
-  name: string
-  prop: string
-  unit: string
-  value: number
-  default: number
-  min: number
-  max: number
+export const FilterAdded = engine.event<Filter>('FilterAdded')
+export const FilterRemoved = engine.event<number>('FilterRemoved')
+export const FilterReordered = engine.event<ReorderPayload>('FilterReordered')
+export const FilterParamChanged = engine.event<FilterParamPayload>('FilterParamChanged')
+export const UndoRequested = engine.event<void>('UndoRequested')
+export const RedoRequested = engine.event<void>('RedoRequested')
+export const ResetAll = engine.event<void>('ResetAll')
+
+export const FiltersChanged = engine.event<Filter[]>('FiltersChanged')
+export const UndoStackChanged = engine.event<Filter[][]>('UndoStackChanged')
+export const RedoStackChanged = engine.event<Filter[][]>('RedoStackChanged')
+
+let filters: Filter[] = []
+let undoStack: Filter[][] = []
+let redoStack: Filter[][] = []
+
+function pushChange(newFilters: Filter[], setFilters: (v: Filter[]) => void, setUndo: (v: Filter[][]) => void, setRedo: (v: Filter[][]) => void) {
+  undoStack = [...undoStack, [...filters]]; redoStack = []
+  filters = newFilters
+  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
 }
 
-export interface HistoryEntry {
-  filters: FilterState[]
-  label: string
-}
-
-/* ------------------------------------------------------------------ */
-/*  Available filters                                                 */
-/* ------------------------------------------------------------------ */
-
-export const FILTER_DEFS: FilterDef[] = [
-  { name: 'Brightness', prop: 'brightness', unit: '%', min: 0, max: 200, default: 100 },
-  { name: 'Contrast', prop: 'contrast', unit: '%', min: 0, max: 200, default: 100 },
-  { name: 'Saturate', prop: 'saturate', unit: '%', min: 0, max: 200, default: 100 },
-  { name: 'Blur', prop: 'blur', unit: 'px', min: 0, max: 20, default: 0 },
-  { name: 'Hue Rotate', prop: 'hue-rotate', unit: 'deg', min: 0, max: 360, default: 0 },
-  { name: 'Grayscale', prop: 'grayscale', unit: '%', min: 0, max: 100, default: 0 },
-  { name: 'Sepia', prop: 'sepia', unit: '%', min: 0, max: 100, default: 0 },
-  { name: 'Invert', prop: 'invert', unit: '%', min: 0, max: 100, default: 0 },
-]
-
-/* ------------------------------------------------------------------ */
-/*  Events                                                            */
-/* ------------------------------------------------------------------ */
-
-export const FilterValueChanged = engine.event<{ id: string; value: number }>('FilterValueChanged')
-export const FilterReordered = engine.event<{ fromIdx: number; toIdx: number }>('FilterReordered')
-export const Undo = engine.event('Undo')
-export const Redo = engine.event('Redo')
-export const ResetAll = engine.event('ResetAll')
-export const SplitChanged = engine.event<number>('SplitChanged')
-
-/* ------------------------------------------------------------------ */
-/*  Initial state                                                     */
-/* ------------------------------------------------------------------ */
-
-let filterId = 0
-function makeDefaultFilters(): FilterState[] {
-  return FILTER_DEFS.map(d => ({
-    id: `filter_${filterId++}`,
-    name: d.name,
-    prop: d.prop,
-    unit: d.unit,
-    value: d.default,
-    default: d.default,
-    min: d.min,
-    max: d.max,
-  }))
-}
-
-/* ------------------------------------------------------------------ */
-/*  Signals                                                           */
-/* ------------------------------------------------------------------ */
-
-export let filters = makeDefaultFilters()
-export const FiltersChanged = engine.event('FiltersChanged')
-engine.on(FilterValueChanged, [FiltersChanged], ({ id, value }, setFilters) => {
-  filters = filters.map(f => f.id === id ? { ...f, value } : f)
-  setFilters(filters)
+engine.on(FilterAdded, [FiltersChanged, UndoStackChanged, RedoStackChanged], (f, setFilters, setUndo, setRedo) => pushChange([...filters, f], setFilters, setUndo, setRedo))
+engine.on(FilterRemoved, [FiltersChanged, UndoStackChanged, RedoStackChanged], (i, setFilters, setUndo, setRedo) => { const n = [...filters]; n.splice(i, 1); pushChange(n, setFilters, setUndo, setRedo) })
+engine.on(FilterReordered, [FiltersChanged, UndoStackChanged, RedoStackChanged], (p, setFilters, setUndo, setRedo) => { const n = [...filters]; const [m] = n.splice(p.from, 1); n.splice(p.to, 0, m); pushChange(n, setFilters, setUndo, setRedo) })
+engine.on(FilterParamChanged, [FiltersChanged, UndoStackChanged, RedoStackChanged], (p, setFilters, setUndo, setRedo) => {
+  pushChange(filters.map((f, i) => i !== p.index ? f : p.param === 'enabled' ? { ...f, enabled: p.value as boolean } : { ...f, value: p.value as number }), setFilters, setUndo, setRedo)
 })
-
-engine.on(FilterReordered, [FiltersChanged], ({ fromIdx, toIdx }, setFilters) => {
-  const next = [...filters]
-  const [item] = next.splice(fromIdx, 1)
-  next.splice(toIdx, 0, item)
-  filters = next
-  setFilters(filters)
-})
-
-engine.on(ResetAll, [FiltersChanged], (_payload, setFilters) => {
-  filters = makeDefaultFilters()
-  setFilters(filters)
-})
-
-export let splitPosition = 50
-export const SplitPositionChanged = engine.event('SplitPositionChanged')
-engine.on(SplitChanged, [SplitPositionChanged], (val, setSplit) => {
-  splitPosition = val
-  setSplit(splitPosition)
-})
-
-/* ------------------------------------------------------------------ */
-/*  Undo/Redo stack                                                   */
-/* ------------------------------------------------------------------ */
-
-const undoStack: HistoryEntry[] = []
-const redoStack: HistoryEntry[] = []
-
-export let canUndo = false
-export const CanUndoChanged = engine.event('CanUndoChanged')
-engine.on(FilterValueChanged, [CanUndoChanged], (_payload, setCanUndo) => {
-  canUndo = undoStack.length > 0
-  setCanUndo(canUndo)
-})
-export let canRedo = false
-export const CanRedoChanged = engine.event('CanRedoChanged')
-engine.on(FilterValueChanged, [CanRedoChanged], (_payload, setCanRedo) => {
-  canRedo = redoStack.length > 0
-  setCanRedo(canRedo)
-})
-
-// Record history on each change
-engine.on(FilterValueChanged, ({ id }) => {
-  const filterName = filters.find(f => f.id === id)?.name ?? 'unknown'
-  undoStack.push({ filters: filters.map(f => ({ ...f })), label: `Changed ${filterName}` })
-  redoStack.length = 0
-})
-
-engine.on(Undo, () => {
+engine.on(ResetAll, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => pushChange([], setFilters, setUndo, setRedo))
+engine.on(UndoRequested, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => {
   if (undoStack.length === 0) return
-  const entry = undoStack.pop()!
-  redoStack.push({ filters: filters.map(f => ({ ...f })), label: 'Undo' })
-  // Restore filters by emitting reset then re-applying
-  engine.emit(ResetAll, undefined)
-  for (const f of entry.filters) {
-    engine.emit(FilterValueChanged, { id: f.id, value: f.value })
-  }
+  redoStack = [...redoStack, [...filters]]; filters = undoStack[undoStack.length - 1]; undoStack = undoStack.slice(0, -1)
+  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
+})
+engine.on(RedoRequested, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => {
+  if (redoStack.length === 0) return
+  undoStack = [...undoStack, [...filters]]; filters = redoStack[redoStack.length - 1]; redoStack = redoStack.slice(0, -1)
+  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
 })
 
-engine.on(Redo, () => {
-  if (redoStack.length === 0) return
-  const entry = redoStack.pop()!
-  undoStack.push({ filters: filters.map(f => ({ ...f })), label: 'Redo' })
-  engine.emit(ResetAll, undefined)
-  for (const f of entry.filters) {
-    engine.emit(FilterValueChanged, { id: f.id, value: f.value })
-  }
-})
+export function computeFilterString(filterList: Filter[]): string {
+  return filterList.filter(f => f.enabled).map(f => {
+    const cfg = filterConfigs[f.name]
+    if (f.name === 'blur') return `blur(${f.value}${cfg.unit})`
+    if (f.name === 'hue-rotate') return `hue-rotate(${f.value}${cfg.unit})`
+    return `${f.name}(${f.value}${cfg.unit})`
+  }).join(' ')
+}
+
+export const SAMPLE_IMAGE = 'https://picsum.photos/800/600?random=42'
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  filters = []
+  undoStack = []
+  redoStack = []
+}

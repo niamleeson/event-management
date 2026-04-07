@@ -3,29 +3,15 @@ import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
-// DAG
+// DAG (3 levels deep)
 // ---------------------------------------------------------------------------
-// FilterAdded ───┬──→ FiltersChanged
-//                ├──→ UndoStackChanged
-//                └──→ RedoStackChanged
-// FilterRemoved ─┬──→ FiltersChanged
-//                ├──→ UndoStackChanged
-//                └──→ RedoStackChanged
-// FilterReordered ┬──→ FiltersChanged
-//                 ├──→ UndoStackChanged
-//                 └──→ RedoStackChanged
-// FilterParamChanged ┬──→ FiltersChanged
-//                    ├──→ UndoStackChanged
-//                    └──→ RedoStackChanged
-// ResetAll ──┬──→ FiltersChanged
-//            ├──→ UndoStackChanged
-//            └──→ RedoStackChanged
-// UndoRequested ┬──→ FiltersChanged
-//               ├──→ UndoStackChanged
-//               └──→ RedoStackChanged
-// RedoRequested ┬──→ FiltersChanged
-//               ├──→ UndoStackChanged
-//               └──→ RedoStackChanged
+// FilterAdded ──→ FiltersChanged ──┬──→ UndoStackChanged
+// FilterRemoved ──→ FiltersChanged │    └──→ RedoStackChanged
+// FilterReordered ──→ FiltersChanged
+// FilterParamChanged ──→ FiltersChanged
+// ResetAll ──→ FiltersChanged
+// UndoRequested ──→ FiltersChanged
+// RedoRequested ──→ FiltersChanged
 // ---------------------------------------------------------------------------
 
 export type FilterName = 'brightness' | 'contrast' | 'saturate' | 'blur' | 'grayscale' | 'sepia' | 'hue-rotate' | 'invert'
@@ -60,30 +46,72 @@ let filters: Filter[] = []
 let undoStack: Filter[][] = []
 let redoStack: Filter[][] = []
 
-type EmitAllFn = (f: Filter[], u: Filter[][], r: Filter[][]) => void
+// Track whether the current change is from undo/redo (skip pushing to undo stack)
+let isUndoRedo = false
 
-function pushChange(newFilters: Filter[], setFilters: (v: Filter[]) => void, setUndo: (v: Filter[][]) => void, setRedo: (v: Filter[][]) => void) {
-  undoStack = [...undoStack, [...filters]]; redoStack = []
+function pushAndEmit(newFilters: Filter[], setFilters: (v: Filter[]) => void) {
+  undoStack = [...undoStack, [...filters]]
+  redoStack = []
   filters = newFilters
-  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
+  setFilters([...filters])
 }
 
-engine.on(FilterAdded, [FiltersChanged, UndoStackChanged, RedoStackChanged], (f, setFilters, setUndo, setRedo) => pushChange([...filters, f], setFilters, setUndo, setRedo))
-engine.on(FilterRemoved, [FiltersChanged, UndoStackChanged, RedoStackChanged], (i, setFilters, setUndo, setRedo) => { const n = [...filters]; n.splice(i, 1); pushChange(n, setFilters, setUndo, setRedo) })
-engine.on(FilterReordered, [FiltersChanged, UndoStackChanged, RedoStackChanged], (p, setFilters, setUndo, setRedo) => { const n = [...filters]; const [m] = n.splice(p.from, 1); n.splice(p.to, 0, m); pushChange(n, setFilters, setUndo, setRedo) })
-engine.on(FilterParamChanged, [FiltersChanged, UndoStackChanged, RedoStackChanged], (p, setFilters, setUndo, setRedo) => {
-  pushChange(filters.map((f, i) => i !== p.index ? f : p.param === 'enabled' ? { ...f, enabled: p.value as boolean } : { ...f, value: p.value as number }), setFilters, setUndo, setRedo)
+// ---------------------------------------------------------------------------
+// Layer 0 -> Layer 1: Input events -> FiltersChanged
+// ---------------------------------------------------------------------------
+
+engine.on(FilterAdded, [FiltersChanged], (f, setFilters) => {
+  isUndoRedo = false
+  pushAndEmit([...filters, f], setFilters)
 })
-engine.on(ResetAll, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => pushChange([], setFilters, setUndo, setRedo))
-engine.on(UndoRequested, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => {
+
+engine.on(FilterRemoved, [FiltersChanged], (i, setFilters) => {
+  isUndoRedo = false
+  const n = [...filters]; n.splice(i, 1)
+  pushAndEmit(n, setFilters)
+})
+
+engine.on(FilterReordered, [FiltersChanged], (p, setFilters) => {
+  isUndoRedo = false
+  const n = [...filters]; const [m] = n.splice(p.from, 1); n.splice(p.to, 0, m)
+  pushAndEmit(n, setFilters)
+})
+
+engine.on(FilterParamChanged, [FiltersChanged], (p, setFilters) => {
+  isUndoRedo = false
+  pushAndEmit(filters.map((f, i) => i !== p.index ? f : p.param === 'enabled' ? { ...f, enabled: p.value as boolean } : { ...f, value: p.value as number }), setFilters)
+})
+
+engine.on(ResetAll, [FiltersChanged], (_, setFilters) => {
+  isUndoRedo = false
+  pushAndEmit([], setFilters)
+})
+
+engine.on(UndoRequested, [FiltersChanged], (_, setFilters) => {
   if (undoStack.length === 0) return
-  redoStack = [...redoStack, [...filters]]; filters = undoStack[undoStack.length - 1]; undoStack = undoStack.slice(0, -1)
-  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
+  isUndoRedo = true
+  redoStack = [...redoStack, [...filters]]
+  filters = undoStack[undoStack.length - 1]
+  undoStack = undoStack.slice(0, -1)
+  setFilters([...filters])
 })
-engine.on(RedoRequested, [FiltersChanged, UndoStackChanged, RedoStackChanged], (_, setFilters, setUndo, setRedo) => {
+
+engine.on(RedoRequested, [FiltersChanged], (_, setFilters) => {
   if (redoStack.length === 0) return
-  undoStack = [...undoStack, [...filters]]; filters = redoStack[redoStack.length - 1]; redoStack = redoStack.slice(0, -1)
-  setFilters([...filters]); setUndo([...undoStack]); setRedo([...redoStack])
+  isUndoRedo = true
+  undoStack = [...undoStack, [...filters]]
+  filters = redoStack[redoStack.length - 1]
+  redoStack = redoStack.slice(0, -1)
+  setFilters([...filters])
+})
+
+// ---------------------------------------------------------------------------
+// Layer 1 -> Layer 2: FiltersChanged -> derived undo/redo stacks
+// ---------------------------------------------------------------------------
+
+engine.on(FiltersChanged, [UndoStackChanged, RedoStackChanged], (_filters, setUndo, setRedo) => {
+  setUndo([...undoStack])
+  setRedo([...redoStack])
 })
 
 export function computeFilterString(filterList: Filter[]): string {
@@ -104,4 +132,5 @@ export function resetState() {
   filters = []
   undoStack = []
   redoStack = []
+  isUndoRedo = false
 }

@@ -1,13 +1,3 @@
-// DAG
-// SearchInput ──→ SearchQueryChanged
-//             └──→ ErrorChanged
-//             └──→ SearchingChanged
-//             └──→ SearchResultsChanged
-// UserSelected ──→ SelectedUserChanged
-//              └──→ LoadingDetailsChanged
-//              └──→ UserDetailsChanged
-//              └──→ ErrorChanged
-
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -69,17 +59,8 @@ const MOCK_DETAILS: Record<string, UserDetails> = Object.fromEntries(
 )
 
 // Mock API functions
-async function searchUsers(
-  query: string,
-  signal: AbortSignal,
-): Promise<User[]> {
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, 600 + Math.random() * 400)
-    signal.addEventListener('abort', () => {
-      clearTimeout(timer)
-      reject(new DOMException('Aborted', 'AbortError'))
-    })
-  })
+async function searchUsers(query: string): Promise<User[]> {
+  await new Promise((resolve) => setTimeout(resolve, 600 + Math.random() * 400))
   const q = query.toLowerCase()
   return MOCK_USERS.filter(
     (u) =>
@@ -89,21 +70,23 @@ async function searchUsers(
   )
 }
 
-async function fetchUserDetails(
-  userId: string,
-  signal: AbortSignal,
-): Promise<UserDetails> {
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, 400 + Math.random() * 300)
-    signal.addEventListener('abort', () => {
-      clearTimeout(timer)
-      reject(new DOMException('Aborted', 'AbortError'))
-    })
-  })
+async function fetchUserDetails(userId: string): Promise<UserDetails> {
+  await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 300))
   const details = MOCK_DETAILS[userId]
   if (!details) throw new Error(`User ${userId} not found`)
   return details
 }
+
+// ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// SearchInput ──┬──→ SearchQueryChanged
+//               └──→ SearchError
+//               (debounced → doSearch → SearchLoading, SearchDone, SearchError)
+// UserSelected ──┬──→ UserDetailsDone
+//                ├──→ UserDetailsLoading
+//                └──→ SearchError
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Event declarations
@@ -111,77 +94,71 @@ async function fetchUserDetails(
 
 export const SearchInput = engine.event<string>('SearchInput')
 export const SearchQueryChanged = engine.event<string>('SearchQueryChanged')
-export const SearchingChanged = engine.event<boolean>('SearchingChanged')
-export const SearchResultsChanged = engine.event<User[]>('SearchResultsChanged')
-export const ErrorChanged = engine.event<string | null>('ErrorChanged')
-
-export const UserSelected = engine.event<string>('UserSelected')
-export const SelectedUserChanged = engine.event<string | null>('SelectedUserChanged')
-export const LoadingDetailsChanged = engine.event<boolean>('LoadingDetailsChanged')
-export const UserDetailsChanged = engine.event<UserDetails | null>('UserDetailsChanged')
+export const SearchLoading = engine.event<boolean>('SearchLoading')
+export const SearchDone = engine.event<User[]>('SearchDone')
+export const SearchError = engine.event<string | null>('SearchError')
+export const UserSelected = engine.event<string | null>('UserSelected')
+export const UserDetailsDone = engine.event<UserDetails | null>('UserDetailsDone')
+export const UserDetailsLoading = engine.event<boolean>('UserDetailsLoading')
 
 // ---------------------------------------------------------------------------
-// Async search with debounce and cancellation
+// Debounce
 // ---------------------------------------------------------------------------
 
-let searchAbort: AbortController | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-engine.on(SearchInput, [SearchQueryChanged, ErrorChanged], (query: string, setQuery, setError) => {
+engine.on(SearchInput, [SearchQueryChanged, SearchError], (query: string, setQuery, setError) => {
   setQuery(query)
   setError(null)
 
-  // Cancel previous
   if (debounceTimer) clearTimeout(debounceTimer)
-  if (searchAbort) searchAbort.abort()
-
-  if (query.trim().length === 0) {
-    engine.emit(SearchingChanged, false)
-    engine.emit(SearchResultsChanged, [])
-    return
-  }
-
-  engine.emit(SearchingChanged, true)
-
-  debounceTimer = setTimeout(async () => {
-    searchAbort = new AbortController()
-    try {
-      const results = await searchUsers(query, searchAbort.signal)
-      engine.emit(SearchResultsChanged, results)
-      engine.emit(SearchingChanged, false)
-    } catch (err: any) {
-      if (err?.name !== 'AbortError') {
-        engine.emit(ErrorChanged, err instanceof Error ? err.message : String(err))
-        engine.emit(SearchingChanged, false)
-      }
-    }
+  debounceTimer = setTimeout(() => {
+    doSearch(query)
   }, 300)
 })
 
 // ---------------------------------------------------------------------------
-// Async user details fetch
+// Async search handler
 // ---------------------------------------------------------------------------
 
-let detailsAbort: AbortController | null = null
-
-engine.on(UserSelected, [SelectedUserChanged, LoadingDetailsChanged], async (userId: string, setSelected, setLoading) => {
-  setSelected(userId)
-  setLoading(true)
-
-  if (detailsAbort) detailsAbort.abort()
-  detailsAbort = new AbortController()
-
-  try {
-    const details = await fetchUserDetails(userId, detailsAbort.signal)
-    engine.emit(UserDetailsChanged, details)
-    engine.emit(LoadingDetailsChanged, false)
-  } catch (err: any) {
-    if (err?.name !== 'AbortError') {
-      engine.emit(ErrorChanged, err instanceof Error ? err.message : String(err))
-      engine.emit(LoadingDetailsChanged, false)
-    }
+async function doSearch(query: string) {
+  if (query.trim().length === 0) {
+    engine.emit(SearchDone, [])
+    return
   }
+  engine.emit(SearchLoading, true)
+  try {
+    const results = await searchUsers(query)
+    engine.emit(SearchDone, results)
+  } catch (e: any) {
+    engine.emit(SearchError, e instanceof Error ? e.message : String(e))
+  }
+  engine.emit(SearchLoading, false)
+}
+
+// ---------------------------------------------------------------------------
+// Async user details handler
+// ---------------------------------------------------------------------------
+
+engine.on(UserSelected, [UserDetailsDone, UserDetailsLoading, SearchError], async (userId: string | null, setDetails, setLoading, setError) => {
+  if (!userId) {
+    setDetails(null)
+    return
+  }
+  setLoading(true)
+  try {
+    const details = await fetchUserDetails(userId)
+    setDetails(details)
+  } catch (e: any) {
+    setError(e instanceof Error ? e.message : String(e))
+  }
+  setLoading(false)
 })
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
+}

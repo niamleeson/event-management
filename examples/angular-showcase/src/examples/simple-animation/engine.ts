@@ -1,13 +1,3 @@
-// DAG
-// Increment ──→ CountChanged
-//           └──→ AnimatedCountChanged (via animateTo)
-//           └──→ ColorIntensityChanged (via animateTo)
-//           └──→ BounceScaleChanged (via animateTo)
-// Decrement ──→ CountChanged
-//           └──→ AnimatedCountChanged (via animateTo)
-//           └──→ ColorIntensityChanged (via animateTo)
-//           └──→ BounceScaleChanged (via animateTo)
-
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -17,14 +7,34 @@ import { createEngine } from '@pulse/core'
 export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
+// DAG (3 levels deep)
+// ---------------------------------------------------------------------------
+// Increment ──→ CountChanged ──→ AnimationTargetsChanged
+// Decrement ──→ CountChanged ──→ AnimationTargetsChanged
+//
+// Frame ──→ AnimatedCountChanged
+//        ├──→ ColorIntensityChanged
+//        └──→ BounceScaleChanged
+//
+// AnimationTargetsChanged feeds target values consumed by Frame handlers
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
+// Layer 0: User input events
 export const Increment = engine.event<void>('Increment')
 export const Decrement = engine.event<void>('Decrement')
+export const Frame = engine.event<number>('Frame')
 
-// State change events
+// Layer 1: Primary state events
 export const CountChanged = engine.event<number>('CountChanged')
+
+// Layer 2: Derived animation targets (from count changes)
+export const AnimationTargetsChanged = engine.event<{ targetCount: number; targetColorIntensity: number; bounceScale: number }>('AnimationTargetsChanged')
+
+// Layer 2 (Frame-driven): Animated output values
 export const AnimatedCountChanged = engine.event<number>('AnimatedCountChanged')
 export const ColorIntensityChanged = engine.event<number>('ColorIntensityChanged')
 export const BounceScaleChanged = engine.event<number>('BounceScaleChanged')
@@ -35,100 +45,92 @@ export const BounceScaleChanged = engine.event<number>('BounceScaleChanged')
 
 let count = 0
 let animatedCount = 0
+let targetCount = 0
 let colorIntensity = 0
+let targetColorIntensity = 0
 let bounceScale = 1
+let bounceVel = 0
 
 // ---------------------------------------------------------------------------
-// Animation helpers
+// Layer 0 → Layer 1: Input handlers → primary state
 // ---------------------------------------------------------------------------
 
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3)
-}
+engine.on(Increment, [CountChanged], (_, setCount) => {
+  count += 1
+  setCount(count)
+})
 
-function easeOutQuad(t: number): number {
-  return t * (2 - t)
-}
+engine.on(Decrement, [CountChanged], (_, setCount) => {
+  count -= 1
+  setCount(count)
+})
 
-function elasticOut(t: number): number {
-  const p = 0.4
-  return Math.pow(2, -10 * t) * Math.sin(((t - p / 4) * (2 * Math.PI)) / p) + 1
-}
+// ---------------------------------------------------------------------------
+// Layer 1 → Layer 2: Primary state → derived animation targets
+// ---------------------------------------------------------------------------
 
-// Simple tween helper
-function animateTo(
-  from: number,
-  to: number,
-  duration: number,
-  easing: (t: number) => number,
-  onUpdate: (v: number) => void,
-  onDone?: () => void,
-) {
-  const start = performance.now()
-  function tick() {
-    const elapsed = performance.now() - start
-    const t = Math.min(1, elapsed / duration)
-    const v = from + (to - from) * easing(t)
-    onUpdate(v)
-    if (t < 1) {
-      requestAnimationFrame(tick)
-    } else {
-      onDone?.()
-    }
+engine.on(CountChanged, [AnimationTargetsChanged], (newCount, setTargets) => {
+  targetCount = newCount
+  targetColorIntensity = Math.max(-1, Math.min(1, newCount / 10))
+  bounceScale = 1.3
+  bounceVel = 0
+  setTargets({ targetCount, targetColorIntensity, bounceScale })
+})
+
+// ---------------------------------------------------------------------------
+// Frame loop: animate values toward targets (Layer 0 → Layer 2)
+// Frame reads targets set by AnimationTargetsChanged and produces animated outputs
+// ---------------------------------------------------------------------------
+
+engine.on(Frame, [AnimatedCountChanged, ColorIntensityChanged, BounceScaleChanged], (_, setAnimated, setColor, setBounce) => {
+  // Animated count: ease toward target (easeOutCubic style)
+  const countDiff = targetCount - animatedCount
+  if (Math.abs(countDiff) > 0.01) {
+    animatedCount += countDiff * 0.08
+    setAnimated(animatedCount)
   }
-  requestAnimationFrame(tick)
+
+  // Color intensity: ease toward target
+  const colorDiff = targetColorIntensity - colorIntensity
+  if (Math.abs(colorDiff) > 0.001) {
+    colorIntensity += colorDiff * 0.05
+    setColor(colorIntensity)
+  }
+
+  // Bounce: spring toward 1
+  if (Math.abs(bounceScale - 1) > 0.001 || Math.abs(bounceVel) > 0.001) {
+    const force = (1 - bounceScale) * 0.15
+    bounceVel += force
+    bounceVel *= 0.75
+    bounceScale += bounceVel
+    setBounce(bounceScale)
+  }
+})
+
+// Start the frame loop
+let _rafId: number | null = null
+export function startLoop() {
+  if (_rafId !== null) return
+  let last = performance.now()
+  const loop = () => {
+    const now = performance.now()
+    engine.emit(Frame, now - last)
+    last = now
+    _rafId = requestAnimationFrame(loop)
+  }
+  _rafId = requestAnimationFrame(loop)
+}
+export function stopLoop() {
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
 }
 
-// ---------------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------------
-
-engine.on(Increment, [CountChanged], (_payload, setCount) => {
-  count++
-  setCount(count)
-
-  // Animate count display
-  animateTo(animatedCount, count, 400, easeOutCubic, (v) => {
-    animatedCount = v
-    engine.emit(AnimatedCountChanged, v)
-  })
-
-  // Animate color intensity
-  const targetIntensity = Math.max(-1, Math.min(1, count / 10))
-  animateTo(colorIntensity, targetIntensity, 600, easeOutQuad, (v) => {
-    colorIntensity = v
-    engine.emit(ColorIntensityChanged, v)
-  })
-
-  // Bounce animation
-  bounceScale = 1.3
-  animateTo(1.3, 1, 300, elasticOut, (v) => {
-    bounceScale = v
-    engine.emit(BounceScaleChanged, v)
-  })
-})
-
-engine.on(Decrement, [CountChanged], (_payload, setCount) => {
-  count--
-  setCount(count)
-
-  animateTo(animatedCount, count, 400, easeOutCubic, (v) => {
-    animatedCount = v
-    engine.emit(AnimatedCountChanged, v)
-  })
-
-  const targetIntensity = Math.max(-1, Math.min(1, count / 10))
-  animateTo(colorIntensity, targetIntensity, 600, easeOutQuad, (v) => {
-    colorIntensity = v
-    engine.emit(ColorIntensityChanged, v)
-  })
-
-  bounceScale = 1.3
-  animateTo(1.3, 1, 300, elasticOut, (v) => {
-    bounceScale = v
-    engine.emit(BounceScaleChanged, v)
-  })
-})
-
-export function startLoop() {}
-export function stopLoop() {}
+export function resetState() {
+  count = 0
+  animatedCount = 0
+  targetCount = 0
+  colorIntensity = 0
+  targetColorIntensity = 0
+  bounceScale = 1
+  bounceVel = 0
+  _rafId = null
+}

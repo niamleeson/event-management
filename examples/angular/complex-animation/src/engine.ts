@@ -1,13 +1,3 @@
-// DAG
-// PageLoaded ──→ CardAnimStateChanged (via staggered entrance)
-//            └──→ AllCardsEnteredEvent
-//            └──→ WelcomeAnimChanged
-// HoverCard ──→ CardAnimStateChanged
-// UnhoverCard ──→ CardAnimStateChanged
-// Frame ──→ CardAnimStateChanged
-//       └──→ AllCardsEnteredEvent
-//       └──→ WelcomeAnimChanged
-
 import { createEngine } from '@pulse/core'
 
 // ---------------------------------------------------------------------------
@@ -40,6 +30,17 @@ export const CARDS: CardData[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// DAG
+// ---------------------------------------------------------------------------
+// PageLoaded (triggers staggered card entrance — terminal)
+// HoverCard (sets hover target — terminal)
+// UnhoverCard (clears hover target — terminal)
+// Frame ──┬──→ AllCardsEnteredEvent
+//         ├──→ WelcomeAnimChanged
+//         └──→ CardAnimStateChanged
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
@@ -50,7 +51,7 @@ export const Frame = engine.event<number>('Frame')
 export const HoverCard = engine.event<number>('HoverCard')
 export const UnhoverCard = engine.event<number>('UnhoverCard')
 
-// State change events
+// State change events for React
 export const CardAnimStateChanged = engine.event<{
   opacities: number[]
   translateYs: number[]
@@ -109,7 +110,7 @@ engine.on(UnhoverCard, (index) => {
 // Frame loop: animate everything
 // ---------------------------------------------------------------------------
 
-engine.on(Frame, [CardAnimStateChanged, AllCardsEnteredEvent, WelcomeAnimChanged], (_dt, setCards, setAllEntered, setWelcome) => {
+engine.on(Frame, [AllCardsEnteredEvent, WelcomeAnimChanged, CardAnimStateChanged], (_dt, setAllEntered, setWelcome, setCardAnim) => {
   let dirty = false
 
   for (let i = 0; i < CARD_COUNT; i++) {
@@ -168,7 +169,7 @@ engine.on(Frame, [CardAnimStateChanged, AllCardsEnteredEvent, WelcomeAnimChanged
   }
 
   if (dirty) {
-    setCards({
+    setCardAnim({
       opacities: [...cardOpacity],
       translateYs: [...cardTranslateY],
       hoverScales: [...cardHoverScale],
@@ -178,7 +179,7 @@ engine.on(Frame, [CardAnimStateChanged, AllCardsEnteredEvent, WelcomeAnimChanged
 })
 
 // ---------------------------------------------------------------------------
-// Start/stop frame loop
+// Start frame loop
 // ---------------------------------------------------------------------------
 
 let _rafId: number | null = null
@@ -195,4 +196,20 @@ export function startLoop() {
 }
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}
+
+export function resetState() {
+  cardOpacity.fill(0)
+  cardTranslateY.fill(40)
+  cardHoverScale.fill(1)
+  cardHoverShadow.fill(0)
+  cardHoverTarget.fill(0)
+  cardHoverVel.fill(0)
+  cardEnteredCount = 0
+  cardEnterTriggered = Array(CARD_COUNT).fill(false)
+  allEntered = false
+  welcomeOpacity = 0
+  welcomeTranslateY = 20
+  welcomePhase = 'hidden'
+  _rafId = null
 }

@@ -1,20 +1,20 @@
 import { createEngine } from '@pulse/core'
 
+export const engine = createEngine()
+
 // ---------------------------------------------------------------------------
 // DAG
 // ---------------------------------------------------------------------------
 // OpenModal ──┬──→ ModalStackChanged
 //             └──→ ActiveModalIdChanged
-//
-// CloseModal ──┬──→ ModalStackChanged
-//              └──→ ActiveModalIdChanged
-//
-// CloseAll ──→ CloseModal (per modal)
-//
-// ConfirmAction ──→ CloseModal
-// CancelAction  ──→ CloseModal
-
-export const engine = createEngine()
+// ModalEnterDone ──→ ModalStackChanged (entering → open)
+// CloseModal ──→ ModalStackChanged (mark exiting)
+// ModalExitDone ──┬──→ ModalStackChanged (remove)
+//                 └──→ ActiveModalIdChanged
+// CloseAll ──→ CloseModal (per modal, staggered)
+// ConfirmAction ──→ CloseModal (chain)
+// CancelAction ──→ CloseModal (chain)
+// ---------------------------------------------------------------------------
 
 export type ModalSize = 'small' | 'medium' | 'large'
 
@@ -33,6 +33,10 @@ export const CloseAll = engine.event<void>('CloseAll')
 export const ConfirmAction = engine.event<string>('ConfirmAction')
 export const CancelAction = engine.event<string>('CancelAction')
 
+// Internal transition events
+const ModalEnterDone = engine.event<string>('ModalEnterDone')
+const ModalExitDone = engine.event<string>('ModalExitDone')
+
 // State change events
 export const ModalStackChanged = engine.event<ModalData[]>('ModalStackChanged')
 export const ActiveModalIdChanged = engine.event<string | null>('ActiveModalIdChanged')
@@ -49,25 +53,29 @@ engine.on(OpenModal, [ModalStackChanged, ActiveModalIdChanged], ({ id, title, co
   setStack([...modalStack])
   setActive(activeModalId)
 
-  setTimeout(() => {
-    modalStack = modalStack.map((m) => m.id === id ? { ...m, state: 'open' as const } : m)
-    engine.emit(ModalStackChanged, [...modalStack])
-  }, 50)
+  setTimeout(() => engine.emit(ModalEnterDone, id), 50)
 })
 
-engine.on(CloseModal, [ModalStackChanged, ActiveModalIdChanged], (id, setStack, setActive) => {
+engine.on(ModalEnterDone, [ModalStackChanged], (id, setStack) => {
+  modalStack = modalStack.map((m) => m.id === id ? { ...m, state: 'open' as const } : m)
+  setStack([...modalStack])
+})
+
+engine.on(CloseModal, [ModalStackChanged], (id, setStack) => {
   const modal = modalStack.find((m) => m.id === id)
   if (!modal || modal.state === 'exiting') return
   modalStack = modalStack.map((m) => m.id === id ? { ...m, state: 'exiting' as const } : m)
   setStack([...modalStack])
 
-  setTimeout(() => {
-    modalStack = modalStack.filter((m) => m.id !== id)
-    if (modalStack.length > 0) activeModalId = modalStack[modalStack.length - 1].id
-    else activeModalId = null
-    engine.emit(ModalStackChanged, [...modalStack])
-    engine.emit(ActiveModalIdChanged, activeModalId)
-  }, 300)
+  setTimeout(() => engine.emit(ModalExitDone, id), 300)
+})
+
+engine.on(ModalExitDone, [ModalStackChanged, ActiveModalIdChanged], (id, setStack, setActive) => {
+  modalStack = modalStack.filter((m) => m.id !== id)
+  if (modalStack.length > 0) activeModalId = modalStack[modalStack.length - 1].id
+  else activeModalId = null
+  setStack([...modalStack])
+  setActive(activeModalId)
 })
 
 engine.on(CloseAll, () => {
@@ -75,8 +83,13 @@ engine.on(CloseAll, () => {
   toClose.forEach((m, i) => setTimeout(() => engine.emit(CloseModal, m.id), i * 100))
 })
 
-engine.on(ConfirmAction, (id) => engine.emit(CloseModal, id))
-engine.on(CancelAction, (id) => engine.emit(CloseModal, id))
+engine.on(ConfirmAction).emit(CloseModal)
+engine.on(CancelAction).emit(CloseModal)
 
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  modalStack = []
+  activeModalId = null
+}

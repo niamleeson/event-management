@@ -1,161 +1,126 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// DAG
-// ---------------------------------------------------------------------------
-// MessageReceived ──┬──→ NewMessageAnim
-//                   └──→ BadgeBounce (if sender !== 'You')
-//
-// MessageSent ──┬──→ TypingStarted
-//               ├──→ TypingStopped
-//               └──→ MessageReceived
-
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
-// Middleware: log all non-frame events
+// DAG (3 levels deep)
+// ---------------------------------------------------------------------------
+// MessageSent ──→ MessageReceived ──→ MessagesChanged ──→ UnreadCountChanged
+//             └──→ (bot responses: TypingStarted → TypingUsersChanged,
+//                                  TypingStopped → TypingUsersChanged,
+//                                  MessageReceived)
+// MessageRead ──→ UnreadCountChanged
+// TypingStarted ──→ TypingUsersChanged
+// TypingStopped ──→ TypingUsersChanged
 // ---------------------------------------------------------------------------
 
-engine.use((event) => {
-  if (event.type.name !== '__frame__') {
-    console.log(`[Pulse] ${event.type.name}`, event.payload)
-  }
-  return event
-})
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface Message {
-  id: string
-  text: string
-  sender: string
-  timestamp: number
-  read: boolean
-}
-
-export interface SendPayload {
-  text: string
-  sender: string
-}
+export interface Message { id: string; text: string; sender: string; timestamp: number; read: boolean }
+export interface SendPayload { text: string; sender: string }
 
 // ---------------------------------------------------------------------------
 // Event declarations
 // ---------------------------------------------------------------------------
 
+// Layer 0: User / external input events
 export const MessageSent = engine.event<SendPayload>('MessageSent')
-export const MessageReceived = engine.event<Message>('MessageReceived')
 export const TypingStarted = engine.event<string>('TypingStarted')
 export const TypingStopped = engine.event<string>('TypingStopped')
 export const MessageRead = engine.event<string>('MessageRead')
-export const BotReply = engine.event<void>('BotReply')
-export const NewMessageAnim = engine.event<void>('NewMessageAnim')
-export const NewMessageAnimDone = engine.event<void>('NewMessageAnimDone')
-export const BadgeBounce = engine.event<void>('BadgeBounce')
-export const BadgeBounceDone = engine.event<void>('BadgeBounceDone')
-export const ScrollTarget = engine.event<void>('ScrollTarget')
 
-// State change events
+// Layer 1: Intermediate state events
+export const MessageReceived = engine.event<Message>('MessageReceived')
+
+// Layer 2: Primary collection state
 export const MessagesChanged = engine.event<Message[]>('MessagesChanged')
 export const TypingUsersChanged = engine.event<string[]>('TypingUsersChanged')
+
+// Layer 3: Derived count (from messages)
 export const UnreadCountChanged = engine.event<number>('UnreadCountChanged')
 
 // ---------------------------------------------------------------------------
-// Tween: new message slide-in animation
+// State
 // ---------------------------------------------------------------------------
 
-
-// Badge bounce tween
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
+let messages: Message[] = []
+let typingUsers: string[] = []
+let unreadCount = 0
 
 // ---------------------------------------------------------------------------
-// Pipes: MessageSent -> MessageReceived (for user's own message)
-// Then simulate bot typing and reply
+// Layer 0 → Layer 1: Input → intermediate (MessageSent → MessageReceived)
 // ---------------------------------------------------------------------------
 
+engine.on(MessageSent).emit(MessageReceived, (payload) => ({
+  id: crypto.randomUUID(),
+  text: payload.text,
+  sender: payload.sender,
+  timestamp: Date.now(),
+  read: true,
+}))
 
-// When a message is received, trigger animation
-engine.on(MessageReceived, [NewMessageAnim], (_, setAnim) => {
-  setAnim(undefined)
+// ---------------------------------------------------------------------------
+// Layer 1 → Layer 2: Intermediate → primary state
+// ---------------------------------------------------------------------------
+
+engine.on(MessageReceived, [MessagesChanged], (msg, setMessages) => {
+  messages = [...messages, msg]
+  setMessages([...messages])
 })
 
-// When unread count changes (non-zero), bounce badge
-engine.on(MessageReceived, [BadgeBounce], (msg, setBounce) => {
-  if (msg.sender !== 'You') {
-    setBounce(undefined)
+engine.on(TypingStarted, [TypingUsersChanged], (user, setTyping) => {
+  if (!typingUsers.includes(user)) { typingUsers = [...typingUsers, user]; setTyping([...typingUsers]) }
+})
+
+engine.on(TypingStopped, [TypingUsersChanged], (user, setTyping) => {
+  typingUsers = typingUsers.filter(u => u !== user)
+  setTyping([...typingUsers])
+})
+
+// ---------------------------------------------------------------------------
+// Layer 2 → Layer 3: Primary state → derived counts
+// ---------------------------------------------------------------------------
+
+engine.on(MessagesChanged, [UnreadCountChanged], (msgs, setUnread) => {
+  // Count unread from non-self senders
+  const lastMsg = msgs[msgs.length - 1]
+  if (lastMsg && lastMsg.sender !== 'You') {
+    unreadCount++
+    setUnread(unreadCount)
   }
 })
 
-// Bot responses
+engine.on(MessageRead, [UnreadCountChanged], (_, setUnread) => {
+  unreadCount = 0
+  setUnread(0)
+})
+
+// ---------------------------------------------------------------------------
+// Bot responses (side effects from MessageSent)
+// ---------------------------------------------------------------------------
+
 const botReplies: Record<string, string[]> = {
-  'Bot Alice': [
-    'That sounds interesting!',
-    'I agree with you on that.',
-    'Have you considered the alternatives?',
-    'Let me think about that for a moment...',
-    'Great point! Here is what I think...',
-    'Thanks for sharing that!',
-    'I was just thinking the same thing.',
-    'Could you elaborate on that?',
-  ],
-  'Bot Bob': [
-    'Hey, that is cool!',
-    'I have a different perspective on this.',
-    'Absolutely! Count me in.',
-    'Not sure I follow, can you explain?',
-    'That reminds me of something...',
-    'Ha, good one!',
-    'I will get back to you on that.',
-    'Interesting approach!',
-  ],
+  'Bot Alice': ['That sounds interesting!','I agree with you on that.','Have you considered the alternatives?','Let me think about that for a moment...','Great point! Here is what I think...','Thanks for sharing that!','I was just thinking the same thing.','Could you elaborate on that?'],
+  'Bot Bob': ['Hey, that is cool!','I have a different perspective on this.','Absolutely! Count me in.','Not sure I follow, can you explain?','That reminds me of something...','Ha, good one!','I will get back to you on that.','Interesting approach!'],
 }
 
-function getRandomReply(bot: string): string {
-  const replies = botReplies[bot] ?? ['...']
-  return replies[Math.floor(Math.random() * replies.length)]
-}
+function getRandomReply(bot: string): string { const r = botReplies[bot] ?? ['...']; return r[Math.floor(Math.random() * r.length)] }
 
-// Simulate bot replies when user sends a message
 engine.on(MessageSent, (payload) => {
   if (payload.sender !== 'You') return
-
-  // Randomly pick 1 or 2 bots to reply
   const bots = ['Bot Alice', 'Bot Bob']
-  const respondingBots = bots.filter(() => Math.random() > 0.3)
-  if (respondingBots.length === 0) respondingBots.push(bots[0])
-
-  respondingBots.forEach((bot, i) => {
+  const responding = bots.filter(() => Math.random() > 0.3)
+  if (responding.length === 0) responding.push(bots[0])
+  responding.forEach((bot, i) => {
     const delay = 1000 + Math.random() * 2000 + i * 1500
-
-    // Start typing
-    setTimeout(() => {
-      engine.emit(TypingStarted, bot)
-    }, 500 + i * 800)
-
-    // Send reply after delay
-    setTimeout(() => {
-      engine.emit(TypingStopped, bot)
-      engine.emit(MessageReceived, {
-        id: crypto.randomUUID(),
-        text: getRandomReply(bot),
-        sender: bot,
-        timestamp: Date.now(),
-        read: false,
-      })
-    }, delay)
+    setTimeout(() => engine.emit(TypingStarted, bot), 500 + i * 800)
+    setTimeout(() => { engine.emit(TypingStopped, bot); engine.emit(MessageReceived, { id: crypto.randomUUID(), text: getRandomReply(bot), sender: bot, timestamp: Date.now(), read: false }) }, delay)
   })
 })
 
-// Start frame loop for animations
-
 export function startLoop() {}
 export function stopLoop() {}
+
+export function resetState() {
+  messages = []
+  typingUsers = []
+  unreadCount = 0
+}

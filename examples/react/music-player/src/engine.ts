@@ -7,6 +7,8 @@ export const engine = createEngine()
 // ---------------------------------------------------------------------------
 // Play ──→ IsPlayingChanged
 // Pause ──→ IsPlayingChanged
+// TrackSelected ──┬→ CurrentTrackChanged ──→ ProgressChanged ──→ VisualizerChanged
+//                 └→ IsPlayingChanged
 // Seek ──→ ProgressChanged ──→ VisualizerChanged
 // VolumeSet ──→ VolumeChanged
 // ShuffleToggle ──→ ShuffleChanged
@@ -42,6 +44,7 @@ export const Seek = engine.event<number>('Seek')
 export const VolumeSet = engine.event<number>('VolumeSet')
 export const ShuffleToggle = engine.event<void>('ShuffleToggle')
 export const RepeatToggle = engine.event<void>('RepeatToggle')
+export const TrackSelected = engine.event<Track>('TrackSelected')
 export const Frame = engine.event<number>('Frame')
 
 // Layer 1: Primary state events
@@ -76,6 +79,14 @@ engine.on(Pause, [IsPlayingChanged], (_, setPlaying) => { isPlaying = false; set
 engine.on(VolumeSet, [VolumeChanged], (v, setVolume) => { volume = v; setVolume(v) })
 engine.on(ShuffleToggle, [ShuffleChanged], (_, setShuffle) => { shuffleOn = !shuffleOn; setShuffle(shuffleOn) })
 engine.on(RepeatToggle, [RepeatChanged], (_, setRepeat) => { repeatOn = !repeatOn; setRepeat(repeatOn) })
+
+engine.on(TrackSelected, [CurrentTrackChanged, IsPlayingChanged], (track, setTrack, setPlaying) => {
+  currentTrack = track
+  progress = 0
+  isPlaying = true
+  setTrack(currentTrack)
+  setPlaying(true)
+})
 
 engine.on(Seek, [ProgressChanged], (v, setProgress) => {
   progress = Math.min(1, Math.max(0, v))

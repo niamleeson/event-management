@@ -1,43 +1,24 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// DAG
-// ---------------------------------------------------------------------------
-// Frame ──┬──→ Pause (when track ends)
-//         ├──→ NextTrack (when track ends)
-//         ├──→ ProgressTick
-//         ├──→ BeatDetected
-//         └──→ VisualizerUpdate
-//
-// NextTrack ──┬──→ TrackChanged
-//             └──→ Play
-//
-// PrevTrack ──┬──→ Seek (if near start, restart)
-//             ├──→ TrackChanged
-//             └──→ Play
-
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
-// Types
+// DAG (3 levels deep)
+// ---------------------------------------------------------------------------
+// Play ──→ IsPlayingChanged
+// Pause ──→ IsPlayingChanged
+// TrackSelected ──┬→ CurrentTrackChanged ──→ ProgressChanged ──→ VisualizerChanged
+//                 └→ IsPlayingChanged
+// Seek ──→ ProgressChanged ──→ VisualizerChanged
+// VolumeSet ──→ VolumeChanged
+// ShuffleToggle ──→ ShuffleChanged
+// RepeatToggle ──→ RepeatChanged
+// NextTrack ──→ CurrentTrackChanged ──→ ProgressChanged ──→ VisualizerChanged
+// PrevTrack ──→ CurrentTrackChanged ──→ ProgressChanged ──→ VisualizerChanged
+// Frame ──→ ProgressChanged ──→ VisualizerChanged
 // ---------------------------------------------------------------------------
 
-export interface Track {
-  id: string
-  title: string
-  artist: string
-  album: string
-  duration: number // seconds
-  color: string // accent color
-}
-
-// ---------------------------------------------------------------------------
-// Sample playlist
-// ---------------------------------------------------------------------------
+export interface Track { id: string; title: string; artist: string; album: string; duration: number; color: string }
 
 export const samplePlaylist: Track[] = [
   { id: '1', title: 'Midnight Pulse', artist: 'Neon Waves', album: 'Digital Dreams', duration: 234, color: '#e91e63' },
@@ -54,117 +35,116 @@ export const samplePlaylist: Track[] = [
 // Event declarations
 // ---------------------------------------------------------------------------
 
+// Layer 0: User input / time events
 export const Play = engine.event<void>('Play')
 export const Pause = engine.event<void>('Pause')
 export const NextTrack = engine.event<void>('NextTrack')
 export const PrevTrack = engine.event<void>('PrevTrack')
 export const Seek = engine.event<number>('Seek')
-export const VolumeChanged = engine.event<number>('VolumeChanged')
+export const VolumeSet = engine.event<number>('VolumeSet')
 export const ShuffleToggle = engine.event<void>('ShuffleToggle')
 export const RepeatToggle = engine.event<void>('RepeatToggle')
-export const TrackChanged = engine.event<Track>('TrackChanged')
-export const BeatDetected = engine.event<void>('BeatDetected')
-export const ProgressTick = engine.event<number>('ProgressTick')
-export const VisualizerUpdate = engine.event<number[]>('VisualizerUpdate')
+export const TrackSelected = engine.event<Track>('TrackSelected')
+export const Frame = engine.event<number>('Frame')
 
-// State change events
+// Layer 1: Primary state events
 export const CurrentTrackChanged = engine.event<Track>('CurrentTrackChanged')
 export const IsPlayingChanged = engine.event<boolean>('IsPlayingChanged')
 export const ProgressChanged = engine.event<number>('ProgressChanged')
+export const VolumeChanged = engine.event<number>('VolumeChanged')
 export const ShuffleChanged = engine.event<boolean>('ShuffleChanged')
 export const RepeatChanged = engine.event<boolean>('RepeatChanged')
-export const PlaylistChanged = engine.event<Track[]>('PlaylistChanged')
-export const VisualizerBarsChanged = engine.event<number[]>('VisualizerBarsChanged')
+
+// Layer 2: Derived state events
+export const VisualizerChanged = engine.event<number[]>('VisualizerChanged')
 
 // ---------------------------------------------------------------------------
-// Signals
+// State
 // ---------------------------------------------------------------------------
 
-
-// ---------------------------------------------------------------------------
-// Frame-driven progress and visualizer
-// ---------------------------------------------------------------------------
-
+let currentTrack = samplePlaylist[0]
+let isPlaying = false
+let progress = 0
+let volume = 0.75
+let shuffleOn = false
+let repeatOn = false
 let beatTimer = 0
 
-engine.on(Frame, [Pause, NextTrack, ProgressTick, BeatDetected, VisualizerUpdate], ({ dt }, setPause, setNext, setProgress, setBeat, setVisualizer) => {
-  if (!isPlaying.value) return
+// ---------------------------------------------------------------------------
+// Layer 0 → Layer 1: Input handlers → primary state
+// ---------------------------------------------------------------------------
 
-  const track = currentTrack.value
-  if (!track) return
+engine.on(Play, [IsPlayingChanged], (_, setPlaying) => { isPlaying = true; setPlaying(true) })
+engine.on(Pause, [IsPlayingChanged], (_, setPlaying) => { isPlaying = false; setPlaying(false) })
+engine.on(VolumeSet, [VolumeChanged], (v, setVolume) => { volume = v; setVolume(v) })
+engine.on(ShuffleToggle, [ShuffleChanged], (_, setShuffle) => { shuffleOn = !shuffleOn; setShuffle(shuffleOn) })
+engine.on(RepeatToggle, [RepeatChanged], (_, setRepeat) => { repeatOn = !repeatOn; setRepeat(repeatOn) })
 
-  // Advance progress
-  const increment = (dt / 1000) / track.duration
-  const newProgress = progress.value + increment
-  if (newProgress >= 1) {
-    setPause(undefined)
-    setNext(undefined)
-    return
-  }
-  setProgress(newProgress)
+engine.on(TrackSelected, [CurrentTrackChanged, IsPlayingChanged], (track, setTrack, setPlaying) => {
+  currentTrack = track
+  progress = 0
+  isPlaying = true
+  setTrack(currentTrack)
+  setPlaying(true)
+})
 
-  // Beat detection (simulated every ~500ms)
-  beatTimer += dt
-  if (beatTimer >= 500) {
-    beatTimer -= 500
-    setBeat(undefined)
-  }
+engine.on(Seek, [ProgressChanged], (v, setProgress) => {
+  progress = Math.min(1, Math.max(0, v))
+  setProgress(progress)
+})
 
-  // Visualizer: generate random bars influenced by "beats"
-  const isBeatFrame = beatTimer < dt
+engine.on(NextTrack, [CurrentTrackChanged], (_, setTrack) => {
+  const idx = samplePlaylist.findIndex(t => t.id === currentTrack.id)
+  let nextIdx = shuffleOn ? Math.floor(Math.random() * samplePlaylist.length) : (idx + 1) % samplePlaylist.length
+  if (nextIdx === idx && samplePlaylist.length > 1) nextIdx = (nextIdx + 1) % samplePlaylist.length
+  currentTrack = samplePlaylist[nextIdx]
+  progress = 0
+  setTrack(currentTrack)
+  if (isPlaying) engine.emit(Play, undefined)
+})
+
+engine.on(PrevTrack, [CurrentTrackChanged], (_, setTrack) => {
+  if (progress > 0.05) { engine.emit(Seek, 0); return }
+  const idx = samplePlaylist.findIndex(t => t.id === currentTrack.id)
+  currentTrack = samplePlaylist[idx <= 0 ? samplePlaylist.length - 1 : idx - 1]
+  progress = 0
+  setTrack(currentTrack)
+  if (isPlaying) engine.emit(Play, undefined)
+})
+
+// CurrentTrackChanged resets progress to 0
+engine.on(CurrentTrackChanged, [ProgressChanged], (_track, setProgress) => {
+  setProgress(0)
+})
+
+engine.on(Frame, [ProgressChanged], (dt, setProgress) => {
+  if (!isPlaying) return
+  const increment = (dt / 1000) / currentTrack.duration
+  progress += increment
+  if (progress >= 1) { engine.emit(Pause, undefined); engine.emit(NextTrack, undefined); return }
+  setProgress(progress)
+})
+
+// ---------------------------------------------------------------------------
+// Layer 1 → Layer 2: Primary state → derived state (visualizer)
+// ---------------------------------------------------------------------------
+
+engine.on(ProgressChanged, [VisualizerChanged], (_progress, setVisualizer) => {
+  if (!isPlaying) return
+
+  beatTimer += 16 // approximate frame dt
+  const isBeatFrame = beatTimer >= 500
+  if (isBeatFrame) beatTimer -= 500
+
   const bars: number[] = []
   for (let i = 0; i < 32; i++) {
     const base = Math.random() * 0.5
-    const beatBoost = isBeatFrame ? Math.random() * 0.5 : 0
-    const freqBias = Math.sin((i / 32) * Math.PI) * 0.3
-    bars.push(Math.min(1, base + beatBoost + freqBias))
+    const boost = isBeatFrame ? Math.random() * 0.5 : 0
+    bars.push(Math.min(1, base + boost + Math.sin((i / 32) * Math.PI) * 0.3))
   }
   setVisualizer(bars)
 })
 
-// ---------------------------------------------------------------------------
-// Track navigation
-// ---------------------------------------------------------------------------
-
-engine.on(NextTrack, [TrackChanged, Play], (_, setTrack, setPlay) => {
-  const current = currentTrack.value
-  const pl = playlist.value
-  const idx = pl.findIndex(t => t.id === current.id)
-  let nextIdx: number
-
-  if (shuffle.value) {
-    nextIdx = Math.floor(Math.random() * pl.length)
-    if (nextIdx === idx && pl.length > 1) nextIdx = (nextIdx + 1) % pl.length
-  } else {
-    nextIdx = (idx + 1) % pl.length
-  }
-
-  setTrack(pl[nextIdx])
-  if (isPlaying.value) {
-    // Keep playing
-    setPlay(undefined)
-  }
-})
-
-engine.on(PrevTrack, [Seek, TrackChanged, Play], (_, setSeek, setTrack, setPlay) => {
-  const current = currentTrack.value
-  const pl = playlist.value
-  const idx = pl.findIndex(t => t.id === current.id)
-
-  if (progress.value > 0.05) {
-    // Restart current track
-    setSeek(0)
-    return
-  }
-
-  const prevIdx = idx <= 0 ? pl.length - 1 : idx - 1
-  setTrack(pl[prevIdx])
-  if (isPlaying.value) {
-    setPlay(undefined)
-  }
-})
-
-// Start/stop frame loop
 let _rafId: number | null = null
 export function startLoop() {
   if (_rafId !== null) return
@@ -179,4 +159,15 @@ export function startLoop() {
 }
 export function stopLoop() {
   if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null }
+}
+
+export function resetState() {
+  currentTrack = samplePlaylist[0]
+  isPlaying = false
+  progress = 0
+  volume = 0.75
+  shuffleOn = false
+  repeatOn = false
+  beatTimer = 0
+  _rafId = null
 }
