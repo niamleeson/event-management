@@ -13,6 +13,7 @@ import {
   flattenTree,
   findNode,
   getPath,
+  getTree,
   setClipboard as engineSetClipboard,
 } from './engine'
 import type { TreeNode } from './engine'
@@ -174,7 +175,7 @@ export default function App() {
   const emit = useEmit()
 
   // Domain state from engine
-  const treeData = usePulse(TreeChanged, [] as TreeNode[])
+  const treeData = usePulse(TreeChanged, getTree())
 
   // UI state — local React
   const [selectedId, setSelectedId] = useState<string | null>(null)

@@ -147,6 +147,7 @@ export class Engine {
   private _pendingQ: any[] = []  // flat: [type, payload, type, payload, ...]
   private _depth = 0             // recursion depth for cycle detection
   private _destroyed = false
+  private _contexts: Array<{ obj: any; defaults: any }> = []
 
   /** Error handler for rule action errors during propagation */
   onError?: (error: Error, rule: Rule, event: any) => void
@@ -168,6 +169,31 @@ export class Engine {
   /** Create a named event type */
   event<T = void>(name: string): EventType<T> {
     return createEventType<T>(name)
+  }
+
+  /**
+   * Create a context object — shared state that handlers read/write.
+   * Context is NOT an event source. Changing context doesn't trigger events.
+   * Events trigger events. Context is just state for handlers to consult.
+   * Automatically reset to defaults on engine.reset().
+   */
+  context<T extends Record<string, any>>(defaults: T): T {
+    const obj = { ...defaults }
+    this._contexts.push({ obj, defaults })
+    return obj
+  }
+
+  /** Reset all contexts to their default values */
+  reset(): void {
+    for (const { obj, defaults } of this._contexts) {
+      for (const key of Object.keys(defaults)) {
+        obj[key] = typeof defaults[key] === 'object' && defaults[key] !== null
+          ? Array.isArray(defaults[key])
+            ? [...defaults[key]]
+            : { ...defaults[key] }
+          : defaults[key]
+      }
+    }
   }
 
   /**

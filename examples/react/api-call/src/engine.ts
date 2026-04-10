@@ -1,9 +1,5 @@
 import { createEngine } from '@pulse/core'
 
-// ---------------------------------------------------------------------------
-// Engine
-// ---------------------------------------------------------------------------
-
 export const engine = createEngine()
 
 // ---------------------------------------------------------------------------
@@ -26,7 +22,27 @@ export interface UserDetails extends User {
 }
 
 // ---------------------------------------------------------------------------
-// Mock data
+// DAG
+// ---------------------------------------------------------------------------
+//
+//  SearchInput ──→ DoSearch ──→ SearchLoadingStart ──→ SearchCompleted ──→ SearchLoadingEnd
+//
+//  UserSelected ──→ DetailLoadingStart ──→ DetailCompleted ──→ DetailLoadingEnd
+//
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Context
+// ---------------------------------------------------------------------------
+
+const ctx = engine.context({
+  query: '',
+  selectedUserId: null as string | null,
+  debounceTimer: null as ReturnType<typeof setTimeout> | null,
+})
+
+// ---------------------------------------------------------------------------
+// Mock API
 // ---------------------------------------------------------------------------
 
 const MOCK_USERS: User[] = [
@@ -41,125 +57,105 @@ const MOCK_USERS: User[] = [
 ]
 
 const MOCK_DETAILS: Record<string, UserDetails> = Object.fromEntries(
-  MOCK_USERS.map((u) => [
-    u.id,
-    {
-      ...u,
-      bio: `${u.name} is a talented ${u.role.toLowerCase()} with years of experience.`,
-      location: ['San Francisco', 'New York', 'London', 'Tokyo', 'Berlin'][
-        Math.floor(parseInt(u.id) % 5)
-      ],
-      joinDate: `202${parseInt(u.id) % 4}-0${(parseInt(u.id) % 9) + 1}-15`,
-      projects: ['Project Alpha', 'Project Beta', 'Project Gamma'].slice(
-        0,
-        (parseInt(u.id) % 3) + 1,
-      ),
-    },
-  ]),
+  MOCK_USERS.map(u => [u.id, {
+    ...u,
+    bio: `${u.name} is a talented ${u.role.toLowerCase()} with years of experience.`,
+    location: ['San Francisco', 'New York', 'London', 'Tokyo', 'Berlin'][parseInt(u.id) % 5],
+    joinDate: `202${parseInt(u.id) % 4}-0${(parseInt(u.id) % 9) + 1}-15`,
+    projects: ['Project Alpha', 'Project Beta', 'Project Gamma'].slice(0, (parseInt(u.id) % 3) + 1),
+  }]),
 )
 
-// Mock API functions
 async function searchUsers(query: string): Promise<User[]> {
-  await new Promise((resolve) => setTimeout(resolve, 600 + Math.random() * 400))
+  await new Promise(r => setTimeout(r, 600 + Math.random() * 400))
   const q = query.toLowerCase()
-  return MOCK_USERS.filter(
-    (u) =>
-      u.name.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q) ||
-      u.role.toLowerCase().includes(q),
+  return MOCK_USERS.filter(u =>
+    u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q),
   )
 }
 
 async function fetchUserDetails(userId: string): Promise<UserDetails> {
-  await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 300))
+  await new Promise(r => setTimeout(r, 400 + Math.random() * 300))
   const details = MOCK_DETAILS[userId]
   if (!details) throw new Error(`User ${userId} not found`)
   return details
 }
 
 // ---------------------------------------------------------------------------
-// DAG
-// ---------------------------------------------------------------------------
-// SearchInput ──→ SearchQueryChanged
-//             └──→ DoSearch (debounced)
-// DoSearch ──→ SearchLoading, SearchDone, SearchError (async)
-// UserSelected ──→ UserDetailsDone, UserDetailsLoading, SearchError (async)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Event declarations
+// Events
 // ---------------------------------------------------------------------------
 
 export const SearchInput = engine.event<string>('SearchInput')
-export const SearchQueryChanged = engine.event<string>('SearchQueryChanged')
-export const SearchLoading = engine.event<boolean>('SearchLoading')
-export const SearchDone = engine.event<User[]>('SearchDone')
-export const SearchError = engine.event<string | null>('SearchError')
-export const UserSelected = engine.event<string | null>('UserSelected')
-export const UserDetailsDone = engine.event<UserDetails | null>('UserDetailsDone')
-export const UserDetailsLoading = engine.event<boolean>('UserDetailsLoading')
-
-// Internal trigger for the debounced async search
 const DoSearch = engine.event<string>('DoSearch')
+export const SearchLoadingStart = engine.event<string>('SearchLoadingStart')
+export const SearchCompleted = engine.event<{ users: User[]; error: string | null }>('SearchCompleted')
+export const SearchLoadingEnd = engine.event<void>('SearchLoadingEnd')
+
+export const UserSelected = engine.event<string | null>('UserSelected')
+export const DetailLoadingStart = engine.event<string>('DetailLoadingStart')
+export const DetailCompleted = engine.event<{ details: UserDetails | null; error: string | null }>('DetailCompleted')
+export const DetailLoadingEnd = engine.event<void>('DetailLoadingEnd')
 
 // ---------------------------------------------------------------------------
-// Debounce: SearchInput -> SearchQueryChanged + debounced DoSearch
+// Search: SearchInput → DoSearch (debounced) → Loading → Completed → End
 // ---------------------------------------------------------------------------
 
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-engine.on(SearchInput, [SearchQueryChanged], (query: string, setQuery) => {
-  setQuery(query)
-
-  if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => {
-    engine.emit(DoSearch, query)
-  }, 300)
+engine.on(SearchInput, [DoSearch], (query, doSearch) => {
+  ctx.query = query
+  if (ctx.debounceTimer) clearTimeout(ctx.debounceTimer)
+  ctx.debounceTimer = setTimeout(() => doSearch(query), 300)
 })
 
-// ---------------------------------------------------------------------------
-// Async search handler: DoSearch -> SearchLoading, SearchDone, SearchError
-// ---------------------------------------------------------------------------
-
-engine.on(DoSearch, [SearchLoading, SearchDone, SearchError], async (query, setLoading, setDone, setError) => {
-  setError(null)
-  if (query.trim().length === 0) {
-    setDone([])
+engine.on(DoSearch, [SearchLoadingStart, SearchCompleted], (query, setStart, setCompleted) => {
+  if (!query.trim()) {
+    setCompleted({ users: [], error: null })
     return
   }
-  setLoading(true)
+  setStart(query)
+})
+
+engine.on(SearchLoadingStart, [SearchCompleted], async (query, setCompleted) => {
   try {
-    const results = await searchUsers(query)
-    setDone(results)
+    const users = await searchUsers(query)
+    setCompleted({ users, error: null })
   } catch (e: any) {
-    setError(e instanceof Error ? e.message : String(e))
+    setCompleted({ users: [], error: e.message ?? String(e) })
   }
-  setLoading(false)
 })
 
+engine.on(SearchCompleted).emit(SearchLoadingEnd)
+
 // ---------------------------------------------------------------------------
-// Async user details handler
+// Detail: UserSelected → Loading → Completed → End
 // ---------------------------------------------------------------------------
 
-engine.on(UserSelected, [UserDetailsDone, UserDetailsLoading, SearchError], async (userId: string | null, setDetails, setLoading, setError) => {
+engine.on(UserSelected, [DetailLoadingStart, DetailCompleted], (userId, setStart, setCompleted) => {
+  ctx.selectedUserId = userId
   if (!userId) {
-    setDetails(null)
+    setCompleted({ details: null, error: null })
     return
   }
-  setLoading(true)
+  setStart(userId)
+})
+
+engine.on(DetailLoadingStart, [DetailCompleted], async (userId, setCompleted) => {
   try {
     const details = await fetchUserDetails(userId)
-    setDetails(details)
+    setCompleted({ details, error: null })
   } catch (e: any) {
-    setError(e instanceof Error ? e.message : String(e))
+    setCompleted({ details: null, error: e.message ?? String(e) })
   }
-  setLoading(false)
 })
+
+engine.on(DetailCompleted).emit(DetailLoadingEnd)
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
 
 export function startLoop() {}
 export function stopLoop() {}
-
 export function resetState() {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = null
+  if (ctx.debounceTimer) clearTimeout(ctx.debounceTimer)
+  engine.reset()
 }
